@@ -1,0 +1,26 @@
+[Unit]
+# Arthatula — manual "Sync now" poller.
+# The app's Daily tab queues sync requests in D1; this service claims
+# them and runs the real Plaid sync engine (~/workspace/budget-sync/
+# sync.mjs), so a tap on "Sync now" becomes an actual sync without
+# any agent or LLM in the loop.
+#
+# Install (user service, after the app change has deployed):
+#   cp tools/budget-sync-poller.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now budget-sync-poller
+# Logs: ~/workspace/budget-sync/poller.log and
+#   journalctl --user -u budget-sync-poller
+Description=Arthatula — manual sync request poller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/workspace/budget-sync
+ExecStart=/usr/bin/node %h/workspace/budget-repo/tools/sync-poller.mjs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

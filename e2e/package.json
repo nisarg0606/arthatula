@@ -1,0 +1,12 @@
+{
+  "name": "arthatula-e2e",
+  "private": true,
+  "description": "Browser tests: the real app in WebKit (iPhone) and Chromium, against a throwaway local database.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.0",
+    "wrangler": "3.114.17"
+  }
+}

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- Add to Home Screen: opens full screen like an app, with its own icon. -->
+<link rel="manifest" href="manifest.webmanifest">
+<!-- Favicons: ICO for browsers that only look at /favicon.ico, PNGs for
+     Safari (no SVG favicon support), SVG for sharp scaling elsewhere. -->
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="icons/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Arthatula">
+<meta name="theme-color" content="#0a0a0a">
+<title>Arthatula — Monthly Budget Planner</title>
+<meta name="description" content="A month-by-month planned-vs-actual budget planner with a daily expense log.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="theme-init.js"></script>
+<!-- Tailwind Play CDN pinned to an exact version (the unversioned URL
+     tracks whatever ships next). The Play CDN is not on npm, so it can't
+     be vendored from this repo's tooling; see README "Security" for the
+     one-liner that vendors it into vendor/. -->
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="tw-config.js"></script>
+<!-- Chart.js vendored (npm chart.js@4.4.1, dist/chart.umd.js) and served
+     same-origin, so no third party can change the code that runs here. -->
+<script src="vendor/chart-4.4.1.umd.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="font-sans antialiased">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- ============ SIGN-IN GATE (shown before the app when the database
+     has an access code, or before one is created) ============ -->
+<div id="authGate" hidden>
+  <div class="auth-card">
+    <p class="auth-brand">💰 Arthatula</p>
+    <form id="gateSetupForm" hidden>
+      <h1 class="auth-title">Create your access code</h1>
+      <p class="hint">This budget is private. Pick an access code — you'll use it to sign in on each of your devices, and each device stays signed in for 90 days. There's no recovery if you forget it, so pick one you'll remember (a password manager is ideal).</p>
+      <div class="field">
+        <label for="gateSetupSecret">Setup secret (the SETUP_SECRET value you set on the Cloudflare Pages project)</label>
+        <input id="gateSetupSecret" type="password" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="gateSetupCode">Access code (at least 12 characters)</label>
+        <input id="gateSetupCode" type="password" autocomplete="new-password" minlength="12" required>
+      </div>
+      <div class="field">
+        <label for="gateSetupConfirm">Type it again</label>
+        <input id="gateSetupConfirm" type="password" autocomplete="new-password" minlength="12" required>
+      </div>
+      <p class="auth-error" id="gateSetupError" hidden></p>
+      <div class="actions">
+        <button type="submit">Create code &amp; sign in</button>
+      </div>
+    </form>
+    <form id="gateLoginForm" hidden>
+      <h1 class="auth-title">Sign in</h1>
+      <p class="hint">Enter your access code to see this budget. This device stays signed in for 90 days.</p>
+      <div class="field">
+        <label for="gateLoginCode">Access code</label>
+        <input id="gateLoginCode" type="password" autocomplete="current-password" required>
+      </div>
+      <p class="auth-error" id="gateLoginError" hidden></p>
+      <div class="actions">
+        <button type="submit">Sign in</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<header class="bg-[#0a0a0a] text-zinc-50 border-b border-[#272727]">
+  <div class="max-w-6xl mx-auto px-4 pt-6 pb-6 sm:pt-10 sm:pb-16">
+    <div class="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
+      <div class="max-w-[680px]">
+        <h1 class="app-title text-3xl sm:text-5xl font-bold tracking-tight">Arthatula</h1>
+        <p class="text-zinc-300 text-base sm:text-lg mt-2 sm:mt-3">Monthly budget planner &middot; planned vs actual &middot; Oct 2026 to Oct 2027</p>
+        <p class="hidden sm:block text-zinc-400 text-sm mt-2">Anchored to actuals from <strong id="headerBaseline" class="text-zinc-200 font-semibold">Oct 1, 2026</strong>. Log expenses daily and watch the prediction meet reality.</p>
+        <p class="mt-4 flex flex-wrap gap-2 items-center">
+          <span id="storageMode" class="storage-badge connecting" role="status">● Connecting…</span>
+          <span id="geminiStatus" class="storage-badge connecting">✦ Gemini: checking…</span>
+        </p>
+      </div>
+      <div class="flex gap-2">
+        <button id="addExpenseTopBtn" type="button" class="btn-primary" aria-label="Add expense"><span aria-hidden="true" class="fab-plus">+</span><span class="fab-label">&nbsp;Add expense</span></button>
+        <button id="themeToggle" type="button" aria-label="Toggle light / dark theme" class="btn-ghost">🌙 / ☀️</button>
+      </div>
+    </div>
+  </div>
+</header>
+<!-- Desktop: floating bar under the header. Phone: fixed bottom tab bar
+     (icon + short label), within thumb reach above the home indicator. -->
+<nav class="nav-float" aria-label="Sections">
+  <button type="button" class="tab-btn" data-tab="dashboard"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V5M16 20v-6M21 20H3"/></svg><span class="lbl-long">Dashboard</span><span class="lbl-short">Home</span></button>
+  <button type="button" class="tab-btn" data-tab="accounts"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5 12 4l9 5.5M5 10v8M19 10v8M3 20h18"/><circle cx="12" cy="14" r="2.5"/></svg><span class="lbl-long">Accounts</span><span class="lbl-short">Accounts</span></button>
+  <button type="button" class="tab-btn" data-tab="transactions"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m17 15 3 2-3 2"/></svg><span class="lbl-long">Transactions</span><span class="lbl-short">Activity</span></button>
+  <button type="button" class="tab-btn" data-tab="cashflow"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M9 20V4M14 20v-7M19 20v-11"/></svg><span class="lbl-long">Cash flow</span><span class="lbl-short">Flow</span></button>
+  <button type="button" class="tab-btn" data-tab="budget"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/></svg><span class="lbl-long">Budget</span><span class="lbl-short">Budget</span></button>
+  <button type="button" class="tab-btn" data-tab="recurring"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg><span class="lbl-long">Recurring</span><span class="lbl-short">Bills</span></button>
+  <button type="button" class="tab-btn" data-tab="goals"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".8"/></svg><span class="lbl-long">Goals</span><span class="lbl-short">Goals</span></button>
+  <button type="button" class="tab-btn" data-tab="settings"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M19 6h1M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span class="lbl-long">Settings</span><span class="lbl-short">Settings</span></button>
+  <span class="nav-sep" aria-hidden="true">Classic</span>
+  <button type="button" class="tab-btn classic" data-tab="editor"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="lbl-long">Month editor</span><span class="lbl-short">Plan</span></button>
+  <button type="button" class="tab-btn classic" data-tab="daily"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg><span class="lbl-long">Daily expenses</span><span class="lbl-short">Daily</span><span class="tab-badge" id="reviewBadge" hidden></span></button>
+  <button type="button" class="tab-btn classic" data-tab="cards"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/></svg><span class="lbl-long">Cards</span><span class="lbl-short">Cards</span></button>
+  <button type="button" class="tab-btn classic" data-tab="bank"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg><span class="lbl-long">Bank</span><span class="lbl-short">Bank</span></button>
+</nav>
+
+<main id="main" class="max-w-6xl mx-auto px-4 pt-8 pb-6">
+
+  <!-- ============ DASHBOARD ============ -->
+  <div data-section="dashboard">
+    <div id="v2Overview"></div>
+    <section class="card ask-card" aria-labelledby="ask-heading">
+      <h2 id="ask-heading" class="card-title">Ask about your budget</h2>
+      <div id="askLog" class="ask-log" aria-live="polite" hidden></div>
+      <button type="button" id="askClear" class="ask-clear" hidden>Clear chat</button>
+      <div class="ask-suggest">
+        <button type="button">Can I afford $1,300 in December?</button>
+        <button type="button">Where did my money go this month?</button>
+        <button type="button">How much will I have by the end of the plan?</button>
+      </div>
+      <form id="askForm" class="ask-form" autocomplete="off">
+        <label class="sr-only" for="askInput">Your question</label>
+        <input id="askInput" type="text" maxlength="500" placeholder="e.g. Can I afford a $400 trip in January?">
+        <button type="submit" id="askBtn" class="btn-primary">Ask</button>
+      </form>
+      <p class="hint">The app works out the numbers from your plan and actuals; Gemini explains them. Your question and budget totals are sent to Gemini.</p>
+    </section>
+    <section class="card dash-card" aria-labelledby="summary-heading">
+      <h2 id="summary-heading" class="card-title">Summary</h2>
+      <div class="compare-toggle">
+        <label class="switch-label" for="compareToggle">
+          <input type="checkbox" id="compareToggle">
+          <span>Compare with plan</span>
+        </label>
+        <p class="hint" style="margin:4px 0 0">Off: this dashboard shows your <strong>actual</strong> income, expenses and savings only. On: actuals are compared with the plan (projected).</p>
+      </div>
+      <div class="baseline-fields grid sm:grid-cols-2 gap-4 max-w-2xl">
+        <div class="field">
+          <label for="startingBalance">Starting balance ($) — actual balance at the baseline date</label>
+          <input id="startingBalance" type="number" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+        <div class="field">
+          <span class="field-label">Actuals start on</span>
+          <p class="baseline-fixed" id="baselineDateDisplay"></p><input type="hidden" id="baselineDate" value="2026-10-26">
+        </div>
+      </div>
+      <button type="button" class="review-banner" id="reviewBanner" hidden></button>
+      <div class="summary-grid" id="summaryGrid">
+        <div class="stat highlight"><span class="stat-label">Ending balance · Oct 2027</span><span class="stat-value" id="statEnding">—</span></div>
+        <div class="stat highlight"><span class="stat-label">Net saved (13 months)</span><span class="stat-value" id="statNet">—</span></div>
+        <div class="stat"><span class="stat-label">Total income</span><span class="stat-value" id="statIncome">—</span></div>
+        <div class="stat"><span class="stat-label">Total expenses</span><span class="stat-value" id="statExpenses">—</span></div>
+        <div class="stat"><span class="stat-label">Average net / month</span><span class="stat-value" id="statAverage">—</span></div>
+        <div class="stat"><span class="stat-label">Savings rate</span><span class="stat-value" id="statRate">—</span></div>
+        <div class="stat"><span class="stat-label">Actual net saved (entered months)</span><span class="stat-value" id="statActualNet">—</span></div>
+        <div class="stat"><span class="stat-label">Variance, actual − predicted</span><span class="stat-value" id="statVariance">—</span></div>
+        <div class="stat"><span class="stat-label">Owed to me (shared expenses)</span><span class="stat-value" id="statOwed">—</span><span class="stat-sub neg" id="statOwedOld" hidden></span></div>
+      </div>
+      <p class="hint" id="actualEmptyNote" hidden></p>
+      <div class="grid lg:grid-cols-2 gap-6 mt-2">
+        <div class="month-switch lg:col-span-2" role="group" aria-label="Month shown in the category and daily charts">
+          <button type="button" class="ms-nav" id="dashMonthPrev" aria-label="Previous month">&#8249;</button>
+          <label class="sr-only" for="dashMonth">Month</label>
+          <select id="dashMonth" class="ms-select"></select>
+          <button type="button" class="ms-nav" id="dashMonthNext" aria-label="Next month">&#8250;</button>
+          <div class="ms-stat"><span class="ms-stat-label">Free after bills &amp; loans</span><span class="ms-stat-value" id="statFreeMonth">—</span></div>
+          <div class="ms-stat"><span class="ms-stat-label">Spent so far</span><span class="ms-stat-value" id="statSpentMonth">—</span><span class="ms-stat-sub" id="statSpentPending"></span></div>
+        </div>
+        <div class="chart-panel pace-panel lg:col-span-2" id="pacePanel" hidden>
+          <h3 class="chart-title" id="paceTitle">Pace</h3>
+          <ul class="pace-list" id="paceList"></ul>
+          <p class="pace-key"><span class="pace-mark-key" aria-hidden="true"></span> where an even pace would be today · tap a category to see what it counted</p>
+        </div>
+        <div class="chart-panel reveal">
+          <div class="chart-head"><h3 class="chart-title">Daily spending · <span id="dailyMonthLabel"></span></h3><span class="chart-kpi" id="dailyKpi"></span></div>
+          <div class="chart-box doughnut"><canvas id="dailyChart"></canvas><p id="dailyFallback" class="chart-fallback" hidden></p></div>
+        </div>
+        <div class="chart-panel reveal">
+          <div class="chart-head">
+            <h3 class="chart-title">By category · <span id="doughnutMonthLabel"></span></h3>
+            <label class="sr-only" for="doughnutMode">Planned or actual</label>
+            <select id="doughnutMode" class="mini-select">
+              <option value="actual">Actual</option><option value="planned">Planned</option>
+            </select>
+          </div>
+          <div class="chart-box doughnut"><canvas id="doughnutChart"></canvas><p id="doughnutFallback" class="chart-fallback" hidden></p></div>
+        </div>
+        <div class="chart-panel reveal">
+          <div class="chart-head"><h3 class="chart-title" id="chartLineTitle">Cumulative balance — actual</h3><span class="chart-kpi" id="lineKpi"></span></div>
+          <div class="chart-box"><canvas id="chart"></canvas><p id="chartFallback" class="chart-fallback" hidden></p></div>
+        </div>
+        <div class="chart-panel reveal">
+          <div class="chart-head"><h3 class="chart-title" id="chartBarsTitle">Monthly income vs expenses — actual</h3></div>
+          <div class="chart-box"><canvas id="barsChart"></canvas><p id="barsFallback" class="chart-fallback" hidden></p></div>
+        </div>
+        <div id="compareTableWrap" class="lg:col-span-2" hidden>
+          <h3 class="chart-title">Month by month</h3>
+          <div class="table-scroll max-h-[380px] overflow-y-auto">
+            <table>
+              <thead><tr><th>Month</th><th>Income (plan)</th><th>Expenses (plan)</th><th>Predicted net</th><th>Actual net</th><th>Variance</th><th>Predicted balance</th><th>Actual balance</th></tr></thead>
+              <tbody id="monthsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ MONTH EDITOR ============ -->
+  <div data-section="accounts" hidden><div id="v2Accounts"></div></div>
+  <div data-section="transactions" hidden><div id="v2Transactions"></div></div>
+  <div data-section="cashflow" hidden><div id="v2Cashflow"></div></div>
+  <div data-section="budget" hidden><div id="v2Budget"></div></div>
+  <div data-section="recurring" hidden><div id="v2Recurring"></div></div>
+  <div data-section="goals" hidden><div id="v2Goals"></div></div>
+
+  <!-- ============ CLASSIC: MONTH EDITOR ============ -->
+  <div data-section="editor" hidden>
+    <section class="card" aria-labelledby="edit-heading">
+      <h2 id="edit-heading" class="card-title">Edit a month — planned &amp; actual</h2>
+      <div class="toolbar">
+        <label class="month-picker" for="monthSelect">Month
+          <select id="monthSelect"></select>
+        </label>
+        <div class="actions">
+          <button type="button" id="copyAllBtn">Copy month to all</button>
+          <button type="button" id="copyPrevBtn">Copy previous month</button>
+          <button type="button" id="exportBtn">Export JSON</button>
+          <label class="button-like" for="importFile">Import JSON</label>
+          <input id="importFile" type="file" accept="application/json,.json" hidden>
+          <button type="button" id="resetBtn" class="danger">Reset to blank</button>
+        </div>
+      </div>
+      <p class="hint">Copy actions copy recurring planned income/expenses only — one-offs are never copied. Changes save automatically. In the Actual view, expense fields for a month with daily-log entries come from the daily log rollup (see Daily expenses) and are shown read-only there.</p>
+      <div class="view-toggle" role="group" aria-label="Planned or actual view">
+        <button type="button" id="viewPlannedBtn" class="toggle active">Planned</button>
+        <button type="button" id="viewActualBtn" class="toggle">Actual</button>
+      </div>
+      <div id="monthTotals" class="month-totals"></div>
+      <form id="monthForm" autocomplete="off"></form>
+    </section>
+  </div>
+
+  <!-- ============ DAILY EXPENSES ============ -->
+  <div data-section="daily" hidden>
+    <section class="card" aria-labelledby="daily-heading">
+      <h2 id="daily-heading" class="card-title">Daily expenses</h2>
+      <div class="sync-row">
+        <button type="button" id="syncNowBtn" class="btn-primary sync-btn">Sync now</button>
+        <span id="syncStatus" class="sync-status" aria-live="polite"></span>
+      </div>
+      <section id="reviewBox" class="review-box" aria-labelledby="review-heading" hidden>
+        <h3 id="review-heading" class="chart-title">To review</h3>
+        <p class="hint">New money to or from people. Transfers between your own accounts, card bills and paychecks are sorted out automatically.</p>
+        <div id="reviewList"></div>
+      </section>
+      <div id="dailySummary" class="daily-summary" aria-live="polite"></div>
+      <details class="howto">
+        <summary>How daily expenses work</summary>
+        <p class="hint">Add what you actually spent, each day. The category fills in automatically (Gemini when a key is set, otherwise keyword rules) and you can always override it. Each month's daily total rolls up into that month's <strong>actual</strong> expenses. Sharing an expense (roommate, friends)? Fill in <strong>My share</strong> with just your portion — actuals count only that; the split itself lives in Splitwise.</p>
+      </details>
+      <h3 class="chart-title mt-4">Add an expense</h3>
+      <form id="expenseForm" class="quick-add grid sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end" autocomplete="off">
+        <div class="field"><label for="expDateBtn">Date</label><div class="datepicker"><button type="button" class="date-btn" id="expDateBtn" aria-haspopup="dialog" aria-expanded="false"><span id="expDateDisplay"></span><span class="date-caret" aria-hidden="true">&#9662;</span></button><input type="hidden" id="expDate"><div class="cal-pop hidden" id="expDateCal" role="dialog" aria-label="Choose a date"></div></div></div>
+        <div class="field lg:col-span-2"><label for="expDescription">Description</label><input id="expDescription" type="text" maxlength="300" placeholder="e.g. Groceries at the supermarket" required></div>
+        <div class="field"><label for="expAmount">Amount ($)</label><input id="expAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" required></div>
+        <div class="field"><label for="expShare">My share ($) — optional</label><input id="expShare" type="number" inputmode="decimal" step="0.01" min="0" placeholder="My share — optional"></div>
+        <div class="field"><label for="expCategory">Category</label><select id="expCategory"><option value="">Auto-categorize</option></select></div>
+        <div class="field"><label for="expCard">Card (optional)</label><select id="expCard"><option value="">— none / cash —</option></select></div>
+        <p id="expCatHint" class="text-sm text-muted dark:text-darkmuted lg:col-span-5"></p>
+        <button type="submit" id="expAddBtn" class="btn-primary">Add expense</button>
+      </form>
+      <section id="pendingSection" class="pending-section" hidden>
+        <div class="pending-head"><h3 class="pending-title">Pending charges</h3><span id="pendingMeta" class="pending-meta"></span></div>
+        <p class="pending-note">Still settling at the bank, so not counted yet. Tap <strong>Count it now</strong> on any you know won't change; when it posts, that expense updates to the final amount instead of being added again.</p>
+        <div id="pendingList" class="pending-list"></div>
+      </section>
+      <div id="expenseList" class="tx-feed"></div>
+    </section>
+  </div>
+
+  <!-- ============ CREDIT CARDS ============ -->
+  <div data-section="cards" hidden>
+    <section class="card" aria-labelledby="cards-heading">
+      <h2 id="cards-heading" class="card-title">Credit cards — statement cycles</h2>
+      <p class="hint">A credit card bill is due in a later month — and often a different paycheck — than the spending itself. Add each card with its statement start and end dates: expenses you tag with that card on the Daily expenses tab and that fall inside the statement window group here, and their total is the estimated statement balance for that cycle.</p>
+      <h3 class="chart-title" id="cardFormTitle">Add a card</h3>
+      <form id="cardForm" class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end" autocomplete="off">
+        <div class="field"><label for="cardName">Card name</label><input id="cardName" type="text" maxlength="100" placeholder="e.g. Sapphire" required></div>
+        <div class="field"><label for="cardStartBtn">Statement start date</label><div class="datepicker"><button type="button" class="date-btn" id="cardStartBtn" aria-haspopup="dialog" aria-expanded="false"><span id="cardStartDisplay"></span><span class="date-caret" aria-hidden="true">&#9662;</span></button><input type="hidden" id="cardStart"><div class="cal-pop hidden" id="cardStartCal" role="dialog" aria-label="Choose a date"></div></div></div>
+        <div class="field"><label for="cardEndBtn">Statement end date</label><div class="datepicker"><button type="button" class="date-btn" id="cardEndBtn" aria-haspopup="dialog" aria-expanded="false"><span id="cardEndDisplay"></span><span class="date-caret" aria-hidden="true">&#9662;</span></button><input type="hidden" id="cardEnd"><div class="cal-pop hidden" id="cardEndCal" role="dialog" aria-label="Choose a date"></div></div></div>
+        <div class="field"><label for="cardDueBtn">Due date (optional)</label><div class="datepicker"><button type="button" class="date-btn" id="cardDueBtn" aria-haspopup="dialog" aria-expanded="false"><span id="cardDueDisplay"></span><span class="date-caret" aria-hidden="true">&#9662;</span></button><input type="hidden" id="cardDue"><div class="cal-pop hidden" id="cardDueCal" role="dialog" aria-label="Choose a date"></div></div></div>
+        <div class="actions">
+          <button type="submit" id="cardSaveBtn">Save card</button>
+          <button type="button" id="cardCancelEditBtn" hidden>Cancel edit</button>
+        </div>
+      </form>
+      <div id="cardList" class="mt-5"></div>
+    </section>
+  </div>
+
+  <!-- ============ BANK ============ -->
+  <div data-section="bank" hidden>
+    <section class="card" aria-labelledby="bank-heading">
+      <h2 id="bank-heading" class="card-title">Bank accounts</h2>
+      <p class="hint">Your checking and savings accounts, synced from Plaid by the automation — balances, salary deposits and everything else that moves through the bank. Read-only: this tab shows the latest snapshot the sync pushed.</p>
+      <p class="hint" id="bankSyncedAt"></p>
+      <div id="bankIgnoreRules" class="ignore-rules" hidden></div>
+      <div id="bankAccounts"></div>
+      <div class="field max-w-xs mt-5">
+        <label for="bankAccountFilter">Show transactions for</label>
+        <select id="bankAccountFilter"><option value="">All accounts</option></select>
+      </div>
+      <div id="bankTxList" class="mt-4"></div>
+    </section>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <dialog id="txDialog" class="tx-dialog" aria-labelledby="txDialogTitle">
+    <div class="txd-head">
+      <div><h3 id="txDialogTitle" class="chart-title"></h3><p id="txDialogSum" class="hint"></p></div>
+      <button type="button" id="txDialogClose" class="txd-close" aria-label="Close">&times;</button>
+    </div>
+    <div id="txDialogList" class="txd-list"></div>
+  </dialog>
+
+  <div data-section="settings" hidden>
+    <section class="card" aria-labelledby="settings-heading">
+      <h2 id="settings-heading" class="card-title">Settings</h2>
+      <h3 class="chart-title">Gemini auto-categorization</h3>
+      <p class="hint" id="geminiSettingsStatus">Checking…</p>
+      <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
+        <div class="field">
+          <label for="geminiKeyInput">Gemini API key (saved server-side, never shown back)</label>
+          <input id="geminiKeyInput" type="password" autocomplete="off" placeholder="Paste your key from Google AI Studio">
+        </div>
+        <div class="field">
+          <label for="geminiModelInput">Gemini model</label>
+          <input id="geminiModelInput" type="text" maxlength="100" placeholder="gemini-3.6-flash">
+        </div>
+      </div>
+      <div class="actions mt-2">
+        <button type="button" id="geminiSaveBtn">Save key</button>
+        <button type="button" id="geminiClearBtn" class="danger">Clear saved key</button>
+      </div>
+      <p class="hint">Two ways to configure the key: paste it here (stored only in the database, used only by the categorize function, and never displayed again — you'll see just its last 4 characters), or set the <code>GEMINI_API_KEY</code> secret on the Cloudflare Pages project, which takes precedence. Without any key, categories fall back to keyword rules. Never commit a key to git — see the README for how to get one and how to restrict it.</p>
+      <h3 class="chart-title mt-6">Merchant rules</h3>
+      <p class="hint">Expenses from these merchants always go under the category you chose, before Gemini or the keyword rules are asked.</p>
+      <ul id="merchantRulesList" class="merchant-rules"></ul>
+      <div id="securitySection" hidden>
+        <h3 class="chart-title mt-6">Security — access code &amp; devices</h3>
+        <p class="hint">Your budget is protected by an access code. Each device that signs in gets its own session (90 days, renewed as you use it) — revoke any device here and it is signed out immediately. Changing the code signs out every other device.</p>
+        <form id="secChangeForm">
+          <div class="grid sm:grid-cols-3 gap-4 max-w-3xl">
+            <div class="field">
+              <label for="secCurrentCode">Current code</label>
+              <input id="secCurrentCode" type="password" autocomplete="current-password" required>
+            </div>
+            <div class="field">
+              <label for="secNewCode">New code (min 12 characters)</label>
+              <input id="secNewCode" type="password" autocomplete="new-password" minlength="12" required>
+            </div>
+            <div class="field">
+              <label for="secNewConfirm">New code again</label>
+              <input id="secNewConfirm" type="password" autocomplete="new-password" minlength="12" required>
+            </div>
+          </div>
+          <div class="actions mt-2">
+            <button type="submit">Change access code</button>
+          </div>
+          <p class="hint" id="secChangeStatus"></p>
+        </form>
+        <h4 class="chart-title mt-4">Automation (Plaid sync)</h4>
+        <p class="hint">To connect the automatic expense sync, open a pairing window and give the one-time code to the sync script. The code works once and expires in 10 minutes. A paired script can only add and list expenses and update card statement dates — it can't read your plan, change settings, or manage devices — and it stays paired for 180 days.</p>
+        <div class="actions mt-2">
+          <button type="button" id="pairOpenBtn">Pair automation</button>
+        </div>
+        <p class="hint" id="pairOpenStatus" aria-live="polite"></p>
+        <div id="pairCard" hidden>
+          <h4 class="chart-title mt-4">Automation pairing request</h4>
+          <p class="hint"><strong id="pairLabel">Plaid sync</strong> asked to connect on <span id="pairWhen"></span>.</p>
+          <p class="hint">Fingerprint: <strong id="pairFingerprint" class="pair-fp"></strong> — approve <strong>only</strong> if the sync script printed exactly this. Approving adds it below as a sync session; it never sees your access code, and you can revoke it any time.</p>
+          <div class="actions mt-2">
+            <button type="button" id="pairApproveBtn">Approve</button>
+            <button type="button" id="pairDenyBtn" class="danger">Deny</button>
+          </div>
+        </div>
+        <h4 class="chart-title mt-4">Signed-in devices</h4>
+        <div id="sessionList"></div>
+        <div class="actions mt-3">
+          <button type="button" id="signOutBtn" class="danger">Sign out of this device</button>
+        </div>
+      </div>
+      <h3 class="chart-title mt-6">Your data</h3>
+      <p class="hint">Export JSON (in the Month editor tab) downloads everything — plan, actuals, daily expenses, credit cards and baseline. Import JSON restores it, saving through the database when in Database mode; older exports without cards still import fine. The exported file is named <code>budget-data.json</code> and is git-ignored by design.</p>
+    </section>
+    <div id="v2Manage"></div>
+  </div>
+</main>
+
+<footer class="max-w-6xl mx-auto px-4 pb-12 text-sm" style="color:var(--muted)">
+  <p>Actuals start on your baseline date. Everything else is a plan until you replace it with what really happened.</p>
+</footer>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

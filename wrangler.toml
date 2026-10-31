@@ -1,0 +1,19 @@
+# Arthatula — ONE Cloudflare Pages project.
+# The static frontend (this folder), the Pages Functions API (/functions)
+# and the D1 database binding below are all part of this single
+# project/deployment. There is no separate backend server to maintain.
+#
+# BEFORE DEPLOYING: replace the database_id with the id of the D1 database
+# you create (see README.md, "Deploy on Cloudflare Pages + D1"). When you
+# deploy through the Cloudflare dashboard instead of wrangler, you don't
+# even need this file — just set the same D1 binding (variable name: DB)
+# in the project settings.
+
+name = "arthatula"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "DB" # the API reads env.DB — this name must stay "DB"
+database_name = "arthatula"
+database_id = "38802126-fcbc-4573-8e5b-f4e348cc3e32"

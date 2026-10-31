@@ -1,0 +1,15 @@
+# Personal budget data — never commit this. Export/Import JSON files
+# downloaded from the app use this exact name.
+budget-data.json
+
+# Local tooling / OS noise
+node_modules/
+.DS_Store
+.wrangler/
+*.muse-github-snapshot-sync.json
+*.muse-github-snapshot-sync.json.tmp-*
+
+# Browser tests (e2e/)
+e2e/.state/
+e2e/test-results/
+e2e/playwright-report/

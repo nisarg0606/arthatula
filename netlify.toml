@@ -1,0 +1,5 @@
+[build]
+  publish = "."
+  # Static-only deploy: no build command, no Functions.
+  # Without the Cloudflare D1 API the app runs in its localStorage
+  # fallback mode ("Local only" badge) — see README.md.

@@ -1,0 +1,34 @@
+/* Entry point: loads every screen module, wires them up in the original order, then starts. */
+import { init as initContext } from "./ui/context.js";
+import { init as initEditor } from "./ui/editor.js";
+import { init as initDatepicker } from "./ui/datepicker.js";
+import { init as initDaily } from "./ui/daily.js";
+import { init as initReview } from "./ui/review.js";
+import { init as initPopup } from "./ui/popup.js";
+import { init as initCards } from "./ui/cards.js";
+import { init as initBank } from "./ui/bank.js";
+import { init as initSync } from "./ui/sync.js";
+import { init as initSettings } from "./ui/settings.js";
+import { init as initShell } from "./ui/shell.js";
+import { init as initAuth } from "./ui/auth.js";
+import { init as initAsk } from "./ui/ask.js";
+import { showTab } from "./ui/shell.js";
+import { bootAuth } from "./ui/auth.js";
+import { init as initV2 } from "./ui/v2/index.js";
+
+initContext();
+initEditor();
+initDatepicker();
+initDaily();
+initReview();
+initPopup();
+initCards();
+initBank();
+initSync();
+initSettings();
+initShell();
+initAuth();
+initAsk();
+initV2(showTab);
+showTab("dashboard");
+bootAuth();
