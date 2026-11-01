@@ -1,8 +1,9 @@
 /* Dashboard overview (top of the Dashboard tab): net worth, this
    month's spending and income against the budget, what needs review,
-   what's due soon, and where the money went. */
+   what's due soon, and where the money went. Also the Dashboard's
+   layout: which cards show and in what order (Customize). */
 import { keepScroll } from "../scroll.js";
-import { api, h, clear, money, shortDay, monthLabel, loadBasics, categoryName, button, errorState, loading } from "./kit.js";
+import { api, h, clear, money, shortDay, monthLabel, loadBasics, categoryName, button, errorState, loading, openDialog } from "./kit.js";
 
 let goTo = null;
 export function setNavigator(fn) { goTo = fn; }
@@ -16,6 +17,7 @@ function tile(label, value, sub, cls, onClick) {
 /* A refresh (e.g. after auto-review) swaps the overview in place: no
    "Loading…" flash and the scroll position stays put. */
 export function render(container) {
+  loadLayout();
   if (!container.firstChild) loading(container);
   return loadBasics().then(function () { return api("GET", "reports?kind=summary"); }).then(function (s) {
     keepScroll(function () { draw(container, s); });
@@ -56,10 +58,76 @@ function draw(container, s) {
     });
     container.appendChild(h("section", { class: "card v2-card v2-overview" },
       h("div", { class: "v2-card-head" }, h("h2", { class: "card-title", text: "Overview" }),
-        h("div", { class: "actions" }, button("Transactions", function () { goTo && goTo("transactions"); }, "v2-mini"), button("Budget", function () { goTo && goTo("budget"); }, "v2-mini"))),
+        h("div", { class: "actions" }, button("Transactions", function () { goTo && goTo("transactions"); }, "v2-mini"), button("Budget", function () { goTo && goTo("budget"); }, "v2-mini"), button("Customize", customize, "v2-mini", { "aria-label": "Customize dashboard" }))),
       tiles,
       heads.firstChild ? h("div", null, h("h3", { class: "v2-sub-head", text: "Heads up" }), heads) : null,
       h("div", { class: "v2-two" },
         h("div", null, h("h3", { class: "v2-sub-head", text: "Coming up · 14 days" }), due),
         h("div", null, h("h3", { class: "v2-sub-head", text: "Top spending this month" }), top))));
+}
+
+/* The Dashboard's cards: [key, name, selector]. Keys match SECTIONS in
+   functions/api/v2/layout.js, which saves the layout per owner so it
+   follows you across devices. */
+const CARDS = [["overview", "Overview", "#v2Overview"], ["month", "This month", ".month-card"], ["ask", "Ask about your budget", ".ask-card"], ["trends", "Trends & plan settings", ".dash-card"]];
+let layout = null;
+
+function loadLayout() {
+  if (layout) return applyLayout();
+  api("GET", "layout").then(function (l) { layout = l; applyLayout(); }, function () { /* keep the default */ });
+}
+
+/* Moves the cards into the saved order; anything else in the section
+   (a card added later) follows them. Charts in a card shown again fit
+   their new box by themselves (Chart.js watches it). */
+function applyLayout() {
+  const dash = document.querySelector('[data-section="dashboard"]');
+  if (!dash) return;
+  const cards = layout.order.map(function (k) {
+    const c = CARDS.find(function (x) { return x[0] === k; });
+    const el = c && dash.querySelector(c[2]);
+    if (el) { el.hidden = layout.hidden.indexOf(k) !== -1; dash.appendChild(el); }
+    return el;
+  });
+  Array.from(dash.children).forEach(function (el) { if (cards.indexOf(el) === -1) dash.appendChild(el); });
+  /* With the overview hidden, Customize lives at the bottom instead. */
+  const alt = document.getElementById("dashCustomize");
+  if (alt) alt.hidden = layout.hidden.indexOf("overview") === -1;
+}
+
+function save(l) {
+  return api("PUT", "layout", l).then(function (saved) { layout = saved; applyLayout(); });
+}
+
+export function customize() {
+  const order = (layout ? layout.order : CARDS.map(function (c) { return c[0]; })).slice();
+  const hidden = (layout ? layout.hidden : []).slice();
+  const list = h("div", { class: "v2-list" });
+  /* Focus follows the moved card's arrow, so a keyboard can keep going. */
+  const move = function (i, d) {
+    order.splice(i + d, 0, order.splice(i, 1)[0]);
+    fill();
+    const btns = list.children[i + d].querySelectorAll("button");
+    (btns[d < 0 ? 0 : 1].disabled ? btns[d < 0 ? 1 : 0] : btns[d < 0 ? 0 : 1]).focus();
+  };
+  const fill = function () {
+    clear(list);
+    order.forEach(function (k, i) {
+      const name = CARDS.find(function (c) { return c[0] === k; })[1];
+      const box = h("input", { attrs: { type: "checkbox" } });
+      box.checked = hidden.indexOf(k) === -1;
+      box.addEventListener("change", function () {
+        if (box.checked) hidden.splice(hidden.indexOf(k), 1); else hidden.push(k);
+      });
+      list.appendChild(h("div", { class: "v2-line layout-row" },
+        h("label", { class: "switch-label v2-check v2-line-name" }, box, h("span", { text: name })),
+        button("↑", function () { move(i, -1); }, "v2-mini", { "aria-label": "Move " + name + " up", disabled: i === 0 }),
+        button("↓", function () { move(i, 1); }, "v2-mini", { "aria-label": "Move " + name + " down", disabled: i === order.length - 1 })));
+    });
+  };
+  fill();
+  openDialog("Customize dashboard", h("div", null, h("p", { class: "hint", text: "Tick what to show; the arrows set the order. Saved to your account, so it follows you to every device." }), list), [
+    { label: "Reset to default", onClick: function (close) { return save({}).then(close); } },
+    { label: "Save", primary: true, onClick: function (close) { return save({ order: order, hidden: hidden }).then(close); } }
+  ]);
 }

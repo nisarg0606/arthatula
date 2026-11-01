@@ -33,6 +33,7 @@ import * as v2budgets from "./functions/api/v2/budgets.js";
 import * as v2categories from "./functions/api/v2/categories.js";
 import * as v2export from "./functions/api/v2/export.js";
 import * as v2goals from "./functions/api/v2/goals.js";
+import * as v2layout from "./functions/api/v2/layout.js";
 import * as v2migration from "./functions/api/v2/migration.js";
 import * as v2networth from "./functions/api/v2/networth.js";
 import * as v2recurring from "./functions/api/v2/recurring.js";
@@ -66,6 +67,7 @@ export const ROUTES = [
   ["/api/v2/categories", v2categories, "api/v2/categories.js"],
   ["/api/v2/export", v2export, "api/v2/export.js"],
   ["/api/v2/goals", v2goals, "api/v2/goals.js"],
+  ["/api/v2/layout", v2layout, "api/v2/layout.js"],
   ["/api/v2/migration", v2migration, "api/v2/migration.js"],
   ["/api/v2/networth", v2networth, "api/v2/networth.js"],
   ["/api/v2/recurring", v2recurring, "api/v2/recurring.js"],

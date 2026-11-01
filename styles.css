@@ -1025,3 +1025,8 @@ textarea{min-height:88px}
   .brand .app-sub,.brand .app-sub2{display:none}
   .brand > p:last-child{margin:0}
 }
+/* Customize dashboard: one row per card. */
+.layout-row{flex-wrap:nowrap}
+.layout-row .v2-mini{min-width:44px}
+.layout-row .v2-mini:disabled{opacity:.35;cursor:default;pointer-events:none}
+#dashCustomize{display:block;margin:0 auto 24px}
