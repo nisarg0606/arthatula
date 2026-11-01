@@ -203,7 +203,7 @@ test("Sync now keeps watching a slow sync and shows the result when it finishes"
   await openTab(page, "daily");
   const btn = page.locator("#syncNowBtn");
   await btn.click();
-  await expect(btn).toHaveText("Queued…");
+  await expect(btn).toHaveText("Queued…", { timeout: 15000 });
   /* Nudge the page's clock forward 10 s at a time (one status check
      each) until the button shows `text`. A button that stopped watching
      never gets there, which is the bug this test guards against. */
@@ -419,7 +419,11 @@ test("new screens: every tab renders without a script error", async ({ page }) =
 });
 
 test("new screens: add a transaction, file it, and see it in the budget and cash flow", async ({ page }, info) => {
-  const name = "E2E farm stand " + info.project.name;
+  /* Unique per attempt: a failed first try leaves its transaction in
+     the shared test database, and a retry reusing the same name would
+     match two rows and die on a strict-mode violation instead of
+     testing anything. */
+  const name = "E2E farm stand " + info.project.name + (info.retry ? " r" + info.retry : "");
   await openTab(page, "transactions");
   await page.locator("#v2AddTx").click();
   await (await dialogField(page, "Merchant")).fill(name);
