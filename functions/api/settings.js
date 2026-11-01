@@ -5,17 +5,19 @@
  *   GET /api/settings -> { ai: { provider, label, providers, hasKey, last4,
  *                          model, modelSource, defaultModel, baseUrl, source },
  *                          gemini: (same as ai, for older clients),
- *                          splitwise: { hasKey, last4, source } }
+ *                          splitwise: { hasKey, last4, source },
+ *                          finnhub: { hasKey, last4, source } }
  *     Full API keys are NEVER returned — only whether one is saved and
  *     at most its last 4 characters.
  *   PUT /api/settings { aiProvider?, aiApiKey?, aiModel?, aiBaseUrl?,
- *                       clearAiKey?, splitwiseApiKey?, clearSplitwiseKey? }
+ *                       clearAiKey?, splitwiseApiKey?, clearSplitwiseKey?,
+ *                       finnhubApiKey?, clearFinnhubKey? }
  *     The ai* fields apply to aiProvider (or the current provider).
  *     The older geminiApiKey / geminiModel / clearGeminiKey still work.
  *     Keys are saved server-side in the D1 budget_settings table, one
  *     per provider, where only the server can read them. A key in an
  *     environment secret (GEMINI_API_KEY, XAI_API_KEY, OPENAI_API_KEY,
- *     SPLITWISE_API_KEY) always wins and is reported as source: "env"
+ *     SPLITWISE_API_KEY, FINNHUB_API_KEY) always wins and is reported as source: "env"
  *     (it cannot be cleared from the UI). See _ai.js.
  */
 import { ensureTables, requireAuth } from "./budget.js";
@@ -91,9 +93,13 @@ export async function describeSettings(env) {
   const swEnvKey = env.SPLITWISE_API_KEY || null;
   const swSavedKey = await getSetting(env.DB, "splitwise_api_key");
   const swKey = swEnvKey || swSavedKey;
+  const fhEnvKey = env.FINNHUB_API_KEY || null;
+  const fhSavedKey = await getSetting(env.DB, "finnhub_api_key");
+  const fhKey = fhEnvKey || fhSavedKey;
   return {
     ai,
     gemini: ai,
+    finnhub: { hasKey: !!fhKey, last4: fhKey ? fhKey.slice(-4) : null, source: fhEnvKey ? "env" : fhSavedKey ? "saved" : null },
     splitwise: {
       hasKey: !!swKey,
       last4: swKey ? swKey.slice(-4) : null,
@@ -145,6 +151,15 @@ export async function onRequestPut(context) {
       await setSetting(context.env.DB, "splitwise_api_key", "");
     } else if (typeof body.splitwiseApiKey === "string" && body.splitwiseApiKey.trim()) {
       await setSetting(context.env.DB, "splitwise_api_key", body.splitwiseApiKey.trim().slice(0, 300));
+    }
+    if (body.clearFinnhubKey === true) {
+      await setSetting(db, "finnhub_api_key", "");
+    } else if (typeof body.finnhubApiKey === "string" && body.finnhubApiKey.trim()) {
+      await setSetting(db, "finnhub_api_key", body.finnhubApiKey.trim().slice(0, 200));
+    }
+    /* A new or removed key means the next visit fetches again. */
+    if (body.clearFinnhubKey === true || typeof body.finnhubApiKey === "string") {
+      await db.prepare("DELETE FROM v2_settings WHERE key IN ('market:checked', 'market:failed_at', 'market:error')").run().catch(() => {});
     }
     return json(await describeSettings(context.env));
   } catch (err) {
