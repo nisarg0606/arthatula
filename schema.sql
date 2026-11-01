@@ -194,10 +194,10 @@ CREATE TABLE IF NOT EXISTS sync_requests (
 -- It is only ever read by the categorize Function; GET /api/settings
 -- returns just a masked indicator, never the key. No key is seeded here.
 
--- Seed: a zero starting balance and an empty baseline note. The API
--- seeds the rest on first use: the baseline date (today) and plan_start
--- (this month; the planner shows 13 months from it). Month rows are
--- written on first save.
+-- Seed: a zero starting balance and an empty baseline note. The app
+-- sets the rest on its first load, in your own time zone: the baseline
+-- date (today) and plan_start (this month; the planner shows 13 months
+-- from it). Month rows are written on first save.
 INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('starting_balance_cents', '0');
 INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_note', '');
 

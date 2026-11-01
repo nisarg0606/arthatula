@@ -17,8 +17,10 @@
 
 /* The planner's months: 13 from plan_start (kept in budget_settings),
    and on through the current month once time runs past them. A new
-   database starts the plan this month; one from before plan_start
-   existed keeps its first stored month (see ensureTables). */
+   database gets plan_start and its baseline date from the app on first
+   load (patchState's `setup`), in the user's own time zone; one from
+   before plan_start existed keeps its first stored month (see
+   ensureTables). Until then the server's UTC month stands in. */
 export const PLAN_LENGTH = 13;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const thisMonth = () => todayIso().slice(0, 7);
@@ -233,12 +235,12 @@ export async function ensureTables(db) {
   ];
   const pragmaIndex = stmts.length - 1;
   /* Month rows are written on first save (upserts), so none are seeded.
-     A database from before plan_start keeps its first month. */
+     A database from before plan_start keeps its first month; a new one
+     gets plan_start and baseline_date from the app (patchState). */
   stmts.push(db.prepare(
-    "INSERT OR IGNORE INTO budget_settings (key, value) SELECT 'plan_start', COALESCE((SELECT MIN(month_key) FROM monthly_budgets), ?)"
-  ).bind(thisMonth()));
+    "INSERT OR IGNORE INTO budget_settings (key, value) SELECT 'plan_start', MIN(month_key) FROM monthly_budgets HAVING MIN(month_key) IS NOT NULL"
+  ));
   stmts.push(db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('starting_balance_cents', '0')"));
-  stmts.push(db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_date', ?)").bind(todayIso()));
   stmts.push(db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_note', '')"));
   const results = await db.batch(stmts);
   /* Migrations for databases created before later features: the CREATE
@@ -1128,7 +1130,9 @@ export async function readState(db) {
   const startingRaw = await getSetting(db, "starting_balance_cents");
   const startingBalance = startingRaw !== null ? toDollars(parseInt(startingRaw, 10)) : 0;
   const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
-  const keys = await monthKeys(db);
+  /* null until the app sends its setup (a new database). */
+  const planStart = await getSetting(db, "plan_start");
+  const keys = planMonthKeys(planStart || thisMonth(), thisMonth());
   const baselineNote = (await getSetting(db, "baseline_note")) || "";
   const { results } = await db.prepare("SELECT * FROM monthly_budgets ORDER BY month_key").all();
   const byKey = new Map((results || []).map((r) => [r.month_key, r]));
@@ -1165,7 +1169,7 @@ export async function readState(db) {
   }));
   const cards = await listCards(db);
   const merchantRules = await getMerchantRules(db);
-  return { baselineDate, baselineNote, startingBalance, months, actuals, dailyExpenses, cards, merchantRules };
+  return { planStart, baselineDate, baselineNote, startingBalance, months, actuals, dailyExpenses, cards, merchantRules };
 }
 
 /* "Always file this merchant under ..." rules (js/core/merchant.js),
@@ -1396,6 +1400,15 @@ export async function writeState(db, state) {
 
 export async function patchState(db, body) {
   await ensureTables(db);
+  /* A new database's first load: the app's own month and date, in the
+     user's time zone. Never replaces values already set. */
+  const setup = body && body.setup;
+  if (setup && /^\d{4}-(0[1-9]|1[0-2])$/.test(setup.planStart) && isValidDateStr(setup.baselineDate)) {
+    await db.batch([
+      db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('plan_start', ?)").bind(setup.planStart),
+      db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_date', ?)").bind(setup.baselineDate)
+    ]);
+  }
   if (body && body.startingBalance !== undefined) {
     await setSetting(db, "starting_balance_cents", String(toCents(body.startingBalance)));
   }

@@ -26,7 +26,7 @@ import { sanitizeMyShare } from "./spending.js";
 export const MONTHS = [];
 var SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function localIso(d) {
+export function localIso(d) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 

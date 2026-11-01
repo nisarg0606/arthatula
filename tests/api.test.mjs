@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  onRequestGet, onRequestPatch, onRequestPut, planMonthKeys, ensureTables, readState
+  onRequestGet, onRequestPatch, onRequestPut, planMonthKeys, ensureTables, readState, patchState
 } from "../functions/api/budget.js";
 import { onRequestPut as actualsPut } from "../functions/api/actuals.js";
 import { FakeD1, makeCtx, setupTestAuth, authHeaders } from "./_fake-d1.mjs";
@@ -111,12 +111,20 @@ assert.deepEqual(planMonthKeys("2026-10", "2028-01").slice(-3), ["2027-11", "202
 assert.deepEqual(planMonthKeys("2026-11", "2026-11").slice(0, 3), ["2026-11", "2026-12", "2027-01"]);
 {
   const today = new Date().toISOString().slice(0, 10);
-  // A new database starts the plan this month, anchored today.
+  // A new database waits for the app's own month and date (its time
+  // zone, not the server's UTC); until then the UTC month stands in.
   const fresh = new FakeD1({ fresh: true });
-  const st = await readState(fresh);
+  let st = await readState(fresh);
+  assert.equal(st.planStart, null);
   assert.equal(st.months[0].monthKey, today.slice(0, 7));
   assert.equal(st.months.length, 13);
-  assert.equal(st.baselineDate, today);
+  st = await patchState(fresh, { setup: { planStart: "2026-10", baselineDate: "2026-10-31" } });
+  assert.equal(st.planStart, "2026-10");
+  assert.equal(st.months[0].monthKey, "2026-10");
+  assert.equal(st.baselineDate, "2026-10-31");
+  st = await patchState(fresh, { setup: { planStart: "2027-01", baselineDate: "2027-01-05" } });
+  assert.equal(st.planStart, "2026-10", "setup never replaces a plan that is already set");
+  assert.equal(st.baselineDate, "2026-10-31");
   // A database from before plan_start keeps its months and baseline.
   const old = new FakeD1({ fresh: true });
   old.db.exec("CREATE TABLE budget_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");

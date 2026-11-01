@@ -1,5 +1,5 @@
 /* Saving and loading: local copy, sign-in session token, API calls, initial load. */
-import { API_URL, STORAGE_KEY, blankState, sanitizeState } from "../core/plan.js";
+import { API_URL, STORAGE_KEY, blankState, localIso, sanitizeState } from "../core/plan.js";
 import { showGate } from "./auth.js";
 import { loadBank } from "./bank.js";
 import { app, els } from "./context.js";
@@ -95,6 +95,14 @@ export function persist() {
 
 export function load() {
   apiRequest("GET").then(function (data) {
+    /* A new database: start its plan and baseline on the user's own
+       today (the server only knows UTC). */
+    if (data && data.planStart === null) {
+      var today = localIso(new Date());
+      return apiRequest("PATCH", { setup: { planStart: today.slice(0, 7), baselineDate: today } });
+    }
+    return data;
+  }).then(function (data) {
     app.state = sanitizeState(data);
     setMode("database");
     saveLocal();
