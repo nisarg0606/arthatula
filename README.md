@@ -21,9 +21,10 @@
   <img src="https://img.shields.io/badge/runs_on-Cloudflare_free_plan-f38020" alt="Runs on Cloudflare's free plan">
   <img src="https://img.shields.io/badge/AI_agents-MCP_server-8b5cf6" alt="MCP server">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
-  <a href="https://liberapay.com/nisarg001/donate"><img src="https://img.shields.io/badge/Liberapay-buy_me_a_coffee-f6c915?logo=liberapay&logoColor=black" alt="Buy me a coffee on Liberapay"></a>
 </p>
-
+<p align="center">
+  <a href="https://ko-fi.com/U7U529WBKW" target="_blank"><img src="https://ko-fi.com/img/githubbutton_sm.svg"></a>
+</p>
 <p align="center">
   <a href="docs/GUIDE.md"><b>Guide</b></a> ·
   <a href="#get-your-own-copy-about-5-minutes-free"><b>Get your copy</b></a> ·
@@ -717,7 +718,7 @@ Arthatula is free and stays free. If it saves you money or time, you can
 [buy me a coffee on Liberapay](https://liberapay.com/nisarg001/donate) ☕,
 star the repo, or tell a friend.
 
-<a href="https://liberapay.com/nisarg001/donate"><img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg"></a>
+<a href="https://ko-fi.com/U7U529WBKW" target="_blank"><img alt="Donate using ko-fi" src="https://ko-fi.com/img/githubbutton_sm.svg"></a>
 
 ## License
 
