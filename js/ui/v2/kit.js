@@ -2,6 +2,7 @@
    that only ever sets text (never HTML), money/date formatting, the
    category and account caches, and a reusable edit dialog. */
 import { apiFetch } from "../storage.js";
+import { amountsHidden, HIDDEN } from "../../core/format.js";
 
 export const v2 = { categories: [], groups: [], accounts: [], loadedAt: 0 };
 
@@ -43,6 +44,7 @@ const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD"
 export function money(cents, opts) {
   const o = opts || {};
   if (cents === null || cents === undefined) return "—";
+  if (amountsHidden()) return HIDDEN;
   const s = (o.whole ? usd0 : usd).format(Math.abs(cents) / 100);
   if (cents < 0) return "-" + s;
   return (o.signed && cents > 0 ? "+" : "") + s;
@@ -175,6 +177,15 @@ export function chartColors() {
     accent: "#14b8a6", income: "#10b981", spend: "#f43f5e", plan: "#8b5cf6" };
 }
 const charts = {};
+/* Eye button on: the value axes and tooltips show no amounts (the shape stays). */
+function maskChart(config) {
+  const o = config.options = config.options || {};
+  Object.keys(o.scales || {}).forEach(function (k) {
+    if (k !== "x") o.scales[k].ticks = Object.assign({}, o.scales[k].ticks, { callback: function () { return HIDDEN; } });
+  });
+  o.plugins = Object.assign({}, o.plugins);
+  o.plugins.tooltip = Object.assign({}, o.plugins.tooltip, { callbacks: { label: function (c) { return (c.dataset.label ? c.dataset.label + ": " : "") + HIDDEN; } } });
+}
 /* (Re)draw a Chart.js chart into a <canvas>; falls back to text. */
 export function drawChart(key, canvas, config, fallbackText) {
   if (charts[key]) { charts[key].destroy(); charts[key] = null; }
@@ -182,6 +193,7 @@ export function drawChart(key, canvas, config, fallbackText) {
     if (canvas && canvas.parentNode) canvas.parentNode.replaceChild(h("p", { class: "chart-fallback", text: fallbackText || "" }), canvas);
     return null;
   }
+  if (amountsHidden()) maskChart(config);
   charts[key] = new window.Chart(canvas, config);
   return charts[key];
 }

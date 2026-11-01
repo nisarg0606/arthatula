@@ -24,7 +24,15 @@ export function deviceLabel(ua) {
 /* One shared formatter: toLocaleString with options builds a new one per call. */
 var MONEY = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/* The eye button (header) hides every amount: the formatters print this
+   instead while <html> has the hide-amounts class. */
+export var HIDDEN = "$•••";
+export function amountsHidden() {
+  return typeof document !== "undefined" && document.documentElement.classList.contains("hide-amounts");
+}
+
 export function fmt(n) {
+  if (amountsHidden()) return HIDDEN;
   var sign = n < 0 ? "-" : "";
   return sign + "$" + MONEY.format(Math.abs(n));
 }

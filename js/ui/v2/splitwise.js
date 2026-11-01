@@ -3,6 +3,7 @@
    served by /api/v2/splitwise. The API key never reaches the
    browser — connect it in Settings → Splitwise. */
 import { api, h, clear, money, section, button, emptyState, errorState, loading, shortDay } from "./kit.js";
+import { amountsHidden } from "../../core/format.js";
 
 let goTo = null;
 export function setNavigator(fn) { goTo = fn; }
@@ -17,7 +18,7 @@ function tile(label, value, sub, cls) {
 function otherCurrencies(balances) {
   return (balances || [])
     .filter((b) => b.currency !== "USD")
-    .map((b) => b.currency + " " + (b.amountCents / 100).toFixed(2))
+    .map((b) => b.currency + " " + (amountsHidden() ? "•••" : (b.amountCents / 100).toFixed(2)))
     .join(" · ");
 }
 

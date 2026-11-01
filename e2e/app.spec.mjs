@@ -422,6 +422,31 @@ async function saveDialog(page) {
   await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(0);
 }
 
+test("eye button hides every amount, keeps it after a reload, and shows them again", async ({ page }) => {
+  const screens = [["dashboard", "#v2Overview .v2-tile"], ["accounts", "#v2Accounts .v2-tiles"], ["transactions", "#v2Transactions .v2-filters"],
+    ["cashflow", "#v2Cashflow .v2-tiles"], ["budget", "#v2Budget .v2-month-nav"]];
+  const visibleText = async (name) => page.locator('[data-section="' + name + '"]').evaluate((el) => {
+    /* the Ask card's example questions ("Can I afford $1,300…") are not your numbers */
+    const copy = el.cloneNode(true);
+    copy.querySelectorAll(".ask-suggest, .ask-form, .hint").forEach((n) => n.remove());
+    return copy.innerText;
+  });
+  await expect(page.locator("#v2Overview .v2-tile").first()).toBeVisible();
+  await page.locator("#hideAmountsBtn").click();
+  await expect(page.locator("#hideAmountsBtn")).toHaveAttribute("aria-pressed", "true");
+  for (const [tab, sel] of screens) {
+    await openTab(page, tab);
+    await expect(page.locator(sel).first()).toBeVisible();
+    expect(await visibleText(tab), tab + " shows an amount").not.toMatch(/\$\s?\d/);
+  }
+  await page.reload();
+  await expect(page.locator("html")).toHaveClass(/hide-amounts/);
+  await expect(page.locator("#v2Overview .v2-tile").first()).toContainText("$•••");
+  await page.locator("#hideAmountsBtn").click();
+  await expect(page.locator("#hideAmountsBtn")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#v2Overview .v2-tile").first()).toContainText(/\$\d/);
+});
+
 test("new screens: every tab renders without a script error", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
