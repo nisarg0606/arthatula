@@ -848,3 +848,7 @@ input[type="checkbox"]:disabled{opacity:.5;cursor:default}
   .more-sheet,.more-sheet[open],.more-sheet::backdrop{animation:none;transition:none}
   input[type="checkbox"]::after{transition:none}
 }
+
+/* Brand logo (lotus scale mark) */
+.brand-logo{width:46px;height:46px;border-radius:12px;display:block;margin-bottom:12px}
+.brand-mark{width:20px;height:20px;border-radius:5px;vertical-align:-5px}
