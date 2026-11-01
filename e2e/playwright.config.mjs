@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/* The app runs under `wrangler pages dev` with a fresh local D1 database
+/* The app runs as the Worker (worker.js, `wrangler dev`) — what the Deploy
+   to Cloudflare button sets up — with a fresh local D1 database
    (e2e/.state is wiped each run) and a throwaway setup secret. One worker:
    both browser projects share that database (in CI each project runs on
    its own runner, so each gets its own). Everything uses 127.0.0.1, not
@@ -23,8 +24,8 @@ export default defineConfig({
     { name: "desktop-chrome", use: { ...devices["Desktop Chrome"] } }
   ],
   webServer: {
-    command: "rm -rf e2e/.state && node e2e/node_modules/wrangler/bin/wrangler.js pages dev . --ip 127.0.0.1 --port 8790 " +
-      "--persist-to e2e/.state --binding SETUP_SECRET=e2e-setup-secret",
+    command: "rm -rf e2e/.state && node e2e/node_modules/wrangler/bin/wrangler.js dev --ip 127.0.0.1 --port 8790 " +
+      "--persist-to e2e/.state --var SETUP_SECRET:e2e-setup-secret",
     cwd: "..",
     url: "http://127.0.0.1:8790",
     stdout: "pipe", /* show the server's own log (e.g. "Ready on …") in CI */
