@@ -25,7 +25,10 @@ export function showTab(name) {
     if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
   });
   var more = document.getElementById("moreTab"), add = document.getElementById("addTab");
-  if (more) more.classList.toggle("active", PHONE_TABS.indexOf(name) === -1);
+  var btn = document.querySelector('.nav-float .tab-btn[data-tab="' + name + '"]');
+  /* More lights up when the open screen has nothing of its own in the bar (phones show Daily as the center Add button). */
+  var inBar = (btn && btn.offsetParent) || (name === "daily" && add && add.offsetParent);
+  if (more) more.classList.toggle("active", !inBar);
   if (add) add.classList.toggle("active", name === "daily");
   if (name === "dashboard") renderSummary(); /* charts need a visible canvas */
   if (name === "cards") renderCards();
@@ -35,13 +38,12 @@ export function showTab(name) {
   onShowV2(name); /* the new screens render on every visit */
 }
 
-/* ================= Phone tab bar: four tabs + More =================
-   The bar shows PHONE_TABS (CSS hides the rest under 640px); More opens
-   a sheet with every section, built from the nav's own buttons so the
-   two never drift apart. The sheet follows the finger when dragged
-   down and closes on a long enough drag or a quick flick. */
-
-export const PHONE_TABS = ["dashboard", "transactions", "budget", "daily"]; /* daily: the center Add button */
+/* ================= Tab bar + More =================
+   Phones show Home, Activity, the center Add button and Budget; wide
+   screens the Money tabs. More opens a sheet with the rest, built from
+   the nav's own buttons so the two never drift apart. The sheet follows
+   the finger when dragged down and closes on a long enough drag or a
+   quick flick. */
 
 function buildMoreSheet(sheet, body) {
   var groups = [["Money", ".nav-float .tab-btn:not(.classic)"], ["Classic", ".nav-float .tab-btn.classic"]];
@@ -50,6 +52,7 @@ function buildMoreSheet(sheet, body) {
     head.className = "sheet-group"; head.textContent = g[0];
     var grid = document.createElement("div");
     grid.className = "more-grid";
+    if (g[0] === "Money") { head.classList.add("sheet-money"); grid.classList.add("sheet-money"); }
     document.querySelectorAll(g[1]).forEach(function (b) {
       var name = b.getAttribute("data-tab");
       var tile = document.createElement("button");

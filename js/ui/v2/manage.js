@@ -17,7 +17,7 @@ function categoriesCard() {
           button("+ Category", function () { addCategory(g); }, "v2-mini", { "aria-label": "Add a category to " + g.name }),
           button("Rename", function () { renameGroup(g); }, "v2-mini"))),
       h("div", { class: "v2-chips" }, cats.map(function (c) {
-        return h("button", { class: "v2-chip big" + (c.archived ? " muted" : ""), text: c.name, attrs: { type: "button", title: "Edit " + c.name }, on: { click: function () { editCategory(c); } } });
+        return h("button", { class: "v2-chip big" + (c.archived ? " muted" : ""), text: (c.icon ? c.icon + " " : "") + c.name, attrs: { type: "button", title: "Edit " + c.name }, on: { click: function () { editCategory(c); } } });
       }))));
   });
   return section("Categories", [button("+ Group", addGroup, "v2-mini")], body);
@@ -44,16 +44,18 @@ function addCategory(g) {
 }
 function editCategory(c) {
   const name = h("input", { attrs: { type: "text", maxlength: "60" }, value: c.name });
+  const icon = h("input", { attrs: { type: "text", maxlength: "8", placeholder: "🛒", "aria-label": "Emoji" }, value: c.icon || "" });
   const group = h("select", { attrs: { "aria-label": "Group" } }, v2.groups.map(function (g) { return h("option", { value: g.id, text: g.name }); }));
   group.value = c.groupId;
   const moveTo = categorySelect(null, { label: "Move its transactions to" });
   const archived = h("input", { attrs: { type: "checkbox" } }); archived.checked = c.archived;
-  openDialog(c.name, h("div", { class: "v2-form" }, field("Name", name), field("Group", group),
+  openDialog(c.name, h("div", { class: "v2-form" }, field("Name", name), field("Emoji", icon, "Optional. Shows next to the name everywhere."), field("Group", group),
     h("label", { class: "switch-label v2-check" }, archived, h("span", { text: "Archive (hide from pickers)" })),
     field("When deleting, move its transactions and budgets to", moveTo)), [
     { label: "Save", primary: true, onClick: function (close) {
       const patch = {};
       if (name.value.trim() !== c.name) patch.name = name.value.trim();
+      if (icon.value.trim() !== (c.icon || "")) patch.icon = icon.value.trim();
       if (group.value !== c.groupId) patch.groupId = group.value;
       if (archived.checked !== c.archived) patch.archived = archived.checked;
       return api("PATCH", "categories", { type: "category", id: c.id, patch: patch }).then(function (r) { close(); done(r); });

@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import {
   summarize, cashFlow, budgetMonth, forecast, netWorthSeries, ruleMatches, applyRules, merchantKey,
-  detectRecurring, upcoming, goalProgress, addMonths, monthRange, reportLines, addDays
+  detectRecurring, upcoming, goalProgress, addMonths, monthRange, reportLines, addDays, largeExpenses
 } from "../js/core/v2/money.js";
 
 const cats = {
@@ -78,12 +78,24 @@ assert.equal(addDays("2026-02-27", 2), "2026-03-01");
   assert.equal(dec.actualSpendingCents, 62000);
   const jan = budgetMonth("2027-01", budgets, txs, cats);
   assert.equal(jan.rows.find((r) => r.categoryId === "food").rolloverCents, 0, "rollover off in January");
+  assert.equal(jan.rows.find((r) => r.categoryId === "food").avgCents, 30000, "Oct-Dec average: (0 + 300 + 600) / 3");
+  assert.equal(jan.rows.find((r) => r.categoryId === "fun").plannedCents, 0, "December's unbudgeted spending shows in January with a suggestion");
   /* Overspending rolls forward as a negative. */
   const over = budgetMonth("2026-12", [
     { month: "2026-11", categoryId: "food", amountCents: 10000, rollover: true },
     { month: "2026-12", categoryId: "food", amountCents: 10000, rollover: true }
   ], [tx("2026-11-05", -15000, "food")], cats);
   assert.equal(over.rows[0].rolloverCents, -5000);
+}
+
+/* ---- large expenses ---- */
+{
+  const list = [tx("2026-10-20", -2000, "food"), tx("2026-10-21", -3000, "food"), tx("2026-10-22", -4000, "food"),
+    tx("2026-10-29", -50000, "rent"), tx("2026-10-30", -9000, "fun"), tx("2026-10-31", -60000, "fun", { hidden: true }),
+    tx("2026-10-31", 900000, "pay"), tx("2026-10-01", -80000, "rent")];
+  const big = largeExpenses(list, "2026-10-31");
+  assert.deepEqual(big.map((t) => t.amountCents), [-50000], "only the big one this week: median $90 x3 = $270");
+  assert.deepEqual(largeExpenses([tx("2026-10-30", -9000, "fun")], "2026-10-31"), [], "nothing under $100");
 }
 
 /* ---- forecast ---- */

@@ -2,7 +2,8 @@
  * v2 reports (serves /api/v2/reports).
  *   GET ?kind=summary[&month=YYYY-MM]  the dashboard: this month's income,
  *        spending and budget, net worth now and 30 days ago, upcoming
- *        bills (14 days), transactions to review, top spending categories.
+ *        bills (14 days), transactions to review, top spending categories,
+ *        categories over budget and big expenses this week.
  *   GET ?kind=cashflow&from=YYYY-MM&to=YYYY-MM  income vs spending by month
  *        and by category over the range (at most 60 months).
  *   GET ?kind=forecast[&months=12]  cash today (checking + savings +
@@ -12,7 +13,7 @@
  */
 import { handleV2, HttpError, cleanMonth } from "../_v2http.js";
 import { loadTransactions, loadCategories, loadBudgets, loadAccounts, categoryIndex } from "../_v2store.js";
-import { summarize, cashFlow, forecast, budgetMonth, monthRange, monthOf, addDays, netWorthSeries, upcoming, isLiability } from "../../../js/core/v2/money.js";
+import { summarize, cashFlow, forecast, budgetMonth, monthRange, monthOf, addDays, netWorthSeries, upcoming, isLiability, largeExpenses } from "../../../js/core/v2/money.js";
 import { recurringItems } from "./recurring.js";
 
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -76,7 +77,12 @@ export const onRequestGet = (context) => handleV2(context, async ({ s, url }) =>
       upcoming: upcoming(rec.items.concat(rec.cardBills), today(), addDays(today(), 14)),
       reviewCount: txAll.filter((t) => t.needsReview && !t.hidden).length,
       autoReviewedCount: txAll.filter((t) => t.autoReview && !t.hidden).length,
-      topCategories: top, groups, categories
+      topCategories: top,
+      overBudget: budget.rows.filter((r) => r.kind === "expense" && r.plannedCents + r.rolloverCents > 0 && r.remainingCents < 0)
+        .map((r) => ({ categoryId: r.categoryId, overCents: -r.remainingCents })),
+      largeExpenses: largeExpenses(txAll, today()).slice(0, 5)
+        .map((t) => ({ id: t.id, date: t.date, name: t.merchant || t.description, amountCents: t.amountCents, categoryId: t.categoryId })),
+      groups, categories
     };
   }
   throw new HttpError(400, "kind must be summary, cashflow or forecast.");

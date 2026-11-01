@@ -2,7 +2,7 @@
    Monarch (income, then each spending group), editable planned amounts,
    rollover per category, copy and repeat. */
 import { keepScroll } from "../scroll.js";
-import { v2, api, h, clear, money, parseMoney, monthLabel, thisMonth, loadBasics, categorySelect, section, button, errorState, loading } from "./kit.js";
+import { v2, api, h, clear, money, parseMoney, monthLabel, thisMonth, loadBasics, categorySelect, categoryName, section, button, errorState, loading } from "./kit.js";
 import { addMonths } from "../../core/v2/money.js";
 
 let root = null, month = null;
@@ -31,9 +31,14 @@ function row(r) {
   roll.checked = r.rollover;
   roll.addEventListener("change", function () { save(r.categoryId, r.plannedCents, roll.checked).catch(function (e) { window.alert(e.message); }); });
   const avail = r.plannedCents + r.rolloverCents;
+  /* Suggest the last 3 months' average when it differs from the plan; a tap sets it. */
+  const avg = r.avgCents > 0 && Math.abs(r.avgCents - r.plannedCents) >= 100
+    ? button("avg " + money(r.avgCents, { whole: true }), function () { save(r.categoryId, Math.round(r.avgCents / 100) * 100, r.rollover).catch(function (e) { window.alert(e.message); }); },
+      "v2-chip v2-avg", { title: "Last 3 months' average. Tap to plan this much.", "aria-label": "Plan the 3-month average, " + money(r.avgCents, { whole: true }) })
+    : null;
   return h("div", { class: "v2-budget-row" },
-    h("div", { class: "v2-budget-name" }, h("span", { text: cat ? cat.name : "Uncategorized" }),
-      r.rolloverCents ? h("span", { class: "v2-chip muted", text: (r.rolloverCents > 0 ? "+" : "") + money(r.rolloverCents, { whole: true }) + " rolled over" }) : null),
+    h("div", { class: "v2-budget-name" }, h("span", { text: categoryName(r.categoryId) }),
+      r.rolloverCents ? h("span", { class: "v2-chip muted", text: (r.rolloverCents > 0 ? "+" : "") + money(r.rolloverCents, { whole: true }) + " rolled over" }) : null, avg),
     bar(r.actualCents, avail, income),
     h("div", { class: "v2-budget-nums" },
       h("span", { class: "v2-budget-actual", text: money(r.actualCents, { whole: true }) }),

@@ -3,7 +3,7 @@
  *   GET -> { groups, categories }
  *   POST { type: "group", name, kind } | { type: "category", name, groupId } -> 201 { groups, categories }
  *        A category takes its group's kind (income, expense, transfer).
- *   PATCH { type, id, patch: { name?, groupId?, archived?, sort? } } -> { groups, categories }
+ *   PATCH { type, id, patch: { name?, icon?, groupId?, archived?, sort? } } -> { groups, categories }
  *   DELETE ?type=category&id=…&moveTo=<category id>
  *        Moves its transactions, splits, budgets and rules to moveTo first.
  *   DELETE ?type=group&id=… -> only when the group is empty.
@@ -73,6 +73,7 @@ export const onRequestPatch = (context) => handleV2(context, async ({ s, request
       const g = await getGroup(s, p.groupId);
       await s.run("UPDATE categories SET group_id = ?3, kind = ?4 WHERE owner_id = ?1 AND id = ?2", c.id, g.id, g.kind);
     }
+    if (p.icon !== undefined) await s.run("UPDATE categories SET icon = ?3 WHERE owner_id = ?1 AND id = ?2", c.id, cleanStr(p.icon, 8));
     if (p.archived !== undefined) await s.run("UPDATE categories SET archived = ?3 WHERE owner_id = ?1 AND id = ?2", c.id, p.archived ? 1 : 0);
     if (p.sort !== undefined) await s.run("UPDATE categories SET sort = ?3 WHERE owner_id = ?1 AND id = ?2", c.id, Number(p.sort) || 0);
   } else {

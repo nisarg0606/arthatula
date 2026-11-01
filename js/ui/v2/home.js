@@ -44,10 +44,21 @@ function draw(container, s) {
       top.appendChild(h("button", { class: "v2-line v2-line-btn", attrs: { type: "button" }, on: { click: function () { goTo && goTo("transactions", { categoryId: t.categoryId, month: s.month }); } } },
         h("span", { class: "v2-line-name", text: categoryName(t.categoryId) }), h("span", { class: "v2-amt", text: money(t.cents, { whole: true }) })));
     });
+    const heads = h("div", { class: "v2-list" });
+    s.overBudget.forEach(function (o) {
+      heads.appendChild(h("button", { class: "v2-line v2-line-btn", attrs: { type: "button" }, on: { click: function () { goTo && goTo("budget"); } } },
+        h("span", { class: "v2-line-name", text: categoryName(o.categoryId) + " is over budget" }), h("span", { class: "v2-amt neg", text: money(o.overCents, { whole: true }) + " over" })));
+    });
+    s.largeExpenses.forEach(function (t) {
+      heads.appendChild(h("button", { class: "v2-line v2-line-btn", attrs: { type: "button" }, on: { click: function () { goTo && goTo("transactions", { q: t.name, month: t.date.slice(0, 7) }); } } },
+        h("span", { class: "v2-line-date", text: shortDay(t.date) }), h("span", { class: "v2-line-name", text: "Big expense · " + (t.name || categoryName(t.categoryId)) }),
+        h("span", { class: "v2-amt", text: money(t.amountCents, { signed: true }) })));
+    });
     container.appendChild(h("section", { class: "card v2-card v2-overview" },
       h("div", { class: "v2-card-head" }, h("h2", { class: "card-title", text: "Overview" }),
         h("div", { class: "actions" }, button("Transactions", function () { goTo && goTo("transactions"); }, "v2-mini"), button("Budget", function () { goTo && goTo("budget"); }, "v2-mini"))),
       tiles,
+      heads.firstChild ? h("div", null, h("h3", { class: "v2-sub-head", text: "Heads up" }), heads) : null,
       h("div", { class: "v2-two" },
         h("div", null, h("h3", { class: "v2-sub-head", text: "Coming up · 14 days" }), due),
         h("div", null, h("h3", { class: "v2-sub-head", text: "Top spending this month" }), top))));
