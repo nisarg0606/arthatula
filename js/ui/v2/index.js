@@ -8,7 +8,7 @@ import { render as renderCashflow } from "./cashflow.js";
 import { render as renderRecurring } from "./recurring.js";
 import { render as renderGoals } from "./goals.js";
 import { render as renderInvestments, setNavigator as setInvestmentsNavigator } from "./investments.js";
-import { render as renderHome, setNavigator } from "./home.js";
+import { render as renderHome, setNavigator, customize } from "./home.js";
 import { render as renderSplitwise, setNavigator as setSplitwiseNavigator } from "./splitwise.js";
 import { render as renderManage } from "./manage.js";
 import { api } from "./kit.js";
@@ -83,6 +83,8 @@ export function init(showTab) {
     window.scrollTo(0, 0);
   };
   setNavigator(go);
+  const alt = document.getElementById("dashCustomize");
+  if (alt) alt.addEventListener("click", customize);
   setSplitwiseNavigator(go);
   setInvestmentsNavigator(go);
   setOpenAccount(function (a) { go("transactions", { accountId: a.id }); });

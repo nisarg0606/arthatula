@@ -1039,3 +1039,8 @@ textarea{min-height:88px}
 .v2-range{display:flex;gap:6px;margin:12px 0}
 .v2-range .v2-mini.on{border-color:var(--accent);color:var(--accent)}
 .more-tile[data-go="investments"]{--c:#5ac8fa}
+/* Customize dashboard: one row per card. */
+.layout-row{flex-wrap:nowrap}
+.layout-row .v2-mini{min-width:44px}
+.layout-row .v2-mini:disabled{opacity:.35;cursor:default;pointer-events:none}
+#dashCustomize{display:block;margin:0 auto 24px}
