@@ -248,7 +248,7 @@ test("Ask: a question goes to the server and the reply shows in the conversation
   await openTab(page, "dashboard");
   await page.locator(".ask-suggest button").first().click();
   await expect(page.locator(".ask-msg.user")).toHaveText("Can I afford $1,300 in December?");
-  await expect(page.locator(".ask-msg.note")).toContainText("Add your Gemini key in Settings");
+  await expect(page.locator(".ask-msg.note")).toContainText("key in Settings to use Ask");
   await page.fill("#askInput", "Where did my money go?");
   await page.locator("#askBtn").click();
   await expect(page.locator(".ask-msg.user")).toHaveCount(2);

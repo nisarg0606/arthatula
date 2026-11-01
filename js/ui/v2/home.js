@@ -31,7 +31,7 @@ function draw(container, s) {
       tile("Spent in " + monthLabel(s.month), money(s.spendingCents, { whole: true }), s.plannedSpendingCents ? spendPct + "% of " + money(s.plannedSpendingCents, { whole: true }) + " budgeted" : "No budget this month", spendPct !== null && spendPct > 100 ? "neg" : "", function () { goTo && goTo("budget"); }),
       tile("Income in " + monthLabel(s.month), money(s.incomeCents, { whole: true }), s.plannedIncomeCents ? "of " + money(s.plannedIncomeCents, { whole: true }) + " planned" : "", "", function () { goTo && goTo("cashflow"); }),
       tile("To review", String(s.reviewCount), s.reviewCount ? "Bank rows waiting for a category" : "All caught up", s.reviewCount ? "warn" : "", function () { goTo && goTo("transactions", { review: true }); }),
-      s.autoReviewedCount ? tile("Checked by Gemini", String(s.autoReviewedCount), "Matched your past payments and counted. Tap to check", "ai", function () { goTo && goTo("transactions", { auto: true }); }) : null);
+      s.autoReviewedCount ? tile("Checked by AI", String(s.autoReviewedCount), "Matched your past payments and counted. Tap to check", "ai", function () { goTo && goTo("transactions", { auto: true }); }) : null);
     const due = h("div", { class: "v2-list" });
     if (!s.upcoming.length) due.appendChild(h("p", { class: "hint", text: "Nothing due in the next 14 days." }));
     s.upcoming.slice(0, 5).forEach(function (u) {

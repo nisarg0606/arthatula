@@ -1,22 +1,25 @@
 /*
- * Arthatula — app settings (the Gemini configuration + the Splitwise
- * connection).
+ * Arthatula — app settings (the AI provider + the Splitwise connection).
  *
  * Routes (this file serves /api/settings):
- *   GET /api/settings -> { gemini: { hasKey, last4, model, source },
+ *   GET /api/settings -> { ai: { provider, label, providers, hasKey, last4,
+ *                          model, modelSource, defaultModel, baseUrl, source },
+ *                          gemini: (same as ai, for older clients),
  *                          splitwise: { hasKey, last4, source } }
  *     Full API keys are NEVER returned — only whether one is saved and
  *     at most its last 4 characters.
- *   PUT /api/settings { geminiApiKey?, geminiModel?, clearGeminiKey?,
- *                       splitwiseApiKey?, clearSplitwiseKey? }
- *     Saves keys server-side in the D1 budget_settings table, where
- *     only the server Functions can read them. A key supplied via an
- *     environment secret (GEMINI_API_KEY / SPLITWISE_API_KEY) always
- *     takes precedence and is reported as source: "env" (it cannot be
- *     cleared from the UI).
+ *   PUT /api/settings { aiProvider?, aiApiKey?, aiModel?, aiBaseUrl?,
+ *                       clearAiKey?, splitwiseApiKey?, clearSplitwiseKey? }
+ *     The ai* fields apply to aiProvider (or the current provider).
+ *     The older geminiApiKey / geminiModel / clearGeminiKey still work.
+ *     Keys are saved server-side in the D1 budget_settings table, one
+ *     per provider, where only the server can read them. A key in an
+ *     environment secret (GEMINI_API_KEY, XAI_API_KEY, OPENAI_API_KEY,
+ *     SPLITWISE_API_KEY) always wins and is reported as source: "env"
+ *     (it cannot be cleared from the UI). See _ai.js.
  */
 import { ensureTables, requireAuth } from "./budget.js";
-import { DEFAULT_GEMINI_MODEL } from "./categorize.js";
+import { PROVIDERS, getAiConfig } from "./_ai.js";
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -66,23 +69,31 @@ export async function setSplitwiseCache(db, payload) {
 
 export async function describeSettings(env) {
   await ensureTables(env.DB);
-  const envKey = env.GEMINI_API_KEY || null;
-  const savedKey = await getSetting(env.DB, "gemini_api_key");
-  const savedModel = await getSetting(env.DB, "gemini_model");
-  const effectiveKey = envKey || savedKey;
+  const cfg = await getAiConfig(env);
+  const p = PROVIDERS[cfg.provider];
+  const envKey = env[p.envKey] || null;
+  const savedKey = await getSetting(env.DB, cfg.provider + "_api_key");
+  const savedModel = await getSetting(env.DB, cfg.provider + "_model");
+  const envModel = cfg.provider === "gemini" ? env.GEMINI_MODEL : env.AI_MODEL;
+  const ai = {
+    provider: cfg.provider,
+    label: p.label,
+    providers: Object.keys(PROVIDERS).map((id) => ({ id, label: PROVIDERS[id].label, defaultModel: PROVIDERS[id].defaultModel, keyUrl: PROVIDERS[id].keyUrl })),
+    hasKey: !!cfg.key,
+    last4: cfg.key ? cfg.key.slice(-4) : null,
+    model: cfg.model,
+    /* where the model comes from: "env", "saved" (Settings) or "default" */
+    modelSource: envModel ? "env" : savedModel ? "saved" : "default",
+    defaultModel: p.defaultModel,
+    baseUrl: cfg.provider === "openai" ? cfg.baseUrl : null,
+    source: envKey ? "env" : savedKey ? "saved" : null
+  };
   const swEnvKey = env.SPLITWISE_API_KEY || null;
   const swSavedKey = await getSetting(env.DB, "splitwise_api_key");
   const swKey = swEnvKey || swSavedKey;
   return {
-    gemini: {
-      hasKey: !!effectiveKey,
-      last4: effectiveKey ? effectiveKey.slice(-4) : null,
-      model: env.GEMINI_MODEL || savedModel || DEFAULT_GEMINI_MODEL,
-      /* where the model comes from: "env", "saved" (Settings) or "default" */
-      modelSource: env.GEMINI_MODEL ? "env" : savedModel ? "saved" : "default",
-      defaultModel: DEFAULT_GEMINI_MODEL,
-      source: envKey ? "env" : savedKey ? "saved" : null
-    },
+    ai,
+    gemini: ai,
     splitwise: {
       hasKey: !!swKey,
       last4: swKey ? swKey.slice(-4) : null,
@@ -109,16 +120,27 @@ export async function onRequestPut(context) {
     if (auth.response) return auth.response;
     const body = await context.request.json();
     await ensureTables(context.env.DB);
-    if (body.clearGeminiKey === true) {
-      await setSetting(context.env.DB, "gemini_api_key", "");
-    } else if (typeof body.geminiApiKey === "string" && body.geminiApiKey.trim()) {
-      await setSetting(context.env.DB, "gemini_api_key", body.geminiApiKey.trim());
+    const db = context.env.DB;
+    const url = typeof body.aiBaseUrl === "string" ? body.aiBaseUrl.trim() : null;
+    if (url && !/^https?:\/\/[^\s]+$/.test(url)) return json({ error: "The base URL must start with https:// (or http:// for a local server)." }, 400);
+    if (typeof body.aiProvider === "string") {
+      if (!PROVIDERS[body.aiProvider]) return json({ error: "Unknown AI provider." }, 400);
+      await setSetting(db, "ai_provider", body.aiProvider);
+    }
+    /* Older clients sent gemini* fields: they mean the Gemini provider. */
+    const legacy = body.geminiApiKey !== undefined || body.geminiModel !== undefined || body.clearGeminiKey !== undefined;
+    const provider = legacy ? "gemini" : (await getAiConfig(context.env)).provider;
+    const key = legacy ? body.geminiApiKey : body.aiApiKey;
+    const model = legacy ? body.geminiModel : body.aiModel;
+    if ((legacy ? body.clearGeminiKey : body.clearAiKey) === true) {
+      await setSetting(db, provider + "_api_key", "");
+    } else if (typeof key === "string" && key.trim()) {
+      await setSetting(db, provider + "_api_key", key.trim().slice(0, 500));
     }
     /* A model name saves it; an empty one removes the saved model, so
-       the code's default applies again. */
-    if (typeof body.geminiModel === "string") {
-      await setSetting(context.env.DB, "gemini_model", body.geminiModel.trim().slice(0, 100));
-    }
+       the provider's default applies again. */
+    if (typeof model === "string") await setSetting(db, provider + "_model", model.trim().slice(0, 100));
+    if (provider === "openai" && url !== null) await setSetting(db, "openai_base_url", url.slice(0, 300));
     if (body.clearSplitwiseKey === true) {
       await setSetting(context.env.DB, "splitwise_api_key", "");
     } else if (typeof body.splitwiseApiKey === "string" && body.splitwiseApiKey.trim()) {

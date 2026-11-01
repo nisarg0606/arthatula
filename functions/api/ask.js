@@ -14,7 +14,7 @@
  *        Without a Gemini key the reply is 409 with a hint to add one.
  */
 import { ensureTables, readState, getBankSnapshot, getPendingSnapshot, requireAuth } from "./budget.js";
-import { getGeminiConfig } from "./categorize.js";
+import { aiRequest, errorText, getAiConfig, PROVIDERS, responseText } from "./_ai.js";
 import { MONTHS, sanitizeState } from "../../js/core/plan.js";
 import { isSpending, expenseShare } from "../../js/core/spending.js";
 import { owedToMe } from "../../js/core/review.js";
@@ -31,31 +31,15 @@ function json(data, status) {
 }
 const round = (n) => Math.round((n || 0) * 100) / 100;
 
-async function gemini(cfg, prompt, asJson, fetchImpl) {
-  const res = await (fetchImpl || fetch)(
-    "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.key },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: asJson ? { responseMimeType: "application/json", temperature: 0 } : { temperature: 0.3 }
-      })
-    }
-  );
+async function askAi(cfg, prompt, fetchImpl) {
+  const res = await (fetchImpl || fetch)(...aiRequest(cfg, prompt, { temperature: 0.3 }));
   if (!res.ok) {
-    /* Pass on Gemini's own reason (bad key, quota, retired model...);
-       it never contains the key. */
+    /* Pass on the provider's own reason (bad key, quota, unknown model...). */
     let reason = "HTTP " + res.status;
-    try {
-      const err = (await res.json()).error || {};
-      reason = [err.status, err.message].filter(Boolean).join(": ").slice(0, 200) || reason;
-    } catch (e) { /* keep the HTTP status */ }
+    try { reason = errorText(await res.json()) || reason; } catch (e) { /* keep the HTTP status */ }
     throw Object.assign(new Error(reason), { status: 502 });
   }
-  const payload = await res.json();
-  return ((payload.candidates && payload.candidates[0] && payload.candidates[0].content &&
-    payload.candidates[0].content.parts) || []).map((p) => p.text || "").join("").trim();
+  return responseText(await res.json());
 }
 
 /* What Gemini is told about the budget: computed totals, not raw data. */
@@ -123,8 +107,8 @@ export function followUpPurchase(question, history, todayIso) {
 export async function answerQuestion(env, body, fetchImpl) {
   const question = typeof body.question === "string" ? body.question.trim().slice(0, 500) : "";
   if (!question) return { status: 400, data: { error: "Ask a question first." } };
-  const cfg = await getGeminiConfig(env);
-  if (!cfg.key) return { status: 409, data: { error: "Add your Gemini key in Settings to use Ask." } };
+  const cfg = await getAiConfig(env);
+  if (!cfg.key) return { status: 409, data: { error: "Add your " + PROVIDERS[cfg.provider].label + " key in Settings to use Ask." } };
   const todayIso = typeof body.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.today)
     ? body.today : new Date().toISOString().slice(0, 10);
   const history = (Array.isArray(body.history) ? body.history : []).slice(-6)
@@ -135,11 +119,11 @@ export async function answerQuestion(env, body, fetchImpl) {
   const state = sanitizeState(await readState(db));
   const facts = buildFacts(state, await getBankSnapshot(db), await getPendingSnapshot(db), todayIso);
 
-  /* The app reads the purchase itself, so a question costs one Gemini call. */
+  /* The app reads the purchase itself, so a question costs one AI call. */
   const purchase = parsePurchase(question, todayIso) || followUpPurchase(question, history, todayIso);
   const afford = purchase ? affordCheck(state, { amount: purchase.amount, monthKey: purchase.monthKey,
     todayKey: todayIso.slice(0, 7), months: purchase.months }) : null;
-  const answer = await gemini(cfg, answerPrompt(question, history, facts, afford), false, fetchImpl);
+  const answer = await askAi(cfg, answerPrompt(question, history, facts, afford), fetchImpl);
   return { status: 200, data: { answer: answer || "I couldn't come up with an answer. Try asking another way.", affordability: afford } };
 }
 
