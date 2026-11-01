@@ -4,11 +4,17 @@
  *   GET ?from=&to=&accountId=&categoryId=&q=&review=1&hidden=1&limit=&offset=
  *        -> { transactions, total }   newest first; limit ≤ 500 (default 200)
  *   POST { date, merchant, amountCents, accountId?, categoryId?, notes?, tags? } -> 201 { transaction }
+ *        auto=1: rows auto-review took off To review (see ../_v2autoreview.js)
+ *   PATCH { reviewAll: true } -> { updated }
+ *        Marks every visible row on To review as reviewed, as it is.
  *   PATCH { id, patch } -> { transaction }
  *        patch: categoryId, merchant, notes, tags, hidden, needsReview,
  *        excludeReports, amountCents, myShareCents (null = all mine),
  *        date, accountId, splits ([{ categoryId, amountCents }] summing
  *        to the transaction's amount — or my share when set; [] removes).
+ *        needsReview true on an auto-reviewed row = "Not right": it goes
+ *        back on To review and is never auto-reviewed again; reviewing
+ *        it yourself confirms auto-review's call.
  *        Rows from the classic daily log (source "v1exp") are written
  *        back to it, so both apps agree; a category the classic app
  *        doesn't have stays on the new app only.
@@ -16,7 +22,7 @@
  */
 import { handleV2, HttpError, cleanStr, cleanCents, cleanDate, bodyOf } from "../_v2http.js";
 import { newId } from "../_v2db.js";
-import { loadTransactions, rowToTransaction, rowToSplit } from "../_v2store.js";
+import { loadTransactions, rowToTransaction, rowToSplit, loadAutoReviews } from "../_v2store.js";
 import { mirrorV1 } from "../_v2mirror.js";
 import { isValidCategory } from "../_categories.js";
 import { onRequestPut as v1Put, onRequestDelete as v1Delete } from "../expenses.js";
@@ -25,7 +31,7 @@ async function getTx(s, id) {
   const r = await s.first("SELECT * FROM transactions WHERE owner_id = ?1 AND id = ?2", String(id || ""));
   if (!r) throw new HttpError(404, "Transaction not found.");
   const splits = (await s.all("SELECT * FROM transaction_splits WHERE owner_id = ?1 AND transaction_id = ?2", r.id)).map(rowToSplit);
-  return rowToTransaction(r, splits);
+  return rowToTransaction(r, splits, (await loadAutoReviews(s, r.id))[r.id]);
 }
 async function checkCategory(s, id) {
   if (id === null) return null;
@@ -70,6 +76,7 @@ export const onRequestGet = (context) => handleV2(context, async ({ s, url }) =>
     list = list.filter((t) => t.categoryId === c || t.splits.some((x) => x.categoryId === c));
   }
   if (p.get("review") === "1") list = list.filter((t) => t.needsReview && !t.hidden);
+  if (p.get("auto") === "1") list = list.filter((t) => t.autoReview && !t.hidden);
   if (p.get("hidden") !== "1") list = list.filter((t) => !t.hidden);
   const q = (p.get("q") || "").trim().toLowerCase();
   if (q) list = list.filter((t) => (t.merchant + " " + t.description + " " + t.notes + " " + t.tags.join(" ")).toLowerCase().indexOf(q) !== -1);
@@ -98,6 +105,14 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
 
 export const onRequestPatch = (context) => handleV2(context, async ({ s, db, request }) => {
   const b = await bodyOf(request);
+  if (b.reviewAll === true) {
+    const ids = await s.all("SELECT id, source FROM transactions WHERE owner_id = ?1 AND needs_review = 1 AND hidden = 0");
+    /* Bank rows are locked so the classic review list can't flip them back. */
+    await s.batch(ids.map((r) => [
+      "UPDATE transactions SET needs_review = 0" + (r.source === "v1bank" ? ", category_locked = 1" : "") + ", updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", r.id
+    ]));
+    return { updated: ids.length };
+  }
   const tx = await getTx(s, b.id);
   const p = b.patch && typeof b.patch === "object" ? b.patch : {};
   const sets = [];
@@ -189,6 +204,12 @@ export const onRequestPatch = (context) => handleV2(context, async ({ s, db, req
     await s.run("UPDATE transactions SET " + cols + ", updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", tx.id, ...sets.map(([, v]) => v));
   }
   if (splitStmts) await s.batch(splitStmts);
+  /* Your call on an auto-reviewed row: "Not right" or agreeing with it. */
+  if (p.needsReview === true) {
+    await s.run("UPDATE auto_reviews SET verdict = 'rejected' WHERE owner_id = ?1 AND transaction_id = ?2", tx.id);
+  } else if (p.needsReview === false || p.categoryId !== undefined) {
+    await s.run("UPDATE auto_reviews SET verdict = 'confirmed' WHERE owner_id = ?1 AND transaction_id = ?2 AND verdict = 'reviewed'", tx.id);
+  }
   return { transaction: await getTx(s, tx.id) };
 });
 

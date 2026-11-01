@@ -166,8 +166,10 @@ test("every screen works without a script error", async ({ page }, info) => {
 test("count a pending charge now; the posted charge updates it instead of adding another", async ({ page, request }, info) => {
   const token = await signIn(page, request);
   const sync = await pairSync(page, request, token, "pending-" + info.project.name);
-  const pendId = "e2e-pend-" + info.project.name;
-  const shop = "E2E Market " + info.project.name;
+  /* Unique per attempt: a failed try leaves its charge already counted. */
+  const key = info.project.name + "-" + info.retry;
+  const pendId = "e2e-pend-" + key;
+  const shop = "E2E Market " + key;
   expect((await request.post("/api/pending", { headers: sync, data: { transactions: [
     { id: pendId, date: today(), name: shop, amount: 25, accountLabel: "", category: "Groceries" }
   ] } })).ok()).toBeTruthy();
@@ -502,4 +504,141 @@ test("new screens: Settings — rules, categories, and the migration check", asy
   await expect(page.locator("#v2Manage .v2-line", { hasText: "e2e-coffee-" + info.project.name })).toContainText("#coffee");
   await page.locator("#v2Manage button", { hasText: "Check now" }).click();
   await expect(page.locator("#v2Manage .v2-ok")).toContainText("matches the classic app");
+});
+
+/* ================= no jump on review ================= */
+
+test("marking a bank payment reviewed keeps your place and doesn't reload the page", async ({ page, request }, info) => {
+  const token = await signIn(page, request);
+  const sync = await pairSync(page, request, token, "review-" + info.project.name);
+  const auth = { Authorization: "Bearer " + token };
+  /* Enough expenses that the Daily tab scrolls. */
+  for (let i = 0; i < 14; i++) {
+    expect((await request.post("/api/expenses", { headers: auth, data: { date: today(), description: "E2E filler " + i + " " + info.project.name, amount: 3 + i, category: "Groceries" } })).ok()).toBeTruthy();
+  }
+  const names = ["ZELLE FROM E2E ONE", "ZELLE FROM E2E TWO"].map((n) => n + " " + info.project.name);
+  expect((await request.post("/api/bank", { headers: sync, data: {
+    accounts: [{ id: "e2e-chk-" + info.project.name, institution: "E2E Bank", name: "Checking", subtype: "checking", currentBalance: 100 }],
+    transactions: names.map((n, i) => ({ id: "e2e-zelle-" + i + "-" + info.project.name, accountId: "e2e-chk-" + info.project.name, date: today(), name: n, amount: -(20 + i) }))
+  } })).ok()).toBeTruthy();
+
+  await page.reload();
+  await openTab(page, "daily");
+  const first = page.locator(".review-item", { hasText: names[0] });
+  await expect(first).toBeVisible();
+  /* Scroll so the item sits mid-screen, well away from the top. */
+  await first.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200));
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(100);
+
+  const budgetLoads = [];
+  page.on("request", (r) => { if (r.method() === "GET" && /\/api\/(budget|bank|pending)\b/.test(r.url())) budgetLoads.push(r.url()); });
+  const saved = page.waitForResponse((r) => r.url().includes("/api/bank") && r.request().method() === "PATCH");
+  await first.getByRole("button", { name: "Ignore", exact: true }).click();
+  await expect(first).toHaveCount(0); /* gone at once, before the save returns */
+  expect((await saved).ok()).toBeTruthy();
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(after - before), "scroll moved from " + before + " to " + after).toBeLessThanOrEqual(2);
+  expect(budgetLoads, "no reload of the budget, bank or pending data").toEqual([]);
+  await expect(page.locator(".review-item", { hasText: names[1] })).toBeVisible();
+
+  /* It stays reviewed after a reload. */
+  await page.reload();
+  await openTab(page, "daily");
+  await expect(page.locator(".review-item", { hasText: names[0] })).toHaveCount(0);
+});
+
+test("new screens: Mark reviewed keeps your place in Transactions", async ({ page, request }, info) => {
+  const token = await signIn(page, request);
+  const sync = await pairSync(page, request, token, "v2review-" + info.project.name);
+  const auth = { Authorization: "Bearer " + token };
+  for (let i = 0; i < 14; i++) {
+    expect((await request.post("/api/expenses", { headers: auth, data: { date: today(), description: "E2E row " + i + " " + info.project.name, amount: 2 + i, category: "Groceries" } })).ok()).toBeTruthy();
+  }
+  /* Dated today so it sits above the 14 rows (not at the very bottom of
+     the page, where a shorter row would let the browser pull the page up),
+     and unique per attempt so a retry has a fresh row to review. */
+  const key = info.project.name + "-" + info.retry;
+  const name = "E2E TRANSFER OUT " + key;
+  expect((await request.post("/api/bank", { headers: sync, data: {
+    accounts: [{ id: "e2e-chk2-" + info.project.name, institution: "E2E Bank", name: "Checking 2", subtype: "checking", currentBalance: 100 }],
+    transactions: [{ id: "e2e-out-" + key, accountId: "e2e-chk2-" + info.project.name, date: today(), name, amount: 75 }]
+  } })).ok()).toBeTruthy();
+
+  await openTab(page, "transactions");
+  const row = page.locator("#v2Transactions .v2-tx", { hasText: name });
+  await expect(row).toBeVisible();
+  await row.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 120));
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(50);
+  /* the page can scroll further, so a shorter row can't drag it */
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY)).toBeGreaterThan(100);
+  await row.click();
+  await page.locator("dialog.v2-dialog button", { hasText: "Mark reviewed" }).click();
+  await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(0);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: name })).not.toHaveClass(/review/);
+  await page.waitForTimeout(600); /* the background save and in-place refresh */
+  const after = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(after - before), "scroll moved from " + before + " to " + after).toBeLessThanOrEqual(2);
+  await expect(page.locator("#v2Transactions .v2-loading")).toHaveCount(0);
+});
+
+test("Gemini review: a payment like ones you filed before is checked and counted; Mark all reviewed clears the rest", async ({ page, request }, info) => {
+  const token = await signIn(page, request);
+  const key = info.project.name + "-" + info.retry;
+  const sync = await pairSync(page, request, token, "autorev-" + key);
+  const auth = { Authorization: "Bearer " + token };
+  const acct = "e2e-chk3-" + key;
+  const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const name = "E2E STREAMCO " + key;
+  const push = (txs) => request.post("/api/bank", { headers: sync, data: {
+    accounts: [{ id: acct, institution: "E2E Bank", name: "Checking 3", subtype: "checking", currentBalance: 500 }], transactions: txs } });
+  /* Two earlier payments you filed under Subscriptions yourself. */
+  expect((await push([
+    { id: "e2e-sc1-" + key, accountId: acct, date: daysAgo(62), name, amount: 12.99 },
+    { id: "e2e-sc2-" + key, accountId: acct, date: daysAgo(31), name, amount: 12.99 }
+  ])).ok()).toBeTruthy();
+  const subs = (await (await request.get("/api/v2/categories", { headers: auth })).json()).categories.find((c) => c.name === "Subscriptions");
+  const past = (await (await request.get("/api/v2/transactions?q=" + encodeURIComponent(name), { headers: auth })).json()).transactions;
+  expect(past.length).toBe(2);
+  for (const t of past) {
+    expect((await request.patch("/api/v2/transactions", { headers: auth, data: { id: t.id, patch: { categoryId: subs.id } } })).ok()).toBeTruthy();
+  }
+  /* This month's one, plus a first-time payee. */
+  const stranger = "E2E FIRSTTIME " + key;
+  expect((await push([
+    { id: "e2e-sc3-" + key, accountId: acct, date: today(), name, amount: 12.99 },
+    { id: "e2e-new-" + key, accountId: acct, date: today(), name: stranger, amount: 333 }
+  ])).ok()).toBeTruthy();
+
+  await page.reload(); /* opening the app runs the review */
+  const tile = page.locator(".v2-tile.ai");
+  await expect(tile).toBeVisible({ timeout: 15000 });
+  await tile.click();
+  await expect(page.locator('[data-section="transactions"]')).toBeVisible();
+  const row = page.locator("#v2Transactions .v2-tx", { hasText: name });
+  await expect(row).toHaveCount(1);
+  await expect(row.locator(".v2-chip.ai")).toBeVisible();
+  await expect(row).toContainText("Subscriptions"); /* counted under the category you used before */
+  await expect(row).not.toHaveClass(/review/);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: stranger })).toHaveCount(0);
+
+  /* "Not right" puts it back on To review. */
+  await row.click();
+  await expect(page.locator("dialog.v2-dialog .v2-ai-note")).toBeVisible();
+  await page.locator("dialog.v2-dialog button", { hasText: "Not right" }).click();
+  await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(0);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: name })).toHaveCount(0);
+
+  /* To review: both are there; Mark all reviewed clears the list. */
+  await page.locator("#v2Transactions label", { hasText: "To review only" }).click();
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: name })).toHaveClass(/review/);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: stranger })).toHaveClass(/review/);
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#v2ReviewAll").click();
+  await expect(page.locator("#v2Transactions .v2-empty")).toContainText("Nothing to review");
+  await page.waitForTimeout(500); /* the background save */
+  const left = (await (await request.get("/api/v2/transactions?review=1", { headers: auth })).json()).total;
+  expect(left).toBe(0);
 });

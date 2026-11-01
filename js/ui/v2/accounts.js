@@ -1,6 +1,7 @@
 /* Accounts screen: net worth (now + over time), then every account
    grouped by type with its balance. Manual accounts (a car, a house,
    cash, a loan the sync can't see) are added and updated here. */
+import { keepScroll } from "../scroll.js";
 import { v2, api, h, clear, money, parseMoney, dayLabel, shortDay, loadBasics, field, openDialog, section, button, emptyState, errorState, loading, drawChart, chartColors } from "./kit.js";
 
 const TYPE_LABEL = { depository: "Cash & checking", credit: "Credit cards", loan: "Loans", investment: "Investments", property: "Property", cash: "Cash", other: "Other" };
@@ -69,7 +70,10 @@ function accountRow(a) {
     button("Edit", function () { editAccount(a); }, "v2-mini", { "aria-label": "Edit " + a.name }));
 }
 
-function draw(nw) {
+/* Redraws keep the reader's place (see ../scroll.js). */
+function draw(nw) { return keepScroll(function () { return drawNow(nw); }); }
+
+function drawNow(nw) {
   clear(root);
   const tiles = h("div", { class: "v2-tiles" },
     tile("Net worth", money(nw.current.netWorthCents, { whole: true }), "accent"),

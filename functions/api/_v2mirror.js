@@ -286,9 +286,12 @@ export async function compareTotals(db) {
     }
     const inMonth = txs.filter((t) => monthOf(t.date) === m);
     /* The gate compares the COPIED rows; rows added on the new screens
-       exist only there and are reported separately. */
-    const v2 = summarize(inMonth.filter((t) => MIRRORED.indexOf(t.source) !== -1), idx);
-    const added = summarize(inMonth.filter((t) => MIRRORED.indexOf(t.source) === -1), idx);
+       exist only there and are reported separately. So is a bank row you
+       (or auto-review) filed on the new screens (category_locked): its
+       category was decided there, not copied from the classic app. */
+    const copied = (t) => MIRRORED.indexOf(t.source) !== -1 && !(t.source === "v1bank" && t.categoryLocked);
+    const v2 = summarize(inMonth.filter(copied), idx);
+    const added = summarize(inMonth.filter((t) => !copied(t)), idx);
     return {
       month: m, v1IncomeCents: v1Income, v2IncomeCents: v2.incomeCents, v1SpendingCents: v1Spending, v2SpendingCents: v2.spendingCents,
       newOnlyIncomeCents: added.incomeCents, newOnlySpendingCents: added.spendingCents,

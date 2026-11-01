@@ -16,7 +16,7 @@ export function rowToAccount(r) {
   };
 }
 
-export function rowToTransaction(r, splits) {
+export function rowToTransaction(r, splits, auto) {
   let tags = [];
   try { tags = JSON.parse(r.tags || "[]"); } catch (e) { tags = []; }
   return {
@@ -29,6 +29,8 @@ export function rowToTransaction(r, splits) {
     pending: !!r.pending, hidden: !!r.hidden, excludeReports: !!r.exclude_reports, needsReview: !!r.needs_review,
     v1ExpenseId: r.v1_expense_id || null,
     splits: splits || [],
+    /* Set while auto-review's decision stands and you haven't confirmed it. */
+    autoReview: auto && auto.verdict === "reviewed" ? { by: auto.reviewer, decision: auto.decision, reason: auto.reason || "", at: auto.checked_at } : null,
     updatedAt: r.updated_at
   };
 }
@@ -95,7 +97,8 @@ export async function loadTransactions(s, opts) {
   const splitRows = await s.all("SELECT * FROM transaction_splits WHERE owner_id = ?1");
   const byTx = {};
   splitRows.forEach((r) => { (byTx[r.transaction_id] = byTx[r.transaction_id] || []).push(rowToSplit(r)); });
-  return rows.map((r) => rowToTransaction(r, byTx[r.id]));
+  const auto = await loadAutoReviews(s);
+  return rows.map((r) => rowToTransaction(r, byTx[r.id], auto[r.id]));
 }
 
 export async function loadAccounts(s) {
@@ -112,4 +115,13 @@ export async function loadBudgets(s, from, to) {
 
 export async function loadRules(s) {
   return (await s.all("SELECT * FROM rules WHERE owner_id = ?1 ORDER BY sort, created_at")).map(rowToRule);
+}
+
+export async function loadAutoReviews(s, id) {
+  const rows = id
+    ? await s.all("SELECT * FROM auto_reviews WHERE owner_id = ?1 AND transaction_id = ?2", id)
+    : await s.all("SELECT * FROM auto_reviews WHERE owner_id = ?1 AND verdict = 'reviewed'");
+  const out = {};
+  rows.forEach((r) => { out[r.transaction_id] = r; });
+  return out;
 }

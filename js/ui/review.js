@@ -7,9 +7,14 @@ import { fmtDate } from "./cards.js";
 import { app, els } from "./context.js";
 import { afterExpensesChanged, deleteExpense, renderDaily, todayLocal, updateExpense } from "./daily.js";
 import { showTab } from "./shell.js";
-import { apiFetch, load } from "./storage.js";
+import { apiFetch, apiRequest, saveLocal } from "./storage.js";
+import { keepScroll } from "./scroll.js";
+import { render } from "./dashboard.js";
+import { sanitizeState } from "../core/plan.js";
 
-export function renderReview() {
+export function renderReview() { keepScroll(renderReviewNow); }
+
+function renderReviewNow() {
   var queue = reviewQueue(app.state, app.bankData);
   var n = queue.length;
   if (els.reviewBadge) { els.reviewBadge.hidden = !n; els.reviewBadge.textContent = String(n); }
@@ -129,17 +134,39 @@ export function saveIgnoreRules(rules, isUndo) {
     .catch(function () { if (!isUndo) app.lastReview = null; alert("Couldn't save that. Check your connection and try again."); });
 }
 
+/* Record a review decision. The item leaves the list at once and only
+   the review list is redrawn; the save runs in the background. Only
+   "income" (or undoing it) changes the month's actuals, so only then is
+   the budget re-read, quietly, without reloading the bank snapshot or
+   rebuilding anything else. A failed save puts the item back. */
 export function saveReview(txId, kind, isUndo) {
+  var bank = app.bankData || {};
+  var reviews = bank.reviews || (bank.reviews = {});
+  var was = Object.prototype.hasOwnProperty.call(reviews, txId) ? reviews[txId] : null;
+  if (kind) reviews[txId] = kind; else delete reviews[txId];
+  if (!isUndo) app.lastReview = { txId: txId };
+  renderReview();
   apiFetch("/api/bank", { method: "PATCH", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ txId: txId, kind: kind }) })
     .then(function (res) { if (!res.ok) throw new Error("bank " + res.status); return res.json(); })
     .then(function (data) {
       app.bankData = data;
-      if (!isUndo) app.lastReview = { txId: txId };
-      /* "income" changes the month's actuals on the server: reload them. */
-      return load();
+      renderReview();
+      renderBank();
+      if (kind === "income" || was === "income") {
+        return apiRequest("GET").then(function (state) {
+          app.state = sanitizeState(state);
+          saveLocal();
+          keepScroll(render);
+        });
+      }
     })
-    .catch(function () { alert("Couldn't save that review. Check your connection and try again."); });
+    .catch(function () {
+      if (was) reviews[txId] = was; else delete reviews[txId];
+      if (!isUndo) app.lastReview = null;
+      renderReview();
+      alert("Couldn't save that review. Check your connection and try again.");
+    });
 }
 
 export function addFromBank(t) {

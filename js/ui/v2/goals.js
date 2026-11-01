@@ -1,5 +1,6 @@
 /* Goals screen: savings goals with progress, linked to an account's
    balance or updated by hand, and what it takes per month. */
+import { keepScroll } from "../scroll.js";
 import { api, h, clear, money, parseMoney, dayLabel, loadBasics, accountSelect, field, openDialog, section, button, emptyState, errorState, loading } from "./kit.js";
 
 let root = null;
@@ -32,7 +33,10 @@ function editGoal(goal) {
     field("Linked account", acct, "Linked: the account's balance is what you've saved."), savedField), actions);
 }
 
-function draw(v) {
+/* Redraws keep the reader's place (see ../scroll.js). */
+function draw(v) { return keepScroll(function () { return drawNow(v); }); }
+
+function drawNow(v) {
   clear(root);
   const list = h("div", { class: "v2-goals" });
   if (!v.goals.length) list.appendChild(emptyState("No goals yet. Add one — e.g. a trip, a down payment or an emergency fund."));

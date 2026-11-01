@@ -93,6 +93,20 @@ const SCHEMA = [
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
+  /* What auto-review decided for a transaction (see ./_v2autoreview.js).
+     verdict: reviewed (taken off To review) | ask (left for you) |
+     confirmed (you agreed) | rejected (you said "Not right"). */
+  `CREATE TABLE IF NOT EXISTS auto_reviews (
+    owner_id TEXT NOT NULL,
+    transaction_id TEXT NOT NULL,
+    verdict TEXT NOT NULL,
+    decision TEXT NOT NULL DEFAULT 'ask',
+    reviewer TEXT NOT NULL DEFAULT 'rules',
+    category_id TEXT,
+    reason TEXT NOT NULL DEFAULT '',
+    checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (owner_id, transaction_id)
+  )`,
   "CREATE UNIQUE INDEX IF NOT EXISTS transactions_ext ON transactions (owner_id, external_id) WHERE external_id IS NOT NULL",
   "CREATE INDEX IF NOT EXISTS transactions_date ON transactions (owner_id, date)",
   `CREATE TABLE IF NOT EXISTS transaction_splits (

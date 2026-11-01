@@ -1,18 +1,23 @@
 /* Transactions screen: one feed of every money movement, with search,
-   filters, a to-review queue, and an edit dialog (category, merchant,
+   filters, a to-review queue (with "Mark all reviewed"), the rows
+   Gemini checked for you, and an edit dialog (category, merchant,
    amount, my share, notes, tags, hide, split). */
+import { keepScroll } from "../scroll.js";
 import {
   v2, api, h, clear, money, parseMoney, dayLabel, todayIso, loadBasics, categoryById, accountById, categoryName,
   categorySelect, accountSelect, field, openDialog, section, button, emptyState, errorState, loading
 } from "./kit.js";
 
-const state = { q: "", accountId: "", categoryId: "", month: "", review: false, limit: 200, list: [], total: 0 };
+const state = { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, limit: 200, list: [], total: 0 };
 let root = null, listEl = null, countEl = null;
 
 /* Jump here from another screen with a filter already set. */
 export function showFiltered(filter) {
-  Object.assign(state, { q: "", accountId: "", categoryId: "", month: "", review: false }, filter || {});
+  Object.assign(state, { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false }, filter || {});
 }
+
+/* Re-read the list in place (after auto-review, from ./index.js). */
+export function refresh() { if (listEl && listEl.isConnected) load(); }
 
 function query() {
   const p = new URLSearchParams();
@@ -21,16 +26,26 @@ function query() {
   if (state.categoryId) p.set("categoryId", state.categoryId);
   if (state.month) { p.set("from", state.month + "-01"); p.set("to", state.month + "-31"); }
   if (state.review) p.set("review", "1");
+  if (state.auto) p.set("auto", "1");
   p.set("limit", String(state.limit));
   return "transactions?" + p.toString();
 }
 
+/* Re-reads the list and swaps it in place: the "Loading…" placeholder
+   only shows when there is nothing on screen yet, and the scroll
+   position stays put (see ../scroll.js). */
 function load() {
-  loading(listEl);
+  if (!listEl.firstChild) loading(listEl);
   return api("GET", query()).then(function (r) {
     state.list = r.transactions; state.total = r.total;
-    drawList();
+    keepScroll(drawList);
   }).catch(function (e) { errorState(listEl, e); });
+}
+
+/* The chip on a row auto-review took off To review. */
+function autoLabel(a) {
+  if (a.decision === "duplicate") return "✓ Already in daily log";
+  return a.by === "gemini" ? "✓ Checked by Gemini" : "✓ Matched past payments";
 }
 
 function amountClass(t) { return t.amountCents > 0 ? "v2-amt in" : "v2-amt"; }
@@ -45,6 +60,7 @@ function txRow(t) {
         h("span", { class: "v2-chip", text: cat }),
         acct ? h("span", { class: "v2-tx-acct", text: acct.name }) : null,
         t.needsReview ? h("span", { class: "v2-chip warn", text: "To review" }) : null,
+        t.autoReview ? h("span", { class: "v2-chip ai", text: autoLabel(t.autoReview), attrs: { title: t.autoReview.reason } }) : null,
         t.excludeReports ? h("span", { class: "v2-chip muted", text: "Not counted" }) : null,
         t.tags.map(function (tag) { return h("span", { class: "v2-tag", text: "#" + tag }); }),
         t.notes ? h("span", { class: "v2-tx-note", text: t.notes }) : null)),
@@ -53,11 +69,30 @@ function txRow(t) {
       t.myShareCents !== null ? h("span", { class: "v2-tx-share", text: "mine " + money(t.myShareCents) }) : null));
 }
 
+/* Everything on To review, as it is, in one go. Instant like a single
+   "Mark reviewed": the list empties now and the save runs behind it. */
+function markAllReviewed() {
+  const n = state.total;
+  if (!n || !window.confirm("Mark all " + n + " transactions on To review as reviewed? Each keeps the category it has now.")) return;
+  state.list = []; state.total = 0;
+  keepScroll(drawList);
+  return api("PATCH", "transactions", { reviewAll: true })
+    .then(load, function (e) { window.alert("Couldn't mark them reviewed: " + e.message); load(); });
+}
+
 function drawList() {
   clear(listEl);
   countEl.textContent = state.total === 1 ? "1 transaction" : state.total + " transactions";
+  if (state.review && state.total > 0) {
+    listEl.appendChild(h("div", { class: "v2-bulk" },
+      h("span", { class: "hint", text: state.total === 1 ? "1 transaction waits for you." : state.total + " transactions wait for you." }),
+      button("Mark all reviewed", markAllReviewed, "btn-primary", { id: "v2ReviewAll" })));
+  }
+  if (state.auto && state.total > 0) {
+    listEl.appendChild(h("p", { class: "hint v2-bulk", text: "These were taken off To review because they match what you did before. They are counted. Open one and choose \u201cNot right\u201d if it isn\u2019t." }));
+  }
   if (!state.list.length) {
-    listEl.appendChild(emptyState(state.review ? "Nothing to review — every transaction has a category." : "No transactions match."));
+    listEl.appendChild(emptyState(state.review ? "Nothing to review — every transaction has a category." : state.auto ? "Nothing here: Gemini hasn't taken anything off To review." : "No transactions match."));
     return;
   }
   let day = null, group = null;
@@ -130,6 +165,9 @@ function editTx(t) {
   splitOn.addEventListener("change", function () { splits.el.hidden = !splitOn.checked; });
 
   const body = h("div", { class: "v2-form" },
+    tx.autoReview ? h("p", { class: "v2-ai-note" },
+      h("strong", { text: autoLabel(tx.autoReview).replace(/^✓ /, "") + ": " }),
+      h("span", { text: tx.autoReview.reason || "It matches payments you had before." })) : null,
     fromBank ? h("p", { class: "hint", text: tx.source === "v1bank" ? "From your bank: the name, date and amount come from the bank." : "From the Month editor: change the amount there." }) : null,
     field("Merchant", merchant),
     h("div", { class: "v2-form-row" }, field("Date", date), field("Direction", dir), field("Amount ($)", amount)),
@@ -179,7 +217,33 @@ function editTx(t) {
       return req.then(function () { close(); load(); });
     }
   }];
-  if (!isNew && tx.needsReview) actions.push({ label: "Mark reviewed", onClick: function (close) { return api("PATCH", "transactions", { id: tx.id, patch: { needsReview: false } }).then(function () { close(); load(); }); } });
+  if (!isNew && tx.needsReview) actions.push({ label: "Mark reviewed", onClick: function (close) {
+    /* Instant: the row updates (or leaves the To review filter) now; the
+       save runs in the background and the row comes back if it fails. */
+    close();
+    const row = state.list.find(function (x) { return x.id === tx.id; });
+    if (row) row.needsReview = false;
+    if (state.review) { state.list = state.list.filter(function (x) { return x.id !== tx.id; }); state.total -= 1; }
+    keepScroll(drawList);
+    return api("PATCH", "transactions", { id: tx.id, patch: { needsReview: false } })
+      .then(load, function (e) { window.alert("Couldn't mark it reviewed: " + e.message); load(); });
+  } });
+  if (!isNew && tx.autoReview) {
+    /* Same instant pattern: the row changes now, the save follows. */
+    const verdict = function (backToReview) {
+      return function (close) {
+        close();
+        const row = state.list.find(function (x) { return x.id === tx.id; });
+        if (row) { row.autoReview = null; row.needsReview = backToReview; }
+        if (state.auto) { state.list = state.list.filter(function (x) { return x.id !== tx.id; }); state.total -= 1; }
+        keepScroll(drawList);
+        return api("PATCH", "transactions", { id: tx.id, patch: { needsReview: backToReview } })
+          .then(load, function (e) { window.alert("Couldn't save that: " + e.message); load(); });
+      };
+    };
+    actions.push({ label: "Looks right", onClick: verdict(false) });
+    actions.push({ label: "Not right — I'll review it", onClick: verdict(true) });
+  }
   if (!isNew && (tx.source === "manual" || tx.source === "v1exp")) {
     actions.push({ label: "Delete", danger: true, onClick: function (close) {
       if (!window.confirm("Delete this transaction?" + (tx.source === "v1exp" ? " It is also removed from the classic daily log." : ""))) return;
@@ -201,9 +265,14 @@ function filters() {
   month.addEventListener("change", function () { state.month = month.value; state.limit = 200; load(); });
   const review = h("input", { attrs: { type: "checkbox" } });
   review.checked = state.review;
-  review.addEventListener("change", function () { state.review = review.checked; state.limit = 200; load(); });
+  const auto = h("input", { attrs: { type: "checkbox" } });
+  auto.checked = state.auto;
+  /* The two are either/or: ticking one unticks the other. */
+  review.addEventListener("change", function () { state.review = review.checked; if (review.checked) { state.auto = false; auto.checked = false; } state.limit = 200; load(); });
+  auto.addEventListener("change", function () { state.auto = auto.checked; if (auto.checked) { state.review = false; review.checked = false; } state.limit = 200; load(); });
   return h("div", { class: "v2-filters" }, search, acct, cat, month,
-    h("label", { class: "switch-label v2-check" }, review, h("span", { text: "To review only" })));
+    h("label", { class: "switch-label v2-check" }, review, h("span", { text: "To review only" })),
+    h("label", { class: "switch-label v2-check" }, auto, h("span", { text: "Checked by Gemini" })));
 }
 
 export function render(container) {

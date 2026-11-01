@@ -75,6 +75,7 @@ export const onRequestGet = (context) => handleV2(context, async ({ s, url }) =>
       cashCents: cashNow(accounts),
       upcoming: upcoming(rec.items.concat(rec.cardBills), today(), addDays(today(), 14)),
       reviewCount: txAll.filter((t) => t.needsReview && !t.hidden).length,
+      autoReviewedCount: txAll.filter((t) => t.autoReview && !t.hidden).length,
       topCategories: top, groups, categories
     };
   }

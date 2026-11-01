@@ -1,6 +1,7 @@
 /* Settings additions for the new model: categories and groups, rules,
    export (JSON / CSV), and the migration check (classic actuals vs the
    new model, month by month). */
+import { keepScroll } from "../scroll.js";
 import { v2, api, h, clear, money, monthLabel, loadBasics, categorySelect, accountSelect, field, openDialog, section, button, errorState, loading, categoryName } from "./kit.js";
 import { apiFetch } from "../storage.js";
 
@@ -135,7 +136,10 @@ function migrationCard() {
     h("div", null, h("p", { class: "hint", text: "The new screens read a copy of your classic data that refreshes whenever it changes. This compares the copy with the classic actuals, month by month; rows you add on the new screens are listed separately." }), box)), run: run };
 }
 
-function draw() {
+/* Redraws keep the reader's place (see ../scroll.js). */
+function draw() { return keepScroll(function () { return drawNow(); }); }
+
+function drawNow() {
   clear(root);
   root.appendChild(categoriesCard());
   const rulesBox = h("div");
