@@ -25,7 +25,7 @@ and a free [GitHub](https://github.com/signup) account. No credit card.
 
 1. Click **Deploy to Cloudflare**:
 
-   [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula-v2)
+   [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula)
 
 2. Sign in to Cloudflare and connect GitHub when asked. Cloudflare copies
    the project into your GitHub account.

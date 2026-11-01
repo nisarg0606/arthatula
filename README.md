@@ -11,7 +11,7 @@ phone, AI (Gemini, Grok, others) and connecting your AI agent (MCP).
 
 ## Get your own copy (about 5 minutes, free)
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula-v2)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula)
 
 1. Click the button and sign in to Cloudflare (or create a free
    account). Connect GitHub when it asks: it copies this project into
