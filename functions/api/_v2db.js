@@ -183,6 +183,17 @@ export const DEFAULT_GROUPS = [
   { key: "transfers", name: "Transfers", kind: "transfer", cats: ["Transfer", "Credit card payment", "Repayment"] }
 ];
 
+/* The emoji each default category starts with (display only, kept out
+   of the name). Mirrored in js/core/categories.js for the classic screens. */
+export const DEFAULT_ICONS = {
+  "Paycheck": "💼", "Other income": "💵", "Interest": "💰",
+  "Rent": "🏠", "Utilities": "💡", "Phone & Internet": "📱", "Insurance": "🛡️", "Subscriptions": "📺",
+  "Groceries": "🛒", "Eating Out": "🍜", "Fuel/Transport": "🚗",
+  "Shopping/Personal": "🛍️", "Gym": "🏋️", "Loan/Debt Payment": "🏦",
+  "One-off": "📌", "Misc/Other": "🏷️", "Sent to India": "✈️",
+  "Transfer": "🔁", "Credit card payment": "💳", "Repayment": "↩️"
+};
+
 export function newId(prefix) {
   const id = typeof crypto.randomUUID === "function"
     ? crypto.randomUUID().replace(/-/g, "").slice(0, 20)
@@ -216,10 +227,17 @@ export async function ensureOwner(db, ownerId) {
     const gid = "grp_" + g.key + "_" + ownerId;
     stmts.push(["INSERT OR IGNORE INTO category_groups (id, owner_id, name, kind, sort) VALUES (?2, ?1, ?3, ?4, ?5)", gid, g.name, g.kind, gi]);
     g.cats.forEach((c, ci) => {
-      stmts.push(["INSERT OR IGNORE INTO categories (id, owner_id, group_id, name, kind, sort) VALUES (?2, ?1, ?3, ?4, ?5, ?6)",
-        newId("cat_"), gid, c, g.kind, ci]);
+      stmts.push(["INSERT OR IGNORE INTO categories (id, owner_id, group_id, name, kind, sort, icon) VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7)",
+        newId("cat_"), gid, c, g.kind, ci, DEFAULT_ICONS[c] || ""]);
     });
   });
+  /* Owners from before default emoji get them once, only where the
+     icon is empty; the flag stops a later ensure from refilling an
+     emoji you cleared on purpose. */
+  for (const [name, icon] of Object.entries(DEFAULT_ICONS)) {
+    stmts.push(["UPDATE categories SET icon = ?3 WHERE owner_id = ?1 AND name = ?2 AND icon = '' AND NOT EXISTS (SELECT 1 FROM v2_settings WHERE owner_id = ?1 AND key = 'default_icons')", name, icon]);
+  }
+  stmts.push(["INSERT OR IGNORE INTO v2_settings (owner_id, key, value) VALUES (?1, 'default_icons', '1')"]);
   await s.batch(stmts);
 }
 

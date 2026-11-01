@@ -123,7 +123,7 @@ test("tapping a category opens its transactions and the × closes them", async (
   /* Click the legend entry for the category (Chart.js draws it on the canvas). */
   const box = await page.evaluate(() => {
     const ch = window.Chart.getChart(document.getElementById("doughnutChart"));
-    const i = ch.legend.legendItems.findIndex((l) => l.text === "Fuel/Transport");
+    const i = ch.legend.legendItems.findIndex((l) => l.text === "🚗 Fuel/Transport");
     const hb = ch.legend.legendHitBoxes[i];
     return { x: hb.left + hb.width / 2, y: hb.top + hb.height / 2 };
   });
@@ -349,7 +349,7 @@ test("add a note to an expense; it stays after a reload and shows in the popup",
   await openTab(page, "dashboard");
   const box = await page.evaluate(() => {
     const ch = window.Chart.getChart(document.getElementById("doughnutChart"));
-    const i = ch.legend.legendItems.findIndex((l) => l.text === "Loan/Debt Payment");
+    const i = ch.legend.legendItems.findIndex((l) => l.text === "🏦 Loan/Debt Payment");
     const hb = ch.legend.legendHitBoxes[i];
     return { x: hb.left + hb.width / 2, y: hb.top + hb.height / 2 };
   });
@@ -470,7 +470,7 @@ test("new screens: add a transaction, file it, and see it in the budget and cash
   await page.locator("#v2AddTx").click();
   await (await dialogField(page, "Merchant")).fill(name);
   await (await dialogField(page, "Amount")).fill("37.25");
-  await (await dialogField(page, "Category")).selectOption({ label: "Groceries" });
+  await (await dialogField(page, "Category")).selectOption({ label: "🛒 Groceries" });
   await (await dialogField(page, "Tags")).fill("e2e");
   await saveDialog(page);
   const row = page.locator("#v2Transactions .v2-tx", { hasText: name });
@@ -490,12 +490,13 @@ test("new screens: add a transaction, file it, and see it in the budget and cash
   await openTab(page, "budget");
   const groceries = page.locator("#v2Budget .v2-budget-row", { hasText: "Groceries" });
   await expect(groceries).toBeVisible();
+  await expect(groceries).toContainText("🛒 Groceries");
   const input = groceries.locator(".v2-plan-input");
   await input.fill("500");
   await input.press("Enter");
   await expect(page.locator("#v2Budget .v2-budget-row", { hasText: "Groceries" }).locator(".v2-plan-input")).toHaveValue("500");
   await openTab(page, "cashflow");
-  await expect(page.locator("#v2Cashflow .v2-cat-row", { hasText: "Groceries" })).toBeVisible();
+  await expect(page.locator("#v2Cashflow .v2-cat-row", { hasText: "🛒 Groceries" })).toBeVisible();
   await expect(page.locator("#v2Cashflow .v2-table")).toBeVisible();
 
   /* Delete it again. */

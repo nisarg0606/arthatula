@@ -4,6 +4,7 @@ import { MONTHS } from "../core/plan.js";
 import { expenseShare, isSpending } from "../core/spending.js";
 import { fmtDate } from "./cards.js";
 import { app, els } from "./context.js";
+import { withIcon } from "../core/categories.js";
 import { categoryColor } from "./daily.js";
 import { getMonth, monthLabel, selectMonth } from "./editor.js";
 import { showTransactions } from "./popup.js";
@@ -286,13 +287,13 @@ export function renderCharts(cmp) {
       };
       doughOpts.onClick = function (evt, elements) { if (elements.length) showCat(catLabels[elements[0].index]); };
       doughOpts.onHover = function (evt, elements) { evt.native.target.style.cursor = elements.length ? "pointer" : ""; };
-      doughOpts.plugins.legend.onClick = function (evt, item) { showCat(item.text); };
+      doughOpts.plugins.legend.onClick = function (evt, item) { showCat(catLabels[item.index]); };
       doughOpts.plugins.legend.onHover = function (evt) { evt.native.target.style.cursor = "pointer"; };
       doughOpts.plugins.legend.onLeave = function (evt) { evt.native.target.style.cursor = ""; };
     }
     app.chartDough = new window.Chart(els.doughnutChart, {
       type: "doughnut",
-      data: { labels: catLabels, datasets: [{
+      data: { labels: catLabels.map(withIcon), datasets: [{
         data: catLabels.map(function (k) { return catTotals[k]; }),
         backgroundColor: catLabels.map(categoryColor), /* same colour as the Daily badges */
         borderWidth: 0, borderRadius: 8, spacing: 4, hoverOffset: 16,
