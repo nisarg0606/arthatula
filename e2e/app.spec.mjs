@@ -537,16 +537,24 @@ test("marking a bank payment reviewed keeps your place and doesn't reload the pa
   for (let i = 0; i < 14; i++) {
     expect((await request.post("/api/expenses", { headers: auth, data: { date: today(), description: "E2E filler " + i + " " + info.project.name, amount: 3 + i, category: "Groceries" } })).ok()).toBeTruthy();
   }
-  const names = ["ZELLE FROM E2E ONE", "ZELLE FROM E2E TWO"].map((n) => n + " " + info.project.name);
+  /* Unique per attempt: a retry must not find the first attempt's items already ignored. */
+  const key = info.project.name + "-" + info.retry;
+  const names = ["ZELLE FROM E2E ONE", "ZELLE FROM E2E TWO"].map((n) => n + " " + key);
   expect((await request.post("/api/bank", { headers: sync, data: {
     accounts: [{ id: "e2e-chk-" + info.project.name, institution: "E2E Bank", name: "Checking", subtype: "checking", currentBalance: 100 }],
-    transactions: names.map((n, i) => ({ id: "e2e-zelle-" + i + "-" + info.project.name, accountId: "e2e-chk-" + info.project.name, date: today(), name: n, amount: -(20 + i) }))
+    transactions: names.map((n, i) => ({ id: "e2e-zelle-" + i + "-" + key, accountId: "e2e-chk-" + info.project.name, date: today(), name: n, amount: -(20 + i) }))
   } })).ok()).toBeTruthy();
 
   await page.reload();
   await openTab(page, "daily");
   const first = page.locator(".review-item", { hasText: names[0] });
   await expect(first).toBeVisible();
+  /* Let the tab's enter animations finish first. Clicking a still-moving
+     button makes Playwright retry ("element is not stable") and scroll the
+     page itself on the retry (block: end, which lands at 0 for an item this
+     high up), so a slow runner saw a jump the app never made. */
+  await page.waitForFunction(() => !document.getAnimations()
+    .some((a) => a.playState === "running" && a.effect.getTiming().iterations !== Infinity));
   /* Scroll so the item sits mid-screen, well away from the top. */
   await first.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200));
   const before = await page.evaluate(() => window.scrollY);
