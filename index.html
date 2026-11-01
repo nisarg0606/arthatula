@@ -19,19 +19,68 @@
 <meta name="theme-color" content="#0a0a0a">
 <title>Arthatula — Monthly Budget Planner</title>
 <meta name="description" content="A month-by-month planned-vs-actual budget planner with a daily expense log.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="theme-init.js"></script>
-<!-- Tailwind Play CDN pinned to an exact version (the unversioned URL
-     tracks whatever ships next). The Play CDN is not on npm, so it can't
-     be vendored from this repo's tooling; see README "Security" for the
-     one-liner that vendors it into vendor/. -->
-<script src="https://cdn.tailwindcss.com/3.4.17"></script>
-<script src="tw-config.js"></script>
 <!-- Chart.js vendored (npm chart.js@4.4.1, dist/chart.umd.js) and served
-     same-origin, so no third party can change the code that runs here. -->
-<script src="vendor/chart-4.4.1.umd.js"></script>
+     same-origin, so no third party can change the code that runs here.
+     defer: it no longer blocks first paint and still runs before the
+     app's module script (deferred and module scripts run in order). -->
+<script defer src="vendor/chart-4.4.1.umd.js"></script>
 <link rel="stylesheet" href="styles.css">
+<!-- Tailwind prebuilt (tailwind.config.js), not compiled in the browser:
+     the Play CDN was a 400 KB script that blocked first paint. After
+     styles.css, where the CDN's injected styles used to land. -->
+<link rel="stylesheet" href="tailwind.css">
+<!-- Every module up front, in parallel: otherwise the browser finds them
+     one import level at a time, a round trip per level.
+     tests/preload.test.mjs keeps this list complete. -->
+<link rel="modulepreload" href="js/core/afford.js">
+<link rel="modulepreload" href="js/core/cards.js">
+<link rel="modulepreload" href="js/core/categories.js">
+<link rel="modulepreload" href="js/core/dates.js">
+<link rel="modulepreload" href="js/core/format.js">
+<link rel="modulepreload" href="js/core/index.js">
+<link rel="modulepreload" href="js/core/merchant.js">
+<link rel="modulepreload" href="js/core/pacing.js">
+<link rel="modulepreload" href="js/core/pending.js">
+<link rel="modulepreload" href="js/core/plan.js">
+<link rel="modulepreload" href="js/core/question.js">
+<link rel="modulepreload" href="js/core/review.js">
+<link rel="modulepreload" href="js/core/spending.js">
+<link rel="modulepreload" href="js/core/summary.js">
+<link rel="modulepreload" href="js/core/sync.js">
+<link rel="modulepreload" href="js/core/v2/money.js">
+<link rel="modulepreload" href="js/ui/ask.js">
+<link rel="modulepreload" href="js/ui/auth.js">
+<link rel="modulepreload" href="js/ui/bank.js">
+<link rel="modulepreload" href="js/ui/banklink.js">
+<link rel="modulepreload" href="js/ui/cards.js">
+<link rel="modulepreload" href="js/ui/charts.js">
+<link rel="modulepreload" href="js/ui/context.js">
+<link rel="modulepreload" href="js/ui/daily.js">
+<link rel="modulepreload" href="js/ui/dashboard.js">
+<link rel="modulepreload" href="js/ui/datepicker.js">
+<link rel="modulepreload" href="js/ui/editor.js">
+<link rel="modulepreload" href="js/ui/merchant.js">
+<link rel="modulepreload" href="js/ui/pager.js">
+<link rel="modulepreload" href="js/ui/pending.js">
+<link rel="modulepreload" href="js/ui/popup.js">
+<link rel="modulepreload" href="js/ui/review.js">
+<link rel="modulepreload" href="js/ui/scroll.js">
+<link rel="modulepreload" href="js/ui/settings.js">
+<link rel="modulepreload" href="js/ui/shell.js">
+<link rel="modulepreload" href="js/ui/storage.js">
+<link rel="modulepreload" href="js/ui/sync.js">
+<link rel="modulepreload" href="js/ui/v2/accounts.js">
+<link rel="modulepreload" href="js/ui/v2/budget.js">
+<link rel="modulepreload" href="js/ui/v2/cashflow.js">
+<link rel="modulepreload" href="js/ui/v2/goals.js">
+<link rel="modulepreload" href="js/ui/v2/home.js">
+<link rel="modulepreload" href="js/ui/v2/index.js">
+<link rel="modulepreload" href="js/ui/v2/kit.js">
+<link rel="modulepreload" href="js/ui/v2/manage.js">
+<link rel="modulepreload" href="js/ui/v2/recurring.js">
+<link rel="modulepreload" href="js/ui/v2/splitwise.js">
+<link rel="modulepreload" href="js/ui/v2/transactions.js">
 </head>
 <body class="font-sans antialiased">
 <a class="skip-link" href="#main">Skip to content</a>
@@ -76,21 +125,21 @@
   </div>
 </div>
 
-<header class="bg-[#0a0a0a] text-zinc-50 border-b border-[#272727]">
-  <div class="max-w-6xl mx-auto px-4 pt-6 pb-6 sm:pt-10 sm:pb-16">
+<header class="app-header">
+  <div class="max-w-6xl mx-auto px-4 pt-6 pb-4 sm:pt-10 sm:pb-12">
     <div class="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
       <div class="max-w-[680px]">
-        <h1 class="app-title text-3xl sm:text-5xl font-bold tracking-tight">Arthatula</h1>
-        <p class="text-zinc-300 text-base sm:text-lg mt-2 sm:mt-3">Monthly budget planner &middot; planned vs actual</p>
-        <p class="hidden sm:block text-zinc-400 text-sm mt-2">Anchored to actuals from <strong id="headerBaseline" class="text-zinc-200 font-semibold">&mdash;</strong>. Log expenses daily and watch the prediction meet reality.</p>
-        <p class="mt-4 flex flex-wrap gap-2 items-center">
+        <h1 class="app-title">Arthatula</h1>
+        <p class="app-sub">Monthly budget planner &middot; planned vs actual</p>
+        <p class="app-sub2 hidden sm:block">Anchored to actuals from <strong id="headerBaseline">&mdash;</strong>. Log expenses daily and watch the prediction meet reality.</p>
+        <p class="mt-3 flex flex-wrap gap-2 items-center">
           <span id="storageMode" class="storage-badge connecting" role="status">● Connecting…</span>
           <span id="geminiStatus" class="storage-badge connecting">✦ Gemini: checking…</span>
         </p>
       </div>
       <div class="flex gap-2">
         <button id="addExpenseTopBtn" type="button" class="btn-primary" aria-label="Add expense"><span aria-hidden="true" class="fab-plus">+</span><span class="fab-label">&nbsp;Add expense</span></button>
-        <button id="themeToggle" type="button" aria-label="Toggle light / dark theme" class="btn-ghost">🌙 / ☀️</button>
+        <button id="themeToggle" type="button" aria-label="Toggle light / dark theme" class="btn-ghost icon-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
       </div>
     </div>
   </div>

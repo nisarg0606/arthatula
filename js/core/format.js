@@ -21,7 +21,10 @@ export function deviceLabel(ua) {
   return device + " · " + browser;
 }
 
+/* One shared formatter: toLocaleString with options builds a new one per call. */
+var MONEY = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export function fmt(n) {
   var sign = n < 0 ? "-" : "";
-  return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return sign + "$" + MONEY.format(Math.abs(n));
 }

@@ -2,18 +2,19 @@
    filters, a to-review queue (with "Mark all reviewed"), the rows
    Gemini checked for you, and an edit dialog (category, merchant,
    amount, my share, notes, tags, hide, split). */
+import { PAGE_SIZE, clampPage, pager } from "../pager.js";
 import { keepScroll } from "../scroll.js";
 import {
   v2, api, h, clear, money, parseMoney, dayLabel, todayIso, loadBasics, categoryById, accountById, categoryName,
   categorySelect, accountSelect, field, openDialog, section, button, emptyState, errorState, loading
 } from "./kit.js";
 
-const state = { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, limit: 200, list: [], total: 0 };
+const state = { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, page: 1, list: [], total: 0 };
 let root = null, listEl = null, countEl = null;
 
 /* Jump here from another screen with a filter already set. */
 export function showFiltered(filter) {
-  Object.assign(state, { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false }, filter || {});
+  Object.assign(state, { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, page: 1 }, filter || {});
 }
 
 /* Re-read the list in place (after auto-review, from ./index.js). */
@@ -27,7 +28,8 @@ function query() {
   if (state.month) { p.set("from", state.month + "-01"); p.set("to", state.month + "-31"); }
   if (state.review) p.set("review", "1");
   if (state.auto) p.set("auto", "1");
-  p.set("limit", String(state.limit));
+  p.set("limit", String(PAGE_SIZE));
+  p.set("offset", String((state.page - 1) * PAGE_SIZE));
   return "transactions?" + p.toString();
 }
 
@@ -38,6 +40,9 @@ function load() {
   if (!listEl.firstChild) loading(listEl);
   return api("GET", query()).then(function (r) {
     state.list = r.transactions; state.total = r.total;
+    /* The list got shorter (reviewed, deleted): step back to its last page. */
+    const last = clampPage(state.page, r.total);
+    if (last !== state.page) { state.page = last; return load(); }
     keepScroll(drawList);
   }).catch(function (e) { errorState(listEl, e); });
 }
@@ -104,9 +109,8 @@ function drawList() {
     }
     group.appendChild(txRow(t));
   });
-  if (state.total > state.list.length) {
-    listEl.appendChild(h("div", { class: "actions v2-more" }, button("Show more (" + (state.total - state.list.length) + " left)", function () { state.limit += 200; load(); })));
-  }
+  const pages = pager(state.page, state.total, function (n) { state.page = n; load(); }, listEl);
+  if (pages) listEl.appendChild(pages);
 }
 
 /* ---- edit / add dialog ---- */
@@ -256,20 +260,20 @@ function editTx(t) {
 function filters() {
   const search = h("input", { class: "v2-search", attrs: { type: "search", placeholder: "Search merchant, notes, tags", "aria-label": "Search transactions" }, value: state.q });
   let timer = null;
-  search.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { state.q = search.value.trim(); state.limit = 200; load(); }, 250); });
+  search.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { state.q = search.value.trim(); state.page = 1; load(); }, 250); });
   const acct = accountSelect(state.accountId, { noneLabel: "All accounts", label: "Filter by account" });
-  acct.addEventListener("change", function () { state.accountId = acct.value; state.limit = 200; load(); });
+  acct.addEventListener("change", function () { state.accountId = acct.value; state.page = 1; load(); });
   const cat = categorySelect(state.categoryId, { allowNone: true, noneLabel: "All categories", label: "Filter by category" });
-  cat.addEventListener("change", function () { state.categoryId = cat.value; state.limit = 200; load(); });
+  cat.addEventListener("change", function () { state.categoryId = cat.value; state.page = 1; load(); });
   const month = h("input", { attrs: { type: "month", "aria-label": "Filter by month" }, value: state.month });
-  month.addEventListener("change", function () { state.month = month.value; state.limit = 200; load(); });
+  month.addEventListener("change", function () { state.month = month.value; state.page = 1; load(); });
   const review = h("input", { attrs: { type: "checkbox" } });
   review.checked = state.review;
   const auto = h("input", { attrs: { type: "checkbox" } });
   auto.checked = state.auto;
   /* The two are either/or: ticking one unticks the other. */
-  review.addEventListener("change", function () { state.review = review.checked; if (review.checked) { state.auto = false; auto.checked = false; } state.limit = 200; load(); });
-  auto.addEventListener("change", function () { state.auto = auto.checked; if (auto.checked) { state.review = false; review.checked = false; } state.limit = 200; load(); });
+  review.addEventListener("change", function () { state.review = review.checked; if (review.checked) { state.auto = false; auto.checked = false; } state.page = 1; load(); });
+  auto.addEventListener("change", function () { state.auto = auto.checked; if (auto.checked) { state.review = false; review.checked = false; } state.page = 1; load(); });
   return h("div", { class: "v2-filters" }, search, acct, cat, month,
     h("label", { class: "switch-label v2-check" }, review, h("span", { text: "To review only" })),
     h("label", { class: "switch-label v2-check" }, auto, h("span", { text: "Checked by Gemini" })));

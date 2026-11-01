@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: tailwind.css matches index.html and js/
+        run: |
+          npx -y tailwindcss@3.4.17 -c tailwind.config.js -o tailwind.css --minify
+          git diff --exit-code tailwind.css || { echo "::error::tailwind.css is stale: run the command in tailwind.config.js and commit it."; exit 1; }
       - name: Run test suites
         run: |
           for f in tests/*.test.mjs; do

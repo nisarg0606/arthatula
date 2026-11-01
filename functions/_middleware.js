@@ -6,11 +6,10 @@
  * --outdir=<dir>` so this middleware is included, or wrap its fetch
  * handler with withSecurityHeaders() below.)
  *
- * - Content-Security-Policy: scripts only from this origin plus the
- *   pinned Tailwind Play CDN; fetch/XHR only to this origin, so even a
+ * - Content-Security-Policy: scripts only from this origin; fetch/XHR only to this origin, so even a
  *   misbehaving script can't send the budget or the session token
- *   anywhere else. 'unsafe-inline' styles are needed because the
- *   Tailwind Play CDN injects a <style> element at runtime.
+ *   anywhere else. 'unsafe-inline' styles stay for the style
+ *   attributes Chart.js and the app set.
  * - frame-ancestors 'none' / X-Frame-Options: the app can't be framed,
  *   so no other site can trick a tap onto "Approve" (pairing) or
  *   "Revoke".
@@ -18,9 +17,9 @@
  */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' https://cdn.tailwindcss.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'none'",
   "img-src 'self' data: blob:",
   "connect-src 'self'",
   "frame-ancestors 'none'",

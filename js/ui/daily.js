@@ -12,6 +12,7 @@ import { renderSummary } from "./dashboard.js";
 import { makeDatePicker, refreshDatePickers } from "./datepicker.js";
 import { buildForm, monthLabel } from "./editor.js";
 import { merchantRuleControl } from "./merchant.js";
+import { PAGE_SIZE, clampPage, pager } from "./pager.js";
 import { renderPending, updateSpentPending } from "./pending.js";
 import { renderReview } from "./review.js";
 import { keepScroll } from "./scroll.js";
@@ -74,50 +75,54 @@ function renderDailyNow() {
     return;
   }
   renderDailySummary(list);
-  /* Group: month -> day -> expenses (list is already newest first). */
-  var months = [];
+  /* Day and month totals come from the whole list; only one page of
+     rows is built (see pager.js). Day/month totals are your actual
+     cost, so shared expenses count at share value — the same numbers
+     the monthly rollup produces. */
+  var monthTotal = {}, dayTotal = {};
   list.forEach(function (e) {
-    var mk = String(e.date).slice(0, 7);
-    var mg = months[months.length - 1];
-    if (!mg || mg.key !== mk) { mg = { key: mk, total: 0, days: [] }; months.push(mg); }
-    var dg = mg.days[mg.days.length - 1];
-    if (!dg || dg.date !== e.date) { dg = { date: e.date, total: 0, items: [] }; mg.days.push(dg); }
-    /* Day/month totals are his actual cost, so shared expenses count
-       at share value — the same numbers the monthly rollup produces. */
-    mg.total += expenseShare(e); dg.total += expenseShare(e);
-    dg.items.push(e);
+    var v = expenseShare(e), mk = String(e.date).slice(0, 7);
+    monthTotal[mk] = (monthTotal[mk] || 0) + v;
+    dayTotal[e.date] = (dayTotal[e.date] || 0) + v;
   });
-  months.forEach(function (mg) {
-    var head = document.createElement("div");
-    head.className = "month-head";
-    var mName = document.createElement("h3");
-    mName.className = "month-total";
-    mName.textContent = monthLabel(mg.key) || longMonth(mg.key);
-    var mSum = document.createElement("span");
-    mSum.className = "month-sum";
-    mSum.textContent = fmt(mg.total);
-    head.appendChild(mName); head.appendChild(mSum);
-    els.expenseList.appendChild(head);
-    mg.days.forEach(function (dg) {
+  app.dailyPage = clampPage(app.dailyPage, list.length);
+  var start = (app.dailyPage - 1) * PAGE_SIZE;
+  var lastMonth = null, group = null, lastDay = null;
+  list.slice(start, start + PAGE_SIZE).forEach(function (e) {
+    var mk = String(e.date).slice(0, 7);
+    if (mk !== lastMonth) {
+      lastMonth = mk;
+      var head = document.createElement("div");
+      head.className = "month-head";
+      var mName = document.createElement("h3");
+      mName.className = "month-total";
+      mName.textContent = monthLabel(mk) || longMonth(mk);
+      var mSum = document.createElement("span");
+      mSum.className = "month-sum";
+      mSum.textContent = fmt(monthTotal[mk]);
+      head.appendChild(mName); head.appendChild(mSum);
+      els.expenseList.appendChild(head);
+      lastDay = null;
+    }
+    if (e.date !== lastDay) {
+      lastDay = e.date;
       var dayHead = document.createElement("div");
       dayHead.className = "day-head";
       var dName = document.createElement("h4");
       dName.className = "day-total";
-      dName.textContent = formatDateLabel(dg.date).replace(/, \d{4}$/, "");
+      dName.textContent = formatDateLabel(e.date).replace(/, \d{4}$/, "");
       var dSum = document.createElement("span");
-      dSum.textContent = fmt(dg.total);
+      dSum.textContent = fmt(dayTotal[e.date]);
       dayHead.appendChild(dName); dayHead.appendChild(dSum);
       els.expenseList.appendChild(dayHead);
-      var group = document.createElement("div");
+      group = document.createElement("div");
       group.className = "tx-group";
-      dg.items.forEach(function (e) {
-        var r = expenseRow(e);
-        if (openIds.indexOf(String(e.id)) !== -1) r.open = true;
-        group.appendChild(r);
-      });
       els.expenseList.appendChild(group);
-    });
+    }
+    group.appendChild(expenseRow(e, openIds.indexOf(String(e.id)) !== -1));
   });
+  var pages = pager(app.dailyPage, list.length, function (n) { app.dailyPage = n; renderDailyNow(); }, els.expenseList);
+  if (pages) els.expenseList.appendChild(pages);
 }
 
 export function longMonth(mk) {
@@ -162,7 +167,7 @@ export function renderDailySummary(list) {
 /* One transaction: a tappable summary row (category badge, description,
    category · card, amount) that expands into the editing controls. */
 
-export function expenseRow(e) {
+export function expenseRow(e, open) {
     var row = document.createElement("details");
     row.className = "expense-item tx";
     row.dataset.id = String(e.id);
@@ -206,133 +211,144 @@ export function expenseRow(e) {
     var edit = document.createElement("div");
     edit.className = "tx-edit";
     row.appendChild(edit);
-    /* Premium calendar pill for the row's date — picking a new day
-       saves it straight away (same update path as the other row
-       controls); the Edit prompts no longer ask for a date. */
-    var dateWrap = document.createElement("div");
-    dateWrap.className = "datepicker";
-    var dateBtn = document.createElement("button");
-    dateBtn.type = "button"; dateBtn.className = "date-btn row";
-    dateBtn.setAttribute("aria-haspopup", "dialog"); dateBtn.setAttribute("aria-expanded", "false");
-    dateBtn.setAttribute("aria-label", "Change the date of this expense");
-    var dateDisp = document.createElement("span");
-    var dateCaret = document.createElement("span");
-    dateCaret.className = "date-caret"; dateCaret.setAttribute("aria-hidden", "true");
-    dateCaret.innerHTML = "&#9662;";
-    dateBtn.appendChild(dateDisp); dateBtn.appendChild(dateCaret);
-    var dateInput = document.createElement("input");
-    dateInput.type = "hidden"; dateInput.value = e.date || "";
-    var datePop = document.createElement("div");
-    datePop.className = "cal-pop hidden"; datePop.setAttribute("role", "dialog");
-    datePop.setAttribute("aria-label", "Choose a date");
-    dateWrap.appendChild(dateBtn); dateWrap.appendChild(dateInput); dateWrap.appendChild(datePop);
-    edit.appendChild(dateWrap);
-    makeDatePicker({ btn: dateBtn, display: dateDisp, pop: datePop, input: dateInput, row: true,
-      onChange: function (v) { if (v && v !== e.date) updateExpense(e.id, { date: v }); } });
-    var sel = document.createElement("select");
-    sel.setAttribute("aria-label", "Category");
-    DAILY_CATEGORIES.forEach(function (c) {
-      var o = document.createElement("option"); o.value = c; o.textContent = c;
-      if (c === e.category) o.selected = true;
-      sel.appendChild(o);
-    });
-    sel.addEventListener("change", function () { updateExpense(e.id, { category: sel.value }); });
-    edit.appendChild(sel);
-    if (app.mode === "database") edit.appendChild(merchantRuleControl(e, sel));
-    var cardSel = document.createElement("select");
-    cardSel.setAttribute("aria-label", "Card this expense was charged to");
-    fillCardSelect(cardSel, e.card || "");
-    cardSel.addEventListener("change", function () {
-      updateExpense(e.id, { card: cardSel.value || null });
-    });
-    edit.appendChild(cardSel);
-    if (app.bankData && (app.bankData.transactions || []).length) {
-      var txSel = document.createElement("select");
-      txSel.className = "tx-link";
-      txSel.setAttribute("aria-label", "Bank payment this expense was paid with");
-      var noneOpt = document.createElement("option");
-      noneOpt.value = ""; noneOpt.textContent = "Bank payment: not linked";
-      txSel.appendChild(noneOpt);
-      var acctName = {};
-      (app.bankData.accounts || []).forEach(function (a) { acctName[a.id] = (a.institution || a.name || "") + (a.mask ? " ••" + a.mask : ""); });
-      bankTxCandidates(e).forEach(function (c) {
-        var o = document.createElement("option");
-        o.value = c.tx.id;
-        o.textContent = (c.diff < 0.005 ? "★ " : "") + fmtDate(c.tx.date).replace(/, \d{4}$/, "") + " · " +
-          String(c.tx.name || "").slice(0, 40) + " · " + fmt(c.tx.amount || 0) +
-          (acctName[c.tx.accountId] ? " · " + acctName[c.tx.accountId] : "") +
-          (c.other ? " (already imported separately)" : "");
-        txSel.appendChild(o);
+    /* The editing controls are built on first open: building every
+       row's picker and selects up front was most of the Daily tab's
+       render time on a long list. */
+    var built = false;
+    function build() {
+      if (built) return;
+      built = true;
+      /* Premium calendar pill for the row's date — picking a new day
+         saves it straight away (same update path as the other row
+         controls); the Edit prompts no longer ask for a date. */
+      var dateWrap = document.createElement("div");
+      dateWrap.className = "datepicker";
+      var dateBtn = document.createElement("button");
+      dateBtn.type = "button"; dateBtn.className = "date-btn row";
+      dateBtn.setAttribute("aria-haspopup", "dialog"); dateBtn.setAttribute("aria-expanded", "false");
+      dateBtn.setAttribute("aria-label", "Change the date of this expense");
+      var dateDisp = document.createElement("span");
+      var dateCaret = document.createElement("span");
+      dateCaret.className = "date-caret"; dateCaret.setAttribute("aria-hidden", "true");
+      dateCaret.innerHTML = "&#9662;";
+      dateBtn.appendChild(dateDisp); dateBtn.appendChild(dateCaret);
+      var dateInput = document.createElement("input");
+      dateInput.type = "hidden"; dateInput.value = e.date || "";
+      var datePop = document.createElement("div");
+      datePop.className = "cal-pop hidden"; datePop.setAttribute("role", "dialog");
+      datePop.setAttribute("aria-label", "Choose a date");
+      dateWrap.appendChild(dateBtn); dateWrap.appendChild(dateInput); dateWrap.appendChild(datePop);
+      edit.appendChild(dateWrap);
+      makeDatePicker({ btn: dateBtn, display: dateDisp, pop: datePop, input: dateInput, row: true,
+        onChange: function (v) { if (v && v !== e.date) updateExpense(e.id, { date: v }); } });
+      var sel = document.createElement("select");
+      sel.setAttribute("aria-label", "Category");
+      DAILY_CATEGORIES.forEach(function (c) {
+        var o = document.createElement("option"); o.value = c; o.textContent = c;
+        if (c === e.category) o.selected = true;
+        sel.appendChild(o);
       });
-      txSel.value = e.bankTxId || "";
-      txSel.addEventListener("change", function () { linkBankTx(e, txSel.value, txSel); });
-      edit.appendChild(txSel);
+      sel.addEventListener("change", function () { updateExpense(e.id, { category: sel.value }); });
+      edit.appendChild(sel);
+      if (app.mode === "database") edit.appendChild(merchantRuleControl(e, sel));
+      var cardSel = document.createElement("select");
+      cardSel.setAttribute("aria-label", "Card this expense was charged to");
+      fillCardSelect(cardSel, e.card || "");
+      cardSel.addEventListener("change", function () {
+        updateExpense(e.id, { card: cardSel.value || null });
+      });
+      edit.appendChild(cardSel);
+      if (app.bankData && (app.bankData.transactions || []).length) {
+        var txSel = document.createElement("select");
+        txSel.className = "tx-link";
+        txSel.setAttribute("aria-label", "Bank payment this expense was paid with");
+        var noneOpt = document.createElement("option");
+        noneOpt.value = ""; noneOpt.textContent = "Bank payment: not linked";
+        txSel.appendChild(noneOpt);
+        var acctName = {};
+        (app.bankData.accounts || []).forEach(function (a) { acctName[a.id] = (a.institution || a.name || "") + (a.mask ? " ••" + a.mask : ""); });
+        bankTxCandidates(e).forEach(function (c) {
+          var o = document.createElement("option");
+          o.value = c.tx.id;
+          o.textContent = (c.diff < 0.005 ? "★ " : "") + fmtDate(c.tx.date).replace(/, \d{4}$/, "") + " · " +
+            String(c.tx.name || "").slice(0, 40) + " · " + fmt(c.tx.amount || 0) +
+            (acctName[c.tx.accountId] ? " · " + acctName[c.tx.accountId] : "") +
+            (c.other ? " (already imported separately)" : "");
+          txSel.appendChild(o);
+        });
+        txSel.value = e.bankTxId || "";
+        txSel.addEventListener("change", function () { linkBankTx(e, txSel.value, txSel); });
+        edit.appendChild(txSel);
+      }
+      var shareInput = document.createElement("input");
+      shareInput.type = "number";
+      shareInput.className = "share-input";
+      shareInput.min = "0"; shareInput.step = "0.01"; shareInput.inputMode = "decimal";
+      shareInput.placeholder = "My share";
+      shareInput.setAttribute("aria-label", "My share of this expense (blank = the full amount is mine)");
+      shareInput.title = "My share ($) — blank means the full amount is yours. Actuals count only your share.";
+      if (typeof e.myShare === "number") shareInput.value = e.myShare;
+      shareInput.addEventListener("change", function () {
+        var raw = shareInput.value.trim();
+        if (raw === "") { updateExpense(e.id, { myShare: null }); return; }
+        var v = toNumber(raw);
+        if (v < 0 || v > (e.amount || 0)) {
+          alert("Your share must be between $0 and the expense amount (" + fmt(e.amount || 0) + ").");
+          shareInput.value = typeof e.myShare === "number" ? e.myShare : "";
+          return;
+        }
+        updateExpense(e.id, { myShare: v });
+      });
+      edit.appendChild(shareInput);
+      var noteInput = document.createElement("input");
+      noteInput.type = "text";
+      noteInput.className = "note-input";
+      noteInput.maxLength = 500;
+      noteInput.placeholder = "Add a note (e.g. what this was for)";
+      noteInput.setAttribute("aria-label", "Note for this expense");
+      noteInput.value = e.note || "";
+      noteInput.addEventListener("change", function () {
+        var v = noteInput.value.trim();
+        if (v !== (e.note || "")) updateExpense(e.id, { note: v });
+      });
+      noteInput.addEventListener("keydown", function (ev) { if (ev.key === "Enter") noteInput.blur(); });
+      edit.appendChild(noteInput);
+      var meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = "via " + (e.categorizationSource || "rules");
+      edit.appendChild(meta);
+      var editBtn = document.createElement("button");
+      editBtn.type = "button"; editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", function () {
+        var nd = prompt("Description:", e.description);
+        if (nd === null) return;
+        var na = prompt("Amount ($):", e.amount);
+        if (na === null) return;
+        var nshare = prompt("My share ($) — leave blank if the full amount is yours:",
+          typeof e.myShare === "number" ? e.myShare : "");
+        if (nshare === null) return;
+        var amtVal = toNumber(na);
+        var patch = { description: nd, amount: amtVal };
+        if (String(nshare).trim() === "") {
+          patch.myShare = null;
+        } else {
+          var sv = toNumber(nshare);
+          if (sv < 0 || sv > amtVal) { alert("Your share must be between $0 and the amount."); return; }
+          patch.myShare = sv;
+        }
+        updateExpense(e.id, patch);
+      });
+      edit.appendChild(editBtn);
+      var delBtn = document.createElement("button");
+      delBtn.type = "button"; delBtn.textContent = "Delete"; delBtn.className = "danger";
+      delBtn.addEventListener("click", function () {
+        if (confirm("Delete this expense?")) deleteExpense(e.id);
+      });
+      edit.appendChild(delBtn);
     }
-    var shareInput = document.createElement("input");
-    shareInput.type = "number";
-    shareInput.className = "share-input";
-    shareInput.min = "0"; shareInput.step = "0.01"; shareInput.inputMode = "decimal";
-    shareInput.placeholder = "My share";
-    shareInput.setAttribute("aria-label", "My share of this expense (blank = the full amount is mine)");
-    shareInput.title = "My share ($) — blank means the full amount is yours. Actuals count only your share.";
-    if (typeof e.myShare === "number") shareInput.value = e.myShare;
-    shareInput.addEventListener("change", function () {
-      var raw = shareInput.value.trim();
-      if (raw === "") { updateExpense(e.id, { myShare: null }); return; }
-      var v = toNumber(raw);
-      if (v < 0 || v > (e.amount || 0)) {
-        alert("Your share must be between $0 and the expense amount (" + fmt(e.amount || 0) + ").");
-        shareInput.value = typeof e.myShare === "number" ? e.myShare : "";
-        return;
-      }
-      updateExpense(e.id, { myShare: v });
-    });
-    edit.appendChild(shareInput);
-    var noteInput = document.createElement("input");
-    noteInput.type = "text";
-    noteInput.className = "note-input";
-    noteInput.maxLength = 500;
-    noteInput.placeholder = "Add a note (e.g. what this was for)";
-    noteInput.setAttribute("aria-label", "Note for this expense");
-    noteInput.value = e.note || "";
-    noteInput.addEventListener("change", function () {
-      var v = noteInput.value.trim();
-      if (v !== (e.note || "")) updateExpense(e.id, { note: v });
-    });
-    noteInput.addEventListener("keydown", function (ev) { if (ev.key === "Enter") noteInput.blur(); });
-    edit.appendChild(noteInput);
-    var meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = "via " + (e.categorizationSource || "rules");
-    edit.appendChild(meta);
-    var editBtn = document.createElement("button");
-    editBtn.type = "button"; editBtn.textContent = "Edit";
-    editBtn.addEventListener("click", function () {
-      var nd = prompt("Description:", e.description);
-      if (nd === null) return;
-      var na = prompt("Amount ($):", e.amount);
-      if (na === null) return;
-      var nshare = prompt("My share ($) — leave blank if the full amount is yours:",
-        typeof e.myShare === "number" ? e.myShare : "");
-      if (nshare === null) return;
-      var amtVal = toNumber(na);
-      var patch = { description: nd, amount: amtVal };
-      if (String(nshare).trim() === "") {
-        patch.myShare = null;
-      } else {
-        var sv = toNumber(nshare);
-        if (sv < 0 || sv > amtVal) { alert("Your share must be between $0 and the amount."); return; }
-        patch.myShare = sv;
-      }
-      updateExpense(e.id, patch);
-    });
-    edit.appendChild(editBtn);
-    var delBtn = document.createElement("button");
-    delBtn.type = "button"; delBtn.textContent = "Delete"; delBtn.className = "danger";
-    delBtn.addEventListener("click", function () {
-      if (confirm("Delete this expense?")) deleteExpense(e.id);
-    });
-    edit.appendChild(delBtn);
+    sum.addEventListener("click", build);
+    row.addEventListener("toggle", function () { if (row.open) build(); });
+    if (open) { row.open = true; build(); }
     return row;
 }
 
@@ -452,6 +468,7 @@ export function init() {
            database mode; local mode uses the hint values above. */
         if (app.mode === "database") delete entry.category;
       }
+      app.dailyPage = 1; /* show the new expense */
       createExpense(entry);
       els.expDescription.value = ""; els.expAmount.value = "";
       els.expCategory.value = ""; if (els.expCard) els.expCard.value = "";
