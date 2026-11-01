@@ -268,6 +268,31 @@ opens with an Overview, and Settings gains categories, rules, export
 and a migration check. The classic tabs (Month editor, Daily, Cards,
 Bank) keep working unchanged.
 
+**Auto-review and Mark all reviewed.** Each time the app opens,
+`POST /api/v2/autoreview` (`functions/api/_v2autoreview.js`) checks
+the bank rows that are waiting on To review before you do. A row is
+compared with similar past rows you reviewed yourself (same direction,
+similar name) and with daily-log entries of the same amount within 3
+days. These go to Gemini in one batched call, and each row gets one of
+three outcomes:
+- **seen**: you've had this kind of payment before. It gets the
+  category the past rows used, so it is counted, and it shows a
+  **✓ Checked by Gemini** chip with Gemini's reason.
+- **duplicate**: it's already in your daily log. It is taken off the
+  list and not counted twice.
+- **ask**: anything new or unclear stays for you.
+
+Gemini can only pick a category that its similar past rows used. With
+no key, or when Gemini fails, a strict rule stands in: the same name on
+at least 2 past rows that share one category, or exactly one
+same-amount daily-log entry. Each row is looked at once. "Not right" in
+a row's dialog puts it back on To review for good, and "Looks right"
+confirms it. The Overview shows a **Checked by Gemini** tile, and
+Transactions has a matching filter. With **To review only** ticked, a
+**Mark all reviewed** button clears the whole list; each row keeps the
+category it has. Auto-review doesn't change the classic Daily review
+list.
+
 **How your classic data gets there.** A mirror
 (`functions/api/_v2mirror.js`) copies the classic tables into the new
 ones whenever they change: daily expenses, bank rows that aren't
@@ -418,6 +443,7 @@ node tests/pairing.test.mjs     # owner-opened pairing, fingerprint approval, hi
 node tests/v2-core.test.mjs     # v2 money logic: reports, rollover, forecast, net worth, rules, recurring, goals
 node tests/v2-model.test.mjs    # v2 schema, owner scoping, the mirror and its totals gate
 node tests/v2-api.test.mjs      # every /api/v2 route: guards, write-back, splits, budgets, reports, export
+node tests/v2-autoreview.test.mjs # auto-review: name matching, strict rule, Gemini checks (fake fetch), Not right, Mark all
 node tests/sync.test.mjs        # "Sync now" request queue: auth scope, dedupe, claim/complete, expiry
 for f in js/*.js js/*/*.js; do node --check "$f"; done   # frontend syntax check
 ```

@@ -607,3 +607,11 @@ button.v2-tile:focus-visible{outline:2px solid var(--accent-bright);outline-offs
   .v2-dialog-body{padding:12px 16px}
   .v2-dialog-actions{padding:12px 16px calc(16px + env(safe-area-inset-bottom))}
 }
+
+/* Auto-review: rows Gemini checked, and the "Mark all reviewed" bar */
+.v2-chip.ai{background:rgba(99,102,241,.12);color:#4f46e5;border-color:rgba(99,102,241,.35)}
+.dark .v2-chip.ai{color:#a5b4fc}
+.v2-tile.ai .v2-tile-value{color:#4f46e5}
+.dark .v2-tile.ai .v2-tile-value{color:#a5b4fc}
+.v2-bulk{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sunken)}
+.v2-ai-note{margin:0;padding:10px 12px;border-radius:12px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);font-size:14px}

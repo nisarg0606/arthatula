@@ -581,3 +581,62 @@ test("new screens: Mark reviewed keeps your place in Transactions", async ({ pag
   expect(Math.abs(after - before), "scroll moved from " + before + " to " + after).toBeLessThanOrEqual(2);
   await expect(page.locator("#v2Transactions .v2-loading")).toHaveCount(0);
 });
+
+test("Gemini review: a payment like ones you filed before is checked and counted; Mark all reviewed clears the rest", async ({ page, request }, info) => {
+  const token = await signIn(page, request);
+  const key = info.project.name + "-" + info.retry;
+  const sync = await pairSync(page, request, token, "autorev-" + key);
+  const auth = { Authorization: "Bearer " + token };
+  const acct = "e2e-chk3-" + key;
+  const daysAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const name = "E2E STREAMCO " + key;
+  const push = (txs) => request.post("/api/bank", { headers: sync, data: {
+    accounts: [{ id: acct, institution: "E2E Bank", name: "Checking 3", subtype: "checking", currentBalance: 500 }], transactions: txs } });
+  /* Two earlier payments you filed under Subscriptions yourself. */
+  expect((await push([
+    { id: "e2e-sc1-" + key, accountId: acct, date: daysAgo(62), name, amount: 12.99 },
+    { id: "e2e-sc2-" + key, accountId: acct, date: daysAgo(31), name, amount: 12.99 }
+  ])).ok()).toBeTruthy();
+  const subs = (await (await request.get("/api/v2/categories", { headers: auth })).json()).categories.find((c) => c.name === "Subscriptions");
+  const past = (await (await request.get("/api/v2/transactions?q=" + encodeURIComponent(name), { headers: auth })).json()).transactions;
+  expect(past.length).toBe(2);
+  for (const t of past) {
+    expect((await request.patch("/api/v2/transactions", { headers: auth, data: { id: t.id, patch: { categoryId: subs.id } } })).ok()).toBeTruthy();
+  }
+  /* This month's one, plus a first-time payee. */
+  const stranger = "E2E FIRSTTIME " + key;
+  expect((await push([
+    { id: "e2e-sc3-" + key, accountId: acct, date: today(), name, amount: 12.99 },
+    { id: "e2e-new-" + key, accountId: acct, date: today(), name: stranger, amount: 333 }
+  ])).ok()).toBeTruthy();
+
+  await page.reload(); /* opening the app runs the review */
+  const tile = page.locator(".v2-tile.ai");
+  await expect(tile).toBeVisible({ timeout: 15000 });
+  await tile.click();
+  await expect(page.locator('[data-section="transactions"]')).toBeVisible();
+  const row = page.locator("#v2Transactions .v2-tx", { hasText: name });
+  await expect(row).toHaveCount(1);
+  await expect(row.locator(".v2-chip.ai")).toBeVisible();
+  await expect(row).toContainText("Subscriptions"); /* counted under the category you used before */
+  await expect(row).not.toHaveClass(/review/);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: stranger })).toHaveCount(0);
+
+  /* "Not right" puts it back on To review. */
+  await row.click();
+  await expect(page.locator("dialog.v2-dialog .v2-ai-note")).toBeVisible();
+  await page.locator("dialog.v2-dialog button", { hasText: "Not right" }).click();
+  await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(0);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: name })).toHaveCount(0);
+
+  /* To review: both are there; Mark all reviewed clears the list. */
+  await page.locator("#v2Transactions label", { hasText: "To review only" }).click();
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: name })).toHaveClass(/review/);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: stranger })).toHaveClass(/review/);
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#v2ReviewAll").click();
+  await expect(page.locator("#v2Transactions .v2-empty")).toContainText("Nothing to review");
+  await page.waitForTimeout(500); /* the background save */
+  const left = (await (await request.get("/api/v2/transactions?review=1", { headers: auth })).json()).total;
+  expect(left).toBe(0);
+});
