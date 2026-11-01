@@ -41,6 +41,7 @@ export function init() {
    "securitySection", "secChangeForm", "secCurrentCode", "secNewCode", "secNewConfirm", "secChangeStatus",
    "pairCard", "pairLabel", "pairWhen", "pairFingerprint", "pairApproveBtn", "pairDenyBtn",
    "pairOpenBtn", "pairOpenStatus",
+   "mcpCreateBtn", "mcpStatus", "mcpReveal", "mcpEndpoint", "mcpToken", "mcpConfig",
    "sessionList", "signOutBtn",
    "themeToggle", "addExpenseTopBtn"]
     .forEach(function (id) { els[id] = document.getElementById(id); });

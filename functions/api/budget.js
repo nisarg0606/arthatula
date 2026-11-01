@@ -464,7 +464,7 @@ export async function createSession(db, { kind = "device", label = "" } = {}) {
   const tokenHash = await sha256Hex(token);
   const id = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : tokenHash.slice(0, 36);
   const now = new Date();
-  const k = kind === "sync" ? "sync" : "device";
+  const k = kind === "sync" ? "sync" : kind === "mcp" ? "mcp" : "device";
   const expiresAt = sessionExpiry(k, now);
   const cleanLabel = String(label || "").slice(0, 100);
   await db.prepare(
@@ -515,8 +515,12 @@ export function extractSessionToken(request) {
    only write allowed then is POST /api/auth action "setup"). Once a
    code exists, a valid session token is mandatory: 401 otherwise.
    'sync' sessions (the Plaid script) are least-privilege: refused with
-   403 unless the route opts in with { allowSync: true }. */
-export async function requireAuth(db, request, { allowSync = false } = {}) {
+   403 unless the route opts in with { allowSync: true }. 'mcp' sessions
+   (an AI assistant's token, minted in Settings -> Security) are refused
+   the same way unless the route opts in with { allowMcp: true } — only
+   /api/mcp does, so an MCP token can never touch the raw API, settings,
+   or session management. */
+export async function requireAuth(db, request, { allowSync = false, allowMcp = false } = {}) {
   const codeHash = await getAccessCodeHash(db);
   if (!codeHash) {
     return { response: json({ error: "Access code setup required", setupRequired: true }, 403) };
@@ -525,6 +529,9 @@ export async function requireAuth(db, request, { allowSync = false } = {}) {
   if (!session) return { response: json({ error: "Sign-in required" }, 401) };
   if (session.kind === "sync" && !allowSync) {
     return { response: json({ error: "Sync tokens can't use this endpoint." }, 403) };
+  }
+  if (session.kind === "mcp" && !allowMcp) {
+    return { response: json({ error: "MCP tokens can only use the /api/mcp endpoint." }, 403) };
   }
   return { session };
 }
@@ -648,7 +655,7 @@ export async function createSessionForTokenHash(db, { kind = "sync", label = "",
   await ensureTables(db);
   const id = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : String(tokenHash).slice(0, 36);
   const now = new Date();
-  const k = kind === "sync" ? "sync" : "device";
+  const k = kind === "sync" ? "sync" : kind === "mcp" ? "mcp" : "device";
   const expiresAt = sessionExpiry(k, now);
   const cleanLabel = String(label || "").slice(0, 100);
   await db.prepare(

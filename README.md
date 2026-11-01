@@ -153,6 +153,7 @@ functions/api/settings.js Pages Function: GET / PUT /api/settings (masked Gemini
 functions/api/sync-requests.js + sync-requests/  Pages Functions: the "Sync now" request queue (file / latest / claim / complete)
 tools/sync-poller.mjs   VM poller: claims queued sync requests and runs the Plaid sync engine (no agent)
 functions/api/auth.js     Pages Function: /api/auth (setup, sign-in, sessions, pairing)
+functions/api/mcp.js      Pages Function: /api/mcp — MCP server for AI assistants (see "AI assistant (MCP)")
 functions/_middleware.js  security headers (CSP, framing, no-store on the API) for every response
 theme-init.js         head script (kept out of index.html for the CSP)
 tailwind.config.js, tailwind.css  Tailwind config and the prebuilt CSS the page loads (CI checks it is current)
@@ -222,6 +223,54 @@ manual sync requests (`GET /api/sync-requests/claim`,
 `POST /api/sync-requests/:id/complete`), and sign itself out. Everything
 else — the budget, settings, sessions, pairing, filing sync requests,
 deleting or editing expenses — answers 403.
+
+### AI assistant (MCP)
+
+The app is also an MCP server (Model Context Protocol, stateless
+Streamable HTTP) at `/api/mcp`, so an AI assistant — Claude, ChatGPT,
+Cursor, Grok (xAI remote MCP), or any other MCP client — can work with
+the budget through tools instead of the raw API:
+
+- **Read (classic, dollars):** `get_budget`, `list_expenses`,
+  `list_cards`, `get_bank_snapshot`, `list_pending_charges`,
+  `get_sync_status`, `categorize_expense`
+- **Read (money model, signed cents):** `list_accounts` (balances + net
+  worth), `list_transactions` (date range, account, category, text,
+  to-review filters), `get_budget_status` (budget vs. actual for a month)
+- **Write:** `add_expense`, `update_expense`, `delete_expense`,
+  `request_sync` — expense writes run the same cores as `/api/expenses`,
+  so auto-categorization, dedupe, bank auto-link and the monthly rollup
+  behave exactly as in the app (and the new screens see them too).
+
+Connect one in Settings → Security → **AI assistant (MCP)** → *Create
+MCP token*. The token is shown once, together with the endpoint
+(`https://<your-app>/api/mcp`) and a ready-to-paste config. For Claude
+Code, Claude Desktop or Cursor, merge it into the MCP settings file:
+
+```json
+{ "mcpServers": { "arthatula": {
+  "type": "http",
+  "url": "https://<your-app>/api/mcp",
+  "headers": { "Authorization": "Bearer <token>" }
+} } }
+```
+
+(Claude Code can also add it in one line:
+`claude mcp add --transport http arthatula https://<your-app>/api/mcp --header "Authorization: Bearer <token>"`.)
+Any other MCP client: choose the **Streamable HTTP** transport, point it
+at `https://<your-app>/api/mcp`, and send the header
+`Authorization: Bearer <token>`. The server is stateless, so `GET` (SSE)
+and `DELETE` answer 405; everything is a JSON-RPC `POST`.
+
+The token is an `mcp` session — a third least-privilege kind next to
+device and sync sessions. `requireAuth` refuses it on every route
+except `/api/mcp`, so it can never open the app, call the raw API
+(including `/api/v2/*`), change settings or the access code, or manage
+devices. Only a signed-in device can create one. It appears in the
+sessions list (badge **MCP**): revoke it there any time, and changing
+the access code signs it out like every other session. Its 90-day
+window slides as it is used, like a device session. Sync tokens are
+refused on `/api/mcp`.
 
 ### What the app expects from the sync (contract)
 
@@ -476,6 +525,7 @@ node tests/v2-model.test.mjs    # v2 schema, owner scoping, the mirror and its t
 node tests/v2-api.test.mjs      # every /api/v2 route: guards, write-back, splits, budgets, reports, export
 node tests/v2-autoreview.test.mjs # auto-review: name matching, strict rule, Gemini checks (fake fetch), Not right, Mark all
 node tests/sync.test.mjs        # "Sync now" request queue: auth scope, dedupe, claim/complete, expiry
+node tests/mcp.test.mjs         # MCP server: mcp-session scope, JSON-RPC handshake, every tool, revoke
 for f in js/*.js js/*/*.js; do node --check "$f"; done   # frontend syntax check
 ```
 
