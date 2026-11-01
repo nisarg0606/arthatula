@@ -1,0 +1,18 @@
+name: General feedback
+description: Anything else — what you like, what's confusing, questions.
+title: "Feedback: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues here are **public**. Please keep your real budget data out of it.
+  - type: textarea
+    id: details
+    attributes:
+      label: Your feedback
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Device, browser and app version (optional)

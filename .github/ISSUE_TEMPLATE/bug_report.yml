@@ -1,0 +1,26 @@
+name: Bug report
+description: Something in Arthatula is broken or behaves wrongly.
+title: "Bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Issues here are **public**. Please don't paste amounts, merchants, account names, tokens or screenshots with your real data.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, step by step, and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: context
+    attributes:
+      label: Device, browser and app version
+      description: e.g. iPhone 15, Safari 18, installed to Home Screen. App version or commit if you know it (Cloudflare dashboard → your Pages project → latest deployment).
+      placeholder: "Browser / OS:\nScreen width:\nApp commit:"
