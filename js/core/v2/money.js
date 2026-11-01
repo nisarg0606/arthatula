@@ -132,15 +132,19 @@ export function budgetMonth(month, budgets, transactions, categories) {
   const ids = {};
   Object.keys(plan).forEach(function (c) { ids[c] = true; });
   Object.keys(spent).forEach(function (c) { if (c) ids[c] = true; });
+  /* ...and what you spent on in the last 3 months, so each gets a suggestion. */
+  [1, 2, 3].forEach(function (n) { Object.keys(spentIn(addMonths(month, -n))).forEach(function (c) { if (c && categories[c]) ids[c] = true; }); });
   const rows = Object.keys(ids).map(function (cid) {
     const b = plan[cid];
     const planned = b ? b.amountCents : 0;
     const rolled = b && b.rollover ? (carry[cid] || 0) : 0;
     const actual = spent[cid] || 0;
     const cat = categories[cid] || {};
+    const avg = Math.round([1, 2, 3].reduce(function (s, n) { return s + (spentIn(addMonths(month, -n))[cid] || 0); }, 0) / 3);
     return {
       categoryId: cid, kind: cat.kind || "expense", plannedCents: planned, rolloverCents: rolled,
-      actualCents: actual, remainingCents: planned + rolled - actual, rollover: !!(b && b.rollover)
+      actualCents: actual, remainingCents: planned + rolled - actual, rollover: !!(b && b.rollover),
+      avgCents: avg
     };
   });
   const sum = function (kind, f) {
@@ -151,6 +155,26 @@ export function budgetMonth(month, budgets, transactions, categories) {
     plannedIncomeCents: sum("income", "plannedCents"), actualIncomeCents: sum("income", "actualCents"),
     plannedSpendingCents: sum("expense", "plannedCents"), actualSpendingCents: sum("expense", "actualCents")
   };
+}
+
+/* Big expenses in the 7 days up to today: at least 3x the typical
+   expense over the last 90 days, and never under $100.
+   ponytail: one fixed rule; make the multiple a setting if it's noisy. */
+export function largeExpenses(transactions, today) {
+  const sizes = [];
+  const recent = [];
+  (transactions || []).forEach(function (tx) {
+    const line = reportLines(tx);
+    if (!line.length || tx.amountCents >= 0 || tx.date > today) return;
+    const cents = -tx.amountCents;
+    if (tx.date >= addDays(today, -90)) sizes.push(cents);
+    if (tx.date >= addDays(today, -6)) recent.push(tx);
+  });
+  if (!sizes.length) return [];
+  sizes.sort(function (a, b) { return a - b; });
+  const floor = Math.max(10000, 3 * sizes[Math.floor(sizes.length / 2)]);
+  return recent.filter(function (tx) { return -tx.amountCents >= floor; })
+    .sort(function (a, b) { return a.amountCents - b.amountCents; });
 }
 
 /* Rolling forecast: from today's cash, month by month for `count` months

@@ -75,7 +75,7 @@ export function loadBasics(force) {
 }
 export function categoryById(id) { return v2.categories.find(function (c) { return c.id === id; }) || null; }
 export function accountById(id) { return v2.accounts.find(function (a) { return a.id === id; }) || null; }
-export function categoryName(id) { const c = categoryById(id); return c ? c.name : "Uncategorized"; }
+export function categoryName(id) { const c = categoryById(id); return c ? (c.icon ? c.icon + " " : "") + c.name : "Uncategorized"; }
 
 /* <select> of categories grouped like the budget, current one picked. */
 export function categorySelect(selected, opts) {
@@ -86,7 +86,7 @@ export function categorySelect(selected, opts) {
     if (o.kinds && o.kinds.indexOf(g.kind) === -1) return;
     const og = h("optgroup", { attrs: { label: g.name } });
     v2.categories.filter(function (c) { return c.groupId === g.id && (!c.archived || c.id === selected); }).forEach(function (c) {
-      const opt = h("option", { value: c.id, text: c.name });
+      const opt = h("option", { value: c.id, text: (c.icon ? c.icon + " " : "") + c.name });
       if (c.id === selected) opt.selected = true;
       og.appendChild(opt);
     });

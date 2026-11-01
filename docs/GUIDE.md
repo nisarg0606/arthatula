@@ -88,12 +88,17 @@ On a phone the bar at the bottom has the things you use most:
 - **Splitwise** — your balances with friends (needs a Splitwise key in Settings).
 - **Settings** — AI, Splitwise, rules, categories, and security.
 - **Month editor**, **Daily expenses**, **Cards**, **Bank** — the classic
-  screens: plan each month line by line, the daily expense log, credit-card
+  screens (on a computer, under **More** at the end of the tab bar): plan each month line by line, the daily expense log, credit-card
   statement cycles, and synced bank data.
 
 Tips:
 
 - Tap a category on Home to see exactly what it counted.
+- **Heads up** on Home flags categories over budget and unusually big
+  expenses from the last week.
+- In Budget, the **avg $…** chip is what you spent on average over the last
+  three months. Tap it to plan that much.
+- Give a category an emoji in **Settings → Categories** (tap the category).
 - In lists, tap a row to edit it.
 - The ◐ button at the top switches light and dark mode.
 
