@@ -52,6 +52,25 @@ const SCHEMA = [
     balance_cents INTEGER NOT NULL,
     PRIMARY KEY (owner_id, account_id, date)
   )`,
+  /* Investment positions pushed by the sync (Plaid holdings): one row
+     per security per account, replaced wholesale on every push that
+     carries holdings. price/value are the institution's latest;
+     as_of is the date that price belongs to. */
+  `CREATE TABLE IF NOT EXISTS holdings (
+    owner_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    security_id TEXT NOT NULL DEFAULT '',
+    ticker TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    quantity REAL NOT NULL DEFAULT 0,
+    cost_basis_cents INTEGER,
+    price_cents INTEGER,
+    value_cents INTEGER,
+    kind TEXT NOT NULL DEFAULT '',
+    as_of TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (owner_id, account_id, security_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS category_groups (
     id TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL,

@@ -1,6 +1,6 @@
 /*
  * v2 investments (serves /api/v2/investments).
- *   GET -> { accounts, series, change }
+ *   GET -> { accounts, series, change, holdings, holdingsAsOf }
  *        accounts: the investment accounts, each with its own 1-day and
  *        30-day change; series: total value per day from the balance
  *        snapshots the sync records; change: { day, week, month, year }
@@ -20,6 +20,11 @@ export const onRequestGet = (context) => handleV2(context, async ({ s }) => {
   const benchmark = (await marketHistory(s, 400))
     .map((m) => { const q = (m.quotes || []).find((x) => x.symbol === "SPY"); return q ? { date: m.date, close: q.close } : null; })
     .filter(Boolean).reverse();
+  const invIds = new Set(accounts.map((a) => a.id));
+  const holdings = (await s.all("SELECT account_id, ticker, name, quantity, cost_basis_cents, price_cents, value_cents, kind, as_of FROM holdings WHERE owner_id = ?1 ORDER BY value_cents DESC"))
+    .filter((r) => invIds.has(r.account_id))
+    .map((r) => ({ accountId: r.account_id, ticker: r.ticker, name: r.name, quantity: r.quantity, costBasisCents: r.cost_basis_cents, priceCents: r.price_cents, valueCents: r.value_cents, kind: r.kind, asOf: r.as_of }));
+  const holdingsAsOf = holdings.reduce((m, x) => (x.asOf && x.asOf > (m || "") ? x.asOf : m), null);
   return {
     accounts: accounts.map((a) => {
       const own = investmentSeries([a], snaps);
@@ -27,6 +32,8 @@ export const onRequestGet = (context) => handleV2(context, async ({ s }) => {
     }),
     series,
     change: { day: changeOver(series, 1), week: changeOver(series, 7), month: changeOver(series, 30), year: changeOver(series, 365) },
-    benchmark
+    benchmark,
+    holdings,
+    holdingsAsOf
   };
 }, { skipMirror: true });

@@ -1,7 +1,13 @@
 /*
  * v2 sync push for the paired automation (serves /api/v2/sync).
- *   POST { accounts: [{ id, name, institution?, type, subtype?, mask?, balanceCents, availableCents?, isoCurrency? }], asOf? }
- *        -> { ok, accounts }
+ *   POST { accounts: [{ id, name, institution?, type, subtype?, mask?, balanceCents, availableCents?, isoCurrency? }],
+ *          holdings?: [{ accountId, securityId, ticker?, name?, quantity, costBasisCents?, priceCents?, valueCents?, kind?, asOf? }],
+ *          asOf? }
+ *        -> { ok, accounts, holdings }
+ *        When the holdings key is present it is the COMPLETE position
+ *        set for the pushed accounts: their stored holdings are
+ *        replaced, so a sold position disappears. When the key is
+ *        absent (older sync), stored holdings are left untouched.
  *        Sync sessions ONLY. Upserts every account by its Plaid id —
  *        including credit cards, loans and investment accounts the
  *        classic Bank tab never saw — and records the day's balance
@@ -18,6 +24,8 @@ import { ACCOUNT_TYPES } from "../../../js/core/v2/money.js";
 const CAP = 100;
 function str(v, max) { return typeof v === "string" ? v.slice(0, max) : ""; }
 function cents(v) { return typeof v === "number" && Number.isInteger(v) && Math.abs(v) < 1e12 ? v : null; }
+function num(v) { return typeof v === "number" && Number.isFinite(v) ? v : null; }
+function dateStr(v, fallback) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : fallback; }
 
 export const onRequestPost = (context) => handleV2(context, async ({ s, request }) => {
   const b = await bodyOf(request);
@@ -49,7 +57,26 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
     }
     n++;
   }
+  let holdingsCount = 0;
+  if (Array.isArray(b.holdings)) {
+    const pushedExts = [...new Set(b.accounts.slice(0, CAP).filter((a) => a && str(a.id, 200)).map((a) => "plaid:" + str(a.id, 200)))];
+    for (const ext of pushedExts) {
+      stmts.push(["DELETE FROM holdings WHERE owner_id = ?1 AND account_id IN (SELECT id FROM accounts WHERE owner_id = ?1 AND external_id = ?2)", ext]);
+    }
+    for (const hd of b.holdings.slice(0, 500)) {
+      if (!hd || typeof hd !== "object" || !str(hd.accountId, 200) || !str(hd.securityId, 200)) continue;
+      const qty = num(hd.quantity);
+      if (qty === null) continue;
+      stmts.push([
+        "INSERT INTO holdings (owner_id, account_id, security_id, ticker, name, quantity, cost_basis_cents, price_cents, value_cents, kind, as_of) " +
+        "SELECT ?1, id, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11 FROM accounts WHERE owner_id = ?1 AND external_id = ?2",
+        "plaid:" + str(hd.accountId, 200), str(hd.securityId, 200), str(hd.ticker, 20), str(hd.name, 200), qty,
+        cents(hd.costBasisCents), cents(hd.priceCents), cents(hd.valueCents), str(hd.kind, 20), dateStr(hd.asOf, asOf)
+      ]);
+      holdingsCount++;
+    }
+  }
   await s.batch(stmts);
   await s.setSetting("mirror_fp", ""); /* re-run the mirror: a synced card may now pair with a classic one */
-  return { ok: true, accounts: n };
+  return { ok: true, accounts: n, holdings: holdingsCount };
 }, { allowSync: true, syncOnly: true, skipMirror: true });

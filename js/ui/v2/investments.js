@@ -69,6 +69,51 @@ function benchmarkLine(points, bench) {
   return line.filter(function (v) { return v !== null; }).length >= 2 ? line : null;
 }
 
+/* Quantity without trailing zeros: whole shares stay "10", crypto
+   dust keeps the decimals it needs. */
+function fmtQty(q) {
+  if (q === null || q === undefined) return "";
+  const v = Math.abs(q) >= 100 ? Math.round(q * 100) / 100 : q;
+  return String(Math.round(v * 1e8) / 1e8);
+}
+
+function gainOf(hd) {
+  if (hd.kind === "cash" || hd.costBasisCents === null || hd.costBasisCents === undefined || hd.valueCents === null || hd.valueCents === undefined) return null;
+  const cents = hd.valueCents - hd.costBasisCents;
+  return { cents: cents, pct: hd.costBasisCents ? Math.round(cents / hd.costBasisCents * 10000) / 100 : null };
+}
+
+function holdingsSection(d) {
+  const byId = {};
+  d.accounts.forEach(function (a) { byId[a.id] = a; });
+  let value = 0, costedValue = 0, cost = 0;
+  d.holdings.forEach(function (hd) {
+    if (hd.valueCents !== null && hd.valueCents !== undefined) value += hd.valueCents;
+    if (gainOf(hd)) { costedValue += hd.valueCents; cost += hd.costBasisCents; }
+  });
+  const totalGain = cost ? { cents: costedValue - cost, pct: Math.round((costedValue - cost) / cost * 10000) / 100 } : null;
+  const body = h("div", null,
+    h("div", { class: "v2-tiles" },
+      h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Holdings value" }), h("span", { class: "v2-tile-value", text: money(value, { whole: true }) })),
+      h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Gain / loss" }), h("span", { class: "v2-tile-value v2-chg " + cls(totalGain), text: totalGain ? changeText(totalGain) : "—" }), h("span", { class: "v2-tile-sub", text: "vs cost basis" }))),
+    h("div", { class: "v2-list" }, d.holdings.map(function (hd) {
+      const a = byId[hd.accountId];
+      const g = gainOf(hd);
+      const title = hd.kind === "cash" ? "Cash" : (hd.ticker || hd.name || "Security");
+      const sub = [];
+      if (hd.kind !== "cash") sub.push(fmtQty(hd.quantity) + " sh");
+      if (hd.kind !== "cash" && hd.priceCents !== null && hd.priceCents !== undefined) sub.push(money(hd.priceCents) + " / sh");
+      if (a) sub.push(a.name + (a.mask ? " ··" + a.mask : ""));
+      if (hd.asOf) sub.push("priced " + shortDay(hd.asOf));
+      return h("div", { class: "v2-line" },
+        h("span", { class: "v2-line-name" }, h("span", null, h("strong", { text: title }), hd.name && hd.kind !== "cash" ? h("span", { class: "hint", text: " " + hd.name }) : null), h("span", { class: "hint", text: sub.join(" · ") })),
+        g ? h("span", { class: "v2-chg hint " + cls(g), text: changeText(g) }) : null,
+        h("span", { class: "v2-amt", text: hd.valueCents === null || hd.valueCents === undefined ? "—" : money(hd.valueCents, { whole: true }) }));
+    })),
+    h("p", { class: "hint", text: "From your bank sync. Prices are the latest close your bank reports" + (d.holdingsAsOf ? " — holdings as of " + dayLabel(d.holdingsAsOf) : "") + "." }));
+  return section("Holdings", [], body);
+}
+
 function draw() { return keepScroll(drawNow); }
 
 function drawNow() {
@@ -116,6 +161,7 @@ function drawNow() {
       h("span", { class: "v2-chg hint " + cls(a.day), text: a.day ? "Today " + changeText(a.day) : "" }),
       h("span", { class: "v2-amt", text: a.balanceCents === null ? "—" : money(a.balanceCents, { whole: true }) }));
   }))));
+  if (d.holdings && d.holdings.length) root.appendChild(holdingsSection(d));
 }
 
 export function render(container) {
