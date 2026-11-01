@@ -179,7 +179,7 @@ export const DEFAULT_GROUPS = [
   { key: "transport", name: "Transportation", kind: "expense", cats: ["Fuel/Transport"] },
   { key: "lifestyle", name: "Lifestyle", kind: "expense", cats: ["Shopping/Personal", "Gym"] },
   { key: "debt", name: "Debt", kind: "expense", cats: ["Loan/Debt Payment"] },
-  { key: "other", name: "Other", kind: "expense", cats: ["One-off", "Misc/Other"] },
+  { key: "other", name: "Other", kind: "expense", cats: ["One-off", "Misc/Other", "Sent to India"] },
   { key: "transfers", name: "Transfers", kind: "transfer", cats: ["Transfer", "Credit card payment", "Repayment"] }
 ];
 
@@ -206,8 +206,11 @@ export async function ensureV2(db) {
 
 export async function ensureOwner(db, ownerId) {
   const s = scope(db, ownerId);
-  const have = await s.first("SELECT COUNT(*) AS n FROM category_groups WHERE owner_id = ?1");
-  if (have && have.n > 0) return;
+  /* The seeds are INSERT OR IGNORE against deterministic group ids
+     and the unique (owner_id, name) category index, so running them
+     on every ensure is a no-op for existing owners — and a category
+     added to DEFAULT_GROUPS later still reaches owners created
+     before it existed. */
   const stmts = [];
   DEFAULT_GROUPS.forEach((g, gi) => {
     const gid = "grp_" + g.key + "_" + ownerId;

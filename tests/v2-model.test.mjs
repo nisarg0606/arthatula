@@ -42,8 +42,8 @@ await ensureV2(env.DB);
   assert.equal((await friend.first("SELECT merchant FROM transactions WHERE owner_id = ?1 AND id = ?2", "tx_friend")).merchant, "Friend secret");
   /* Each owner gets its own default categories. */
   const meCats = (await loadCategories(me)).categories, frCats = (await loadCategories(friend)).categories;
-  assert.equal(meCats.length, 19, "19 default categories");
-  assert.equal(frCats.length, 19);
+  assert.equal(meCats.length, 20, "20 default categories");
+  assert.equal(frCats.length, 20);
   assert.ok(!meCats.some((c) => frCats.some((f) => f.id === c.id)), "category ids are per owner");
 }
 

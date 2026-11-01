@@ -42,8 +42,9 @@ const FIELD_LABEL = {
   creditCardPayment: "Card payment", otherLoan: "Other loan", oneOffs: "One-off", otherExpenses: "Other expenses"
 };
 const MIRRORED = ["v1exp", "v1bank", "v1actual"];
-const MIRROR_VERSION = "3"; /* 2: rows before the baseline count in reports
-                                3: unbooked months' bank inflows count as income */
+const MIRROR_VERSION = "4"; /* 2: rows before the baseline count in reports
+                                3: unbooked months' bank inflows count as income
+                               4: Cybrid outflows count as Sent to India */
 
 async function fingerprint(db) {
   const r = await db.prepare(
@@ -213,6 +214,12 @@ export async function mirrorV1(db, opts) {
     if (kind === "income") reviewedIncome[monthOf(t.date)] = (reviewedIncome[monthOf(t.date)] || 0) + amount;
     let defaultCat = cat("Transfer");
     if (!kind && inflowIsIncome(t, amount)) defaultCat = cat("Other income");
+    /* CYBRID-CROBO debits are money he sends to India: real outflows
+       the sync deliberately never logs as expenses, so reports count
+       them here, under their own category, in every month. Other
+       unlinked outflows stay Transfer — that spending is already in
+       the daily log via the card charges. */
+    else if (!kind && amount < 0 && /cybrid/i.test(t.name || "")) defaultCat = cat("Sent to India");
     desired.push({
       ext: "bank:" + t.plaid_transaction_id, source: "v1bank", date: t.date, merchant: t.name, description: t.name,
       amount: amount, share: null,

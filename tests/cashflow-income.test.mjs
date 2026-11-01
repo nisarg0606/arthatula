@@ -11,11 +11,18 @@
  *   - moves between the owner's own accounts (name patterns, or an
  *     inflow paired with an equal outflow from another account
  *     within 3 days) stay transfers, never income.
+ * Outflows have one mirror-image rule: CYBRID-CROBO debits — money
+ * sent to India, which the sync deliberately never logs as an
+ * expense — count as spending under their own "Sent to India"
+ * category in every month, booked or not. Every other unlinked
+ * outflow stays a transfer (that spending already reaches the
+ * reports through the daily log's card charges).
  * Run: node tests/cashflow-income.test.mjs — made-up data only.
  */
 import assert from "node:assert/strict";
 import { FakeD1, makeCtx, setupTestAuth, authHeaders } from "./_fake-d1.mjs";
 import { patchState, upsertBankData } from "../functions/api/budget.js";
+import { ensureOwner, OWNER_ID } from "../functions/api/_v2db.js";
 import * as reports from "../functions/api/v2/reports.js";
 
 const env = { DB: new FakeD1() };
@@ -47,10 +54,13 @@ await upsertBankData(env.DB, {
     { id: "self-may", accountId: "chk", date: "2026-05-26", name: "Zelle payment from NISARG SHAH", amount: -700 },
     /* An unrecognized inflow stays a neutral transfer. */
     { id: "mystery-may", accountId: "chk", date: "2026-05-27", name: "ACME DEPOSIT 883920", amount: -432 },
+    /* Money sent to India via Cybrid counts as spending in any month. */
+    { id: "cyb-may", accountId: "chk", date: "2026-05-21", name: "CYBRID-CROBO.MON 01272C3F", amount: 5000 },
     /* October: the same paycheck, already inside the booked actuals. */
     { id: "pay-oct", accountId: "chk", date: "2026-10-31", name: "ACME PAYROLL 000101", amount: -2976.54, pfc: "INCOME" },
     /* An ordinary outflow stays neutral either way. */
-    { id: "out-oct", accountId: "chk", date: "2026-10-12", name: "AUTOPAY CARD", amount: 300 }
+    { id: "out-oct", accountId: "chk", date: "2026-10-12", name: "AUTOPAY CARD", amount: 300 },
+    { id: "cyb-oct", accountId: "chk", date: "2026-10-20", name: "CYBRID-CROBO.MON 88410A", amount: 1200 }
   ]
 });
 
@@ -66,6 +76,27 @@ assert.equal(byMonth["2026-05"].incomeCents, 110000 + 187654 + 25000,
 assert.equal(byMonth["2026-10"].incomeCents, 297654,
   "October income = the booked actuals only; the bank paycheck is not counted twice");
 assert.equal(cf.total.incomeCents, 110000 + 187654 + 25000 + 297654);
-assert.equal(cf.total.spendingCents, 0, "unlinked bank outflows stay transfers, not spending");
+assert.equal(byMonth["2026-05"].spendingCents, 500000, "May spending = the Cybrid send to India");
+assert.equal(byMonth["2026-10"].spendingCents, 120000, "Cybrid counts even in a booked month; the card autopay stays a transfer");
+assert.equal(cf.total.spendingCents, 500000 + 120000,
+  "only the Cybrid outflows count as spending; other unlinked outflows stay transfers");
+
+/* The Cybrid rows must carry the dedicated category, not the
+   Misc/Other fallback the mirror uses for unknown names. */
+const cybCats = await env.DB.prepare(
+  "SELECT c.name AS n FROM transactions t JOIN categories c ON c.id = t.category_id " +
+  "WHERE t.source = 'v1bank' AND (t.merchant LIKE '%CYBRID%' OR t.description LIKE '%CYBRID%') ORDER BY t.date"
+).all();
+assert.deepEqual(cybCats.results.map((r) => r.n), ["Sent to India", "Sent to India"]);
+
+/* An owner created BEFORE "Sent to India" existed must still get it:
+   the seed batch re-runs idempotently on every ensure. */
+await env.DB.prepare("DELETE FROM categories WHERE name = 'Sent to India'").run();
+await ensureOwner(env.DB, OWNER_ID);
+const restored = await env.DB.prepare("SELECT COUNT(*) AS n FROM categories WHERE name = 'Sent to India'").first();
+assert.equal(restored.n, 1, "re-running the seeds restores a category added after the owner was created");
+const dupes = await env.DB.prepare(
+  "SELECT COUNT(*) AS n FROM (SELECT name FROM categories GROUP BY name HAVING COUNT(*) > 1)").first();
+assert.equal(dupes.n, 0, "the re-run duplicated no category");
 
 console.log("cashflow-income.test.mjs: all assertions passed");
