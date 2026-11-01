@@ -5,7 +5,8 @@
   "scripts": {
     "shots": "cd .. && VIDEO_SHOTS=video/public/shots node tools/readme-screenshots.mjs",
     "studio": "remotion studio src/index.jsx",
-    "render": "remotion render src/index.jsx Promo-16x9 out/arthatula-16x9.mp4 --codec=h264 --crf=20 --enforce-audio-track && remotion render src/index.jsx Promo-1x1 out/arthatula-1x1.mp4 --codec=h264 --crf=20 --enforce-audio-track && remotion render src/index.jsx Promo-9x16 out/arthatula-9x16.mp4 --codec=h264 --crf=20 --enforce-audio-track"
+    "render": "remotion render src/index.jsx Promo-16x9 out/arthatula-16x9.mp4 --codec=h264 --crf=20 --enforce-audio-track && remotion render src/index.jsx Promo-1x1 out/arthatula-1x1.mp4 --codec=h264 --crf=20 --enforce-audio-track && remotion render src/index.jsx Promo-9x16 out/arthatula-9x16.mp4 --codec=h264 --crf=20 --enforce-audio-track",
+    "voice": "node voice.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.539",

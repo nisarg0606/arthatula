@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Easing, Sequence, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { slide } from "@remotion/transitions/slide";
@@ -203,18 +203,38 @@ const SCENES = [
     ["🤖", "MCP for AI agents", "“Log $12 lunch” and it's saved"]]} />],
   [150, <Cta />],
 ];
-const T = 15;
-export const DURATION = SCENES.reduce((s, [d]) => s + d, 0) - T * (SCENES.length - 1);
+const T = 15, LEAD = 8, TAIL = 10;
+const num = (i) => String(i + 1).padStart(2, "0");
 
-export function Promo() {
+/* Scene lengths in frames. voice = public/voice/manifest.json (seconds per
+   file, from voice.mjs). A per-scene line that runs long stretches its
+   scene, with a short pause after it and before the next transition; a
+   single continuous take only ever stretches the last scene. */
+export function lengths(voice = {}) {
+  const d = SCENES.map(([base], i) => {
+    const v = voice[num(i)];
+    return v ? Math.max(base, LEAD + Math.ceil(v * 30) + TAIL + (i < SCENES.length - 1 ? T : 0)) : base;
+  });
+  const total = d.reduce((a, b) => a + b, 0) - T * (d.length - 1);
+  if (voice.voiceover) d[d.length - 1] += Math.max(0, Math.ceil(voice.voiceover * 30) + TAIL - total);
+  return d;
+}
+export const duration = (voice) => lengths(voice).reduce((a, b) => a + b, 0) - T * (SCENES.length - 1);
+
+export function Promo({ voice = {} }) {
+  const d = lengths(voice);
   return (
     <AbsoluteFill style={{ fontFamily }}>
       <Background />
+      {voice.voiceover && <Audio src={staticFile("voice/voiceover.wav")} />}
       <TransitionSeries>
-        {SCENES.flatMap(([d, el], i) => [
+        {SCENES.flatMap(([, el], i) => [
           /* Screen to screen slides, so two captions never fade over each other. */
           i > 0 && <TransitionSeries.Transition key={"t" + i} presentation={i >= 3 && i <= 11 ? slide({ direction: "from-right" }) : fade()} timing={linearTiming({ durationInFrames: T })} />,
-          <TransitionSeries.Sequence key={i} durationInFrames={d}>{el}</TransitionSeries.Sequence>,
+          <TransitionSeries.Sequence key={i} durationInFrames={d[i]}>
+            {el}
+            {voice[num(i)] && <Sequence from={LEAD} layout="none"><Audio src={staticFile("voice/" + num(i) + ".wav")} /></Sequence>}
+          </TransitionSeries.Sequence>,
         ].filter(Boolean))}
       </TransitionSeries>
     </AbsoluteFill>
