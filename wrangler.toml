@@ -25,3 +25,9 @@ run_worker_first = true
 [[d1_databases]]
 binding = "DB" # the API reads env.DB: this name must stay "DB"
 database_name = "arthatula"
+
+# The nightly market recap (worker.js scheduled): 01:30 UTC Tuesday to
+# Saturday is 9:30 pm New York (8:30 pm in winter), after each weekday's
+# close. The app also writes it on the first visit after the close.
+[triggers]
+crons = ["30 1 * * 2-6"]

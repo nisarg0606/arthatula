@@ -12,6 +12,8 @@
  * tests/worker.test.mjs checks ROUTES covers every file in functions/api.
  */
 import { withSecurityHeaders } from "./functions/_middleware.js";
+import { ensureV2, scope, OWNER_ID } from "./functions/api/_v2db.js";
+import { ensureMarket } from "./functions/api/_market.js";
 import * as actuals from "./functions/api/actuals.js";
 import * as ask from "./functions/api/ask.js";
 import * as auth from "./functions/api/auth.js";
@@ -33,6 +35,8 @@ import * as v2budgets from "./functions/api/v2/budgets.js";
 import * as v2categories from "./functions/api/v2/categories.js";
 import * as v2export from "./functions/api/v2/export.js";
 import * as v2goals from "./functions/api/v2/goals.js";
+import * as v2investments from "./functions/api/v2/investments.js";
+import * as v2market from "./functions/api/v2/market.js";
 import * as v2migration from "./functions/api/v2/migration.js";
 import * as v2networth from "./functions/api/v2/networth.js";
 import * as v2recurring from "./functions/api/v2/recurring.js";
@@ -66,6 +70,8 @@ export const ROUTES = [
   ["/api/v2/categories", v2categories, "api/v2/categories.js"],
   ["/api/v2/export", v2export, "api/v2/export.js"],
   ["/api/v2/goals", v2goals, "api/v2/goals.js"],
+  ["/api/v2/investments", v2investments, "api/v2/investments.js"],
+  ["/api/v2/market", v2market, "api/v2/market.js"],
   ["/api/v2/migration", v2migration, "api/v2/migration.js"],
   ["/api/v2/networth", v2networth, "api/v2/networth.js"],
   ["/api/v2/recurring", v2recurring, "api/v2/recurring.js"],
@@ -118,5 +124,11 @@ export default {
     const path = new URL(request.url).pathname;
     const response = path === "/api" || path.startsWith("/api/") ? await handleApi(request, env, ctx) : await env.ASSETS.fetch(request);
     return withSecurityHeaders(response, request.url);
+  },
+  /* The nightly market recap (wrangler.toml [triggers]); Pages has no
+     cron, so there the first visit after the close writes it instead. */
+  async scheduled(event, env, ctx) {
+    if (!env.DB) return;
+    ctx.waitUntil(ensureV2(env.DB).then(() => ensureMarket(scope(env.DB, OWNER_ID), env)));
   }
 };

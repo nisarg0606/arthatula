@@ -138,12 +138,40 @@ function migrationCard() {
     h("div", null, h("p", { class: "hint", text: "The new screens read a copy of your classic data that refreshes whenever it changes. This compares the copy with the classic actuals, month by month; rows you add on the new screens are listed separately." }), box)), run: run };
 }
 
+/* The Finnhub key behind the nightly market recap (see functions/api/_market.js). */
+function marketKeyCard() {
+  const status = h("p", { class: "hint", text: "Checking…" });
+  const input = h("input", { attrs: { type: "password", autocomplete: "off", placeholder: "Paste your Finnhub API key", "aria-label": "Finnhub API key" } });
+  const show = function (r) {
+    const f = r.finnhub || {};
+    status.textContent = f.hasKey ? "Connected (key " + (f.source === "env" ? "from the Cloudflare secret" : "saved in the app") + ", ••••" + (f.last4 || "") + "). The recap appears on Home and Investments after each US market close." : "Not connected.";
+  };
+  const put = function (body) {
+    return apiFetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (res) { return res.json().then(function (j) { if (!res.ok) throw new Error(j.error || "Could not save."); return j; }); });
+  };
+  apiFetch("/api/settings").then(function (res) { return res.json(); }).then(show, function () { status.textContent = ""; });
+  return section("Market data", [], h("div", { class: "v2-form" },
+    h("p", { class: "hint", text: "A short recap of the US stock market every weekday evening, from Finnhub's free plan (S&P 500, Nasdaq and Dow moves plus the day's headlines). Get a key at finnhub.io/register. Your AI provider, if set, writes the summary; only market numbers and headlines are sent to it, never your balances." }),
+    field("Finnhub API key", input), status,
+    h("div", { class: "actions" },
+      button("Save key", function () {
+        if (!input.value.trim()) { window.alert("Paste your Finnhub key first."); return; }
+        put({ finnhubApiKey: input.value.trim() }).then(function (r) { input.value = ""; show(r); }).catch(function (e) { window.alert(e.message); });
+      }, "btn-primary"),
+      button("Remove key", function () {
+        if (!window.confirm("Remove the Finnhub key saved in the app?")) return;
+        put({ clearFinnhubKey: true }).then(show).catch(function (e) { window.alert(e.message); });
+      }, "danger"))));
+}
+
 /* Redraws keep the reader's place (see ../scroll.js). */
 function draw() { return keepScroll(function () { return drawNow(); }); }
 
 function drawNow() {
   clear(root);
   root.appendChild(categoriesCard());
+  root.appendChild(marketKeyCard());
   const rulesBox = h("div");
   root.appendChild(rulesBox);
   api("GET", "rules").then(function (r) { clear(rulesBox).appendChild(rulesCard(r.rules)); }).catch(function (e) { errorState(rulesBox, e); });

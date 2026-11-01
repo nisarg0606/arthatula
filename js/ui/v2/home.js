@@ -3,6 +3,7 @@
    what's due soon, and where the money went. */
 import { keepScroll } from "../scroll.js";
 import { api, h, clear, money, shortDay, monthLabel, loadBasics, categoryName, button, errorState, loading } from "./kit.js";
+import { marketCard } from "./investments.js";
 
 let goTo = null;
 export function setNavigator(fn) { goTo = fn; }
@@ -24,6 +25,9 @@ export function render(container) {
 
 function draw(container, s) {
     clear(container);
+    /* The market recap loads on its own: a slow quote never holds up the overview. */
+    const marketBox = h("div", { class: "v2-market-slot" });
+    api("GET", "market").then(function (m) { if (m.status !== "nokey" || m.latest) clear(marketBox).appendChild(marketCard(m)); }, function () { /* the overview still shows */ });
     const nwDelta = s.netWorth30dAgoCents === null ? null : s.netWorthCents - s.netWorth30dAgoCents;
     const spendPct = s.plannedSpendingCents > 0 ? Math.round(s.spendingCents / s.plannedSpendingCents * 100) : null;
     const tiles = h("div", { class: "v2-tiles" },
@@ -62,4 +66,5 @@ function draw(container, s) {
       h("div", { class: "v2-two" },
         h("div", null, h("h3", { class: "v2-sub-head", text: "Coming up · 14 days" }), due),
         h("div", null, h("h3", { class: "v2-sub-head", text: "Top spending this month" }), top))));
+    container.appendChild(marketBox);
 }

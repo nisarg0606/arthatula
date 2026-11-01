@@ -84,6 +84,9 @@ On a phone the bar at the bottom has the things you use most:
 - **Accounts** — your bank and card accounts and their balances.
 - **Cash flow** — money in vs out, month by month.
 - **Recurring** — bills and subscriptions, and what's coming up.
+- **Investments** — your brokerage and retirement accounts' value over
+  time (from the daily balances your sync records), with an S&P 500 line to
+  compare, and the evening **Market today** recap (see below).
 - **Goals** — things you're saving for.
 - **Splitwise** — your balances with friends (needs a Splitwise key in Settings).
 - **Settings** — AI, Splitwise, rules, categories, and security.
@@ -101,6 +104,21 @@ Tips:
 - Give a category an emoji in **Settings → Categories** (tap the category).
 - In lists, tap a row to edit it.
 - The ◐ button at the top switches light and dark mode.
+
+### Market today (evening recap)
+
+Every weekday after the US market closes, the app writes a short recap:
+how the S&P 500, Nasdaq and Dow moved and what the day's headlines say
+drove it. It shows on **Home** and **Investments**.
+
+1. Get a free key at <https://finnhub.io/register> (copy it from the
+   dashboard).
+2. In your app: **Settings → Market data** → paste it → **Save key**.
+
+The recap is written by your AI provider when one is set (only market
+numbers and headlines are sent to it, never your balances); without one
+you get a plain one-line version. It appears the first time you open the
+app after 4:10 pm New York time.
 
 ## 5. Turn on the AI (Gemini, Grok or others)
 

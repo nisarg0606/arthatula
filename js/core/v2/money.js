@@ -245,6 +245,34 @@ export function netWorthSeries(accounts, snapshots) {
   });
 }
 
+/* ---- investments ---- */
+
+/* Total value of the investment accounts per snapshot day (each
+   account's last known balance carried forward). */
+export function investmentSeries(accounts, snapshots) {
+  const idx = {};
+  (accounts || []).forEach(function (a) { if (a.type === "investment" && !a.hidden) idx[a.id] = a; });
+  const mine = (snapshots || []).filter(function (s) { return idx[s.accountId]; });
+  return netWorthSeries(idx, mine).map(function (p) { return { date: p.date, valueCents: p.assetsCents }; });
+}
+
+/* Change from the last point on or before `days` before the latest
+   point (or from the previous point when days is 1) to the latest.
+   null when there's nothing to compare with. */
+export function changeOver(series, days) {
+  if (!series || series.length < 2) return null;
+  const end = series[series.length - 1];
+  let start = null;
+  if (days === 1) start = series[series.length - 2];
+  else {
+    const from = addDays(end.date, -days);
+    for (let i = series.length - 2; i >= 0; i--) { if (series[i].date <= from) { start = series[i]; break; } }
+    if (!start) start = series[0];
+  }
+  const cents = end.valueCents - start.valueCents;
+  return { cents: cents, pct: start.valueCents ? Math.round(cents / start.valueCents * 10000) / 100 : null, since: start.date };
+}
+
 /* ---- merchant names + rules ---- */
 
 /* "SQ *BLUE BOTTLE #123 SF" -> "sq blue bottle sf": lower case, digits
