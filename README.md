@@ -20,6 +20,7 @@
   <img src="https://img.shields.io/badge/vanilla-HTML%20%C2%B7%20CSS%20%C2%B7%20JS-0f766e" alt="Vanilla HTML, CSS and JS">
   <img src="https://img.shields.io/badge/runs_on-Cloudflare_free_plan-f38020" alt="Runs on Cloudflare's free plan">
   <img src="https://img.shields.io/badge/AI_agents-MCP_server-8b5cf6" alt="MCP server">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
 <p align="center">
@@ -708,3 +709,8 @@ desktop Chromium, against a throwaway local database):
 ```
 cd e2e && npm ci && npx playwright install webkit chromium && npx playwright test
 ```
+
+## License
+
+[MIT](LICENSE): use it, change it, share it, including in your own
+projects. Keep the copyright notice.

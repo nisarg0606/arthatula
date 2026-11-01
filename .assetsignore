@@ -17,6 +17,7 @@ netlify.toml
 vercel.json
 tailwind.config.js
 README.md
+LICENSE
 docs
 .dev.vars*
 .assetsignore
