@@ -8,6 +8,7 @@ import { render as renderCashflow } from "./cashflow.js";
 import { render as renderRecurring } from "./recurring.js";
 import { render as renderGoals } from "./goals.js";
 import { render as renderHome, setNavigator } from "./home.js";
+import { render as renderSplitwise, setNavigator as setSplitwiseNavigator } from "./splitwise.js";
 import { render as renderManage } from "./manage.js";
 import { api } from "./kit.js";
 
@@ -17,7 +18,8 @@ const SCREENS = {
   budget: ["v2Budget", renderBudget],
   cashflow: ["v2Cashflow", renderCashflow],
   recurring: ["v2Recurring", renderRecurring],
-  goals: ["v2Goals", renderGoals]
+  goals: ["v2Goals", renderGoals],
+  splitwise: ["v2Splitwise", renderSplitwise]
 };
 let show = null;
 let signedIn = false;
@@ -79,5 +81,6 @@ export function init(showTab) {
     window.scrollTo(0, 0);
   };
   setNavigator(go);
+  setSplitwiseNavigator(go);
   setOpenAccount(function (a) { go("transactions", { accountId: a.id }); });
 }

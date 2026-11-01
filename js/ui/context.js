@@ -32,6 +32,7 @@ export function init() {
    "bankSyncedAt", "bankIgnoreRules", "bankAccounts", "bankAccountFilter", "bankTxList",
    "baselineDateDisplay",
    "geminiKeyInput", "geminiModelInput", "geminiSaveBtn", "geminiClearBtn", "geminiSettingsStatus",
+   "splitwiseKeyInput", "splitwiseSaveBtn", "splitwiseClearBtn", "splitwiseSettingsStatus",
    "authGate", "gateSetupForm", "gateSetupSecret", "gateSetupCode", "gateSetupConfirm", "gateSetupError",
    "gateLoginForm", "gateLoginCode", "gateLoginError",
    "securitySection", "secChangeForm", "secCurrentCode", "secNewCode", "secNewConfirm", "secChangeStatus",
@@ -54,4 +55,5 @@ export function init() {
   app.chartDough = null;
   app.chartDaily = null;
   app.geminiInfo = { hasKey: false, last4: null, model: "", source: null };
+  app.splitwiseInfo = { hasKey: false, last4: null, source: null };
 }
