@@ -38,6 +38,14 @@ async function openTab(page, name) {
   await expect(page.locator('[data-section="' + name + '"]')).toBeVisible();
 }
 
+/* Stop the page clock so only the test moves it. A running installed
+   clock fires timers on its own too, and when that overlaps a
+   fastForward it can set the clock back to before the jump, leaving the
+   page's next timer minutes away (an intermittent hang). */
+async function pauseClock(page) {
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+}
+
 test.beforeEach(async ({ page, request }) => {
   await signIn(page, request);
   await page.goto("/");
@@ -201,6 +209,7 @@ test("Sync now keeps watching a slow sync and shows the result when it finishes"
   await page.clock.install();
   await page.reload();
   await openTab(page, "daily");
+  await pauseClock(page);
   const btn = page.locator("#syncNowBtn");
   await btn.click();
   await expect(btn).toHaveText("Queued…", { timeout: 15000 });
@@ -357,6 +366,7 @@ test("Sync now still updates when each status check is slow to answer", async ({
   await page.clock.install();
   await page.reload();
   await openTab(page, "daily");
+  await pauseClock(page);
   const btn = page.locator("#syncNowBtn");
   await btn.click();
   await expect(btn).toHaveText("Queued…", { timeout: 15000 });

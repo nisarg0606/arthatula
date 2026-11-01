@@ -11,13 +11,31 @@
  *
  * Money is stored in D1 as integer cents to avoid float rounding; the API
  * speaks dollars. No personal values live in this file — a fresh database
- * seeds twelve blank months and a zero starting balance.
+ * starts with blank months, a zero starting balance and today as the
+ * baseline date.
  */
 
-export const MONTH_KEYS = [
-  "2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04",
-  "2027-05", "2027-06", "2027-07", "2027-08", "2027-09", "2027-10"
-];
+/* The planner's months: 13 from plan_start (kept in budget_settings),
+   and on through the current month once time runs past them. A new
+   database gets plan_start and its baseline date from the app on first
+   load (patchState's `setup`), in the user's own time zone; one from
+   before plan_start existed keeps its first stored month (see
+   ensureTables). Until then the server's UTC month stands in. */
+export const PLAN_LENGTH = 13;
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const thisMonth = () => todayIso().slice(0, 7);
+export function addMonth(key, n) {
+  const d = new Date(Date.UTC(+key.slice(0, 4), +key.slice(5, 7) - 1 + n, 1));
+  return d.toISOString().slice(0, 7);
+}
+export function planMonthKeys(start, nowKey) {
+  const keys = [];
+  for (let k = start; keys.length < PLAN_LENGTH || k <= nowKey; k = addMonth(k, 1)) keys.push(k);
+  return keys;
+}
+export async function monthKeys(db) {
+  return planMonthKeys((await getSetting(db, "plan_start")) || thisMonth(), thisMonth());
+}
 
 /* camelCase API field -> D1 column (all *_cents are INTEGER cents) */
 export const MONEY_FIELDS = [
@@ -60,7 +78,6 @@ const CREATE_ACTUALS = `CREATE TABLE IF NOT EXISTS monthly_actuals (
   ${MONEY_FIELDS.map(([, col]) => `${col} INTEGER NOT NULL DEFAULT 0`).join(",\n  ")},
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`;
-export const DEFAULT_BASELINE_DATE = "2026-10-26";
 const CREATE_DAILY = `CREATE TABLE IF NOT EXISTS daily_expenses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date TEXT NOT NULL,
@@ -217,12 +234,13 @@ export async function ensureTables(db) {
     db.prepare("PRAGMA table_info(daily_expenses)")
   ];
   const pragmaIndex = stmts.length - 1;
-  for (const key of MONTH_KEYS) {
-    stmts.push(db.prepare("INSERT OR IGNORE INTO monthly_budgets (month_key) VALUES (?)").bind(key));
-    stmts.push(db.prepare("INSERT OR IGNORE INTO monthly_actuals (month_key) VALUES (?)").bind(key));
-  }
+  /* Month rows are written on first save (upserts), so none are seeded.
+     A database from before plan_start keeps its first month; a new one
+     gets plan_start and baseline_date from the app (patchState). */
+  stmts.push(db.prepare(
+    "INSERT OR IGNORE INTO budget_settings (key, value) SELECT 'plan_start', MIN(month_key) FROM monthly_budgets HAVING MIN(month_key) IS NOT NULL"
+  ));
   stmts.push(db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('starting_balance_cents', '0')"));
-  stmts.push(db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_date', ?)").bind(DEFAULT_BASELINE_DATE));
   stmts.push(db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_note', '')"));
   const results = await db.batch(stmts);
   /* Migrations for databases created before later features: the CREATE
@@ -829,7 +847,7 @@ export async function setBankReview(db, txId, kind) {
   }
   const monthKey = String(tx.date).slice(0, 7);
   const delta = (was === "income" ? -1 : 0) + (kind === "income" ? 1 : 0);
-  if (delta && MONTH_KEYS.includes(monthKey)) {
+  if (delta && (await monthKeys(db)).includes(monthKey)) {
     /* Money IN is negative in the Plaid convention. */
     const amount = toDollars(-tx.amount_cents) * delta;
     const current = (await readState(db)).actuals.find((a) => a.monthKey === monthKey);
@@ -1111,11 +1129,14 @@ export async function readState(db) {
   await ensureTables(db);
   const startingRaw = await getSetting(db, "starting_balance_cents");
   const startingBalance = startingRaw !== null ? toDollars(parseInt(startingRaw, 10)) : 0;
-  const baselineDate = (await getSetting(db, "baseline_date")) || DEFAULT_BASELINE_DATE;
+  const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
+  /* null until the app sends its setup (a new database). */
+  const planStart = await getSetting(db, "plan_start");
+  const keys = planMonthKeys(planStart || thisMonth(), thisMonth());
   const baselineNote = (await getSetting(db, "baseline_note")) || "";
   const { results } = await db.prepare("SELECT * FROM monthly_budgets ORDER BY month_key").all();
   const byKey = new Map((results || []).map((r) => [r.month_key, r]));
-  const months = MONTH_KEYS.map((key) => {
+  const months = keys.map((key) => {
     const row = byKey.get(key) || {};
     const m = { monthKey: key };
     for (const [field, col] of MONEY_FIELDS) m[field] = toDollars(row[col] || 0);
@@ -1124,7 +1145,7 @@ export async function readState(db) {
   });
   const actualsResult = await db.prepare("SELECT * FROM monthly_actuals ORDER BY month_key").all();
   const actualByKey = new Map((actualsResult.results || []).map((r) => [r.month_key, r]));
-  const actuals = MONTH_KEYS.map((key) => {
+  const actuals = keys.map((key) => {
     const row = actualByKey.get(key) || {};
     const a = { monthKey: key, entered: row.has_data === 1 || row.has_data === true };
     for (const [field, col] of MONEY_FIELDS) a[field] = toDollars(row[col] || 0);
@@ -1148,7 +1169,7 @@ export async function readState(db) {
   }));
   const cards = await listCards(db);
   const merchantRules = await getMerchantRules(db);
-  return { baselineDate, baselineNote, startingBalance, months, actuals, dailyExpenses, cards, merchantRules };
+  return { planStart, baselineDate, baselineNote, startingBalance, months, actuals, dailyExpenses, cards, merchantRules };
 }
 
 /* "Always file this merchant under ..." rules (js/core/merchant.js),
@@ -1196,7 +1217,7 @@ export async function writeActual(db, actual) {
 
 export async function patchActual(db, monthKey, patch) {
   await ensureTables(db);
-  if (!MONTH_KEYS.includes(monthKey) || !patch || typeof patch !== "object") {
+  if (!(await monthKeys(db)).includes(monthKey) || !patch || typeof patch !== "object") {
     throw new Error("patchActual expects a valid monthKey and a patch object");
   }
   const current = (await readState(db)).actuals.find((a) => a.monthKey === monthKey);
@@ -1226,7 +1247,7 @@ export async function patchActual(db, monthKey, patch) {
  * in the log.
  *
  * BASELINE RULE: the starting balance is a snapshot taken on the
- * baseline date (budget_settings.baseline_date, default 2026-10-26),
+ * baseline date (budget_settings.baseline_date, today on a new database),
  * so spending BEFORE that date is already reflected in it. The rollup
  * therefore only counts expenses dated on or after the baseline date;
  * earlier rows stay in the log as records but never enter actuals —
@@ -1234,8 +1255,8 @@ export async function patchActual(db, monthKey, patch) {
  */
 export async function syncDailyRollup(db, monthKey) {
   await ensureTables(db);
-  if (!MONTH_KEYS.includes(monthKey)) return readState(db);
-  const baselineDate = (await getSetting(db, "baseline_date")) || DEFAULT_BASELINE_DATE;
+  if (!(await monthKeys(db)).includes(monthKey)) return readState(db);
+  const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
   const { results } = await db
     .prepare("SELECT category, SUM(COALESCE(my_share, amount)) AS total, COUNT(*) AS n FROM daily_expenses WHERE substr(date, 1, 7) = ? AND date >= ? GROUP BY category")
     .bind(monthKey, baselineDate)
@@ -1309,7 +1330,7 @@ async function writeMonth(db, month) {
    re-rolled up. Without this, a month kept the totals from the old
    baseline until one of its expenses was next edited. */
 export async function setBaselineDate(db, date) {
-  const old = (await getSetting(db, "baseline_date")) || DEFAULT_BASELINE_DATE;
+  const old = (await getSetting(db, "baseline_date")) || todayIso();
   await setSetting(db, "baseline_date", date);
   if (old === date) return;
   const lo = (old < date ? old : date).slice(0, 7);
@@ -1331,23 +1352,24 @@ export async function writeState(db, state) {
   if (state && typeof state.baselineNote === "string") {
     await setSetting(db, "baseline_note", cleanText(state.baselineNote));
   }
+  const keys = await monthKeys(db);
   const incoming = new Map();
   if (state && Array.isArray(state.months)) {
     for (const m of state.months) {
-      if (m && MONTH_KEYS.includes(m.monthKey)) incoming.set(m.monthKey, m);
+      if (m && keys.includes(m.monthKey)) incoming.set(m.monthKey, m);
     }
   }
-  for (const key of MONTH_KEYS) {
+  for (const key of keys) {
     const m = incoming.get(key) || { monthKey: key };
     await writeMonth(db, { monthKey: key, ...m });
   }
   const incomingActuals = new Map();
   if (state && Array.isArray(state.actuals)) {
     for (const a of state.actuals) {
-      if (a && MONTH_KEYS.includes(a.monthKey)) incomingActuals.set(a.monthKey, a);
+      if (a && keys.includes(a.monthKey)) incomingActuals.set(a.monthKey, a);
     }
   }
-  for (const key of MONTH_KEYS) {
+  for (const key of keys) {
     const a = incomingActuals.get(key) || { monthKey: key, entered: false };
     await writeActual(db, { monthKey: key, ...a });
   }
@@ -1378,6 +1400,15 @@ export async function writeState(db, state) {
 
 export async function patchState(db, body) {
   await ensureTables(db);
+  /* A new database's first load: the app's own month and date, in the
+     user's time zone. Never replaces values already set. */
+  const setup = body && body.setup;
+  if (setup && /^\d{4}-(0[1-9]|1[0-2])$/.test(setup.planStart) && isValidDateStr(setup.baselineDate)) {
+    await db.batch([
+      db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('plan_start', ?)").bind(setup.planStart),
+      db.prepare("INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_date', ?)").bind(setup.baselineDate)
+    ]);
+  }
   if (body && body.startingBalance !== undefined) {
     await setSetting(db, "starting_balance_cents", String(toCents(body.startingBalance)));
   }
@@ -1390,10 +1421,10 @@ export async function patchState(db, body) {
   if (body && Array.isArray(body.merchantRules)) await setMerchantRules(db, body.merchantRules);
   /* Actuals can be patched through this endpoint too:
      { actualMonthKey: "2026-11", patch: { takeHomePay: ..., entered: true } } */
-  if (body && MONTH_KEYS.includes(body.actualMonthKey) && body.patch && typeof body.patch === "object") {
+  if (body && (await monthKeys(db)).includes(body.actualMonthKey) && body.patch && typeof body.patch === "object") {
     return patchActual(db, body.actualMonthKey, body.patch);
   }
-  if (body && MONTH_KEYS.includes(body.monthKey) && body.patch && typeof body.patch === "object") {
+  if (body && (await monthKeys(db)).includes(body.monthKey) && body.patch && typeof body.patch === "object") {
     const current = (await readState(db)).months.find((m) => m.monthKey === body.monthKey);
     const merged = { ...current };
     for (const [field] of MONEY_FIELDS) if (body.patch[field] !== undefined) merged[field] = body.patch[field];

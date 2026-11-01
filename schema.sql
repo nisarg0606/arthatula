@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS monthly_budgets (
 );
 
 -- Actuals: the real figures for each month, entered from the baseline
--- date (2026-10-26) onwards. Same money columns as the plan, plus
+-- date (budget_settings.baseline_date) onwards. Same money columns as the plan, plus
 -- has_data: 1 once that month's actuals have been entered (a month with
 -- no actuals yet is "not entered", not zero).
 CREATE TABLE IF NOT EXISTS monthly_actuals (
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS monthly_actuals (
   updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Daily expense log (workflow starts 2026-10-26; earlier dates are not
+-- Daily expense log (counted from the baseline date; earlier dates are not
 -- blocked). amount is REAL dollars. categorization_source records how the
 -- category was chosen: 'gemini', 'rules', or 'manual' (user override).
 -- my_share (nullable, REAL dollars) is the user's own portion of a shared
@@ -194,21 +194,12 @@ CREATE TABLE IF NOT EXISTS sync_requests (
 -- It is only ever read by the categorize Function; GET /api/settings
 -- returns just a masked indicator, never the key. No key is seeded here.
 
--- Seed: a zero starting balance, the actuals baseline date, and the
--- twelve blank planner months (planned + actuals).
+-- Seed: a zero starting balance and an empty baseline note. The app
+-- sets the rest on its first load, in your own time zone: the baseline
+-- date (today) and plan_start (this month; the planner shows 13 months
+-- from it). Month rows are written on first save.
 INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('starting_balance_cents', '0');
-INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_date', '2026-10-26');
 INSERT OR IGNORE INTO budget_settings (key, value) VALUES ('baseline_note', '');
-INSERT OR IGNORE INTO monthly_budgets (month_key) VALUES
-  ('2026-10'), ('2026-11'), ('2026-12'),
-  ('2027-01'), ('2027-02'), ('2027-03'), ('2027-04'),
-  ('2027-05'), ('2027-06'), ('2027-07'), ('2027-08'),
-  ('2027-09'), ('2027-10');
-INSERT OR IGNORE INTO monthly_actuals (month_key) VALUES
-  ('2026-10'), ('2026-11'), ('2026-12'),
-  ('2027-01'), ('2027-02'), ('2027-03'), ('2027-04'),
-  ('2027-05'), ('2027-06'), ('2027-07'), ('2027-08'),
-  ('2027-09'), ('2027-10');
 
 -- The v2 money model (accounts, transactions, splits, categories and
 -- groups, budgets, rules, recurring, goals, balance snapshots, all keyed

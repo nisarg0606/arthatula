@@ -10,7 +10,8 @@ import {
   onRequestGet as cardsGet, onRequestPost as cardsPost,
   onRequestPut as cardsPut, onRequestDelete as cardsDelete
 } from "../functions/api/cards.js";
-import { onRequestGet as budgetGet, onRequestPut as budgetPut, MONTH_KEYS } from "../functions/api/budget.js";
+import { onRequestGet as budgetGet, onRequestPut as budgetPut, planMonthKeys } from "../functions/api/budget.js";
+const MONTH_KEYS = planMonthKeys("2026-10", "2026-10");
 import {
   onRequestPost as expensePost, onRequestPut as expensePut, onRequestGet as expenseGet
 } from "../functions/api/expenses.js";

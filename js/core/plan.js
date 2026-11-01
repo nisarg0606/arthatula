@@ -19,21 +19,34 @@ import { sanitizeMyShare } from "./spending.js";
  */
 
 
-export const MONTHS = [
-  { key: "2026-10", label: "Oct 2026" },
-  { key: "2026-11", label: "Nov 2026" },
-  { key: "2026-12", label: "Dec 2026" },
-  { key: "2027-01", label: "Jan 2027" },
-  { key: "2027-02", label: "Feb 2027" },
-  { key: "2027-03", label: "Mar 2027" },
-  { key: "2027-04", label: "Apr 2027" },
-  { key: "2027-05", label: "May 2027" },
-  { key: "2027-06", label: "Jun 2027" },
-  { key: "2027-07", label: "Jul 2027" },
-  { key: "2027-08", label: "Aug 2027" },
-  { key: "2027-09", label: "Sep 2027" },
-  { key: "2027-10", label: "Oct 2027" }
-];
+/* The planner's months, [{ key: "2026-10", label: "Oct 2026" }, ...].
+   One shared array, refilled in place (so every importer sees it) from
+   the months a loaded state carries; the server decides them (see
+   functions/api/budget.js). Until then: 13 months from this month. */
+export const MONTHS = [];
+var SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export function localIso(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+export function planMonthKeys(start) {
+  var keys = [];
+  var y = +start.slice(0, 4), m = +start.slice(5, 7) - 1;
+  for (var i = 0; i < 13; i++) {
+    var d = new Date(y, m + i, 1);
+    keys.push(localIso(d).slice(0, 7));
+  }
+  return keys;
+}
+
+export function setPlanMonths(keys) {
+  MONTHS.splice.apply(MONTHS, [0, MONTHS.length].concat(keys.map(function (k) {
+    return { key: k, label: SHORT[+k.slice(5, 7) - 1] + " " + k.slice(0, 4) };
+  })));
+}
+
+setPlanMonths(planMonthKeys(localIso(new Date())));
 
 export const NUMBER_FIELDS = [
   { key: "takeHomePay", label: "Take-home pay ($)", group: "Income" },
@@ -87,8 +100,8 @@ export function blankActualMonth(key) {
 export function blankState() {
   return {
     /* The prediction is anchored to actuals: the starting balance is the
-       actual balance on the baseline date (default 2026-10-26). */
-    baselineDate: "2026-10-26",
+       actual balance on the baseline date (default today). */
+    baselineDate: localIso(new Date()),
     baselineNote: "",
     startingBalance: 0,
     months: MONTHS.map(function (m) { return blankMonth(m.key); }),
@@ -118,6 +131,11 @@ export function toNumber(v) {
 }
 
 export function sanitizeState(raw) {
+  if (raw && Array.isArray(raw.months)) {
+    var keys = raw.months.map(function (m) { return m && m.monthKey; })
+      .filter(function (k) { return typeof k === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(k); });
+    if (keys.length) setPlanMonths(keys.filter(function (k, i) { return keys.indexOf(k) === i; }).sort());
+  }
   var state = blankState();
   if (!raw || typeof raw !== "object") return state;
   state.startingBalance = toNumber(raw.startingBalance);

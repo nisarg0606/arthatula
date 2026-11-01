@@ -1,6 +1,6 @@
 # Arthatula — monthly budget planner
 
-A small 13-month budget planner (Oct 2026 – Oct 2027) built with vanilla
+A small 13-month budget planner, starting the month you set it up, built with vanilla
 HTML, CSS and JavaScript — no build step and no framework. Styling is
 Tailwind CSS via its Play CDN (with an inline theme config) plus a small
 custom stylesheet, and graphs are Chart.js via CDN; if a CDN fails to
@@ -26,13 +26,15 @@ recurring income/expenses only — one-off amounts and one-off notes are never
 copied), **Reset to blank**, and **Export / Import JSON** for backup or
 moving your numbers between devices.
 
-## Planned vs actual — anchored to Oct 26, 2026
+## Planned vs actual — anchored to a baseline date
 
-The prediction is anchored to **actuals starting Oct 26, 2026**: the
-starting balance is the *actual* balance on that baseline date (the date
-is a field in the app and in the database settings, defaulting to
-2026-10-26, with a free-text baseline note next to it). The 13 months
-start out as a **plan**. As each month actually happens, fill in its
+The prediction is anchored to **actuals from a baseline date**: the
+starting balance is the *actual* balance on that date (a field in the
+app and in the database settings, defaulting to the day you set the app
+up, with a free-text baseline note next to it). The plan covers 13
+months from the month you set it up (`plan_start` in the database
+settings) and keeps going through the current month once time runs past
+them. The months start out as a **plan**. As each month actually happens, fill in its
 **Actual** view (Month editor → Planned/Actual toggle) with the real
 income and expenses. The summary and table then compare, per month:
 
@@ -47,8 +49,8 @@ the baseline together.
 
 ## Daily expenses + Gemini auto-categorization
 
-The **Daily expenses** tab is the day-to-day workflow (it starts
-2026-10-26 onwards): quick-add a date (defaults to today), description
+The **Daily expenses** tab is the day-to-day workflow (counted from the
+baseline date onwards): quick-add a date (defaults to today), description
 and amount, and the category fills in automatically — you can always
 override it before or after saving. Entries are grouped by day and
 month with per-day and per-month totals, and can be edited or deleted.

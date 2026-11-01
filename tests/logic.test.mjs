@@ -3,9 +3,10 @@
  * rollup overlay. Run: node tests/logic.test.mjs — dummy amounts only.
  */
 import assert from "node:assert/strict";
+import { blank } from "./_plan.mjs";
 import * as app from "../js/core/index.js";
 
-const state = app.blankState();
+const state = blank();
 state.startingBalance = 100;
 // October (first planner month): planned pay 1000, planned groceries 300.
 const first = state.months.find((m) => m.monthKey === "2026-10");
@@ -96,7 +97,7 @@ assert.equal(ms.dailyExpenses.find((e) => e.id === 3).myShare, null, "a negative
 assert.equal(ms.dailyExpenses.find((e) => e.id === 4).myShare, null, "an old-format expense loads with myShare null");
 assert.equal(ms.dailyExpenses.find((e) => e.id === 5).myShare, 0, "a zero share is kept (his portion really is 0)");
 
-const shareState = app.blankState();
+const shareState = blank();
 const sNovA = shareState.actuals.find((a) => a.monthKey === "2026-11");
 sNovA.entered = true; sNovA.takeHomePay = 1000;
 shareState.dailyExpenses.push(
@@ -109,7 +110,7 @@ assert.equal(app.expenseShare({ amount: 80, myShare: 30 }), 30);
 assert.equal(app.expenseShare({ amount: 80 }), 80, "no share set -> full amount");
 
 // ---- Dashboard mode selection ----
-const ds = app.blankState();
+const ds = blank();
 ds.startingBalance = 500;
 const dFirst = ds.months.find((m) => m.monthKey === "2026-10");
 dFirst.takeHomePay = 2000; dFirst.rent = 800;
@@ -130,7 +131,7 @@ assert.deepEqual(
   "compare mode keeps the planned/predicted totals exactly as before");
 // Planned average is net over every plan month (13 since the Oct start), not a fixed 12.
 assert.equal(dash.totals.average, 1200 / app.MONTHS.length, "average net divides by the real month count");
-const emptyDash = app.computeDashboard(app.blankState(), false);
+const emptyDash = app.computeDashboard(blank(), false);
 assert.equal(emptyDash.enteredCount, 0);
 assert.equal(emptyDash.totals.ending, null, "no actuals entered -> no actual ending balance");
 assert.equal(emptyDash.totals.income, 0);
@@ -140,7 +141,7 @@ assert.equal(emptyDash.totals.net, 0);
 // Spent sums the month's log entries by charge date at his-share value,
 // on/after the baseline only, and excludes "One-off" entries (those are
 // pre-logged card-bill settlements = payments, not spending).
-const sp = app.blankState(); // baselineDate defaults to 2026-10-26
+const sp = blank(); // baseline 2026-10-26 (see _plan.mjs)
 sp.dailyExpenses.push(
   { id: 1, date: "2026-11-03", description: "Groceries", amount: 100, category: "Groceries" },
   { id: 2, date: "2026-11-10", description: "Split dinner", amount: 80, category: "Eating Out", myShare: 30 },

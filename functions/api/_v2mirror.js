@@ -22,7 +22,7 @@
  * migration gate: for every classic plan month, v2's income and spending
  * must equal the classic actuals to the cent.
  */
-import { MONTH_KEYS, MONEY_FIELDS, readState } from "./budget.js";
+import { MONEY_FIELDS, readState } from "./budget.js";
 import { OWNER_ID, ensureV2, scope, newId } from "./_v2db.js";
 import { loadCategories, loadTransactions, loadRules, categoryIndex } from "./_v2store.js";
 import { summarize, monthOf, applyRules } from "../../js/core/v2/money.js";
@@ -277,7 +277,7 @@ export async function compareTotals(db) {
   const { categories } = await loadCategories(s);
   const idx = categoryIndex(categories);
   const txs = await loadTransactions(s);
-  const months = MONTH_KEYS.map((m) => {
+  const months = state.months.map(({ monthKey: m }) => {
     const a = state.actuals.find((x) => x.monthKey === m) || {};
     let v1Income = 0, v1Spending = 0;
     if (a.entered) {
