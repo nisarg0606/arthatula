@@ -109,7 +109,8 @@
 **Also inside:** recurring bills and subscriptions (found for you in your
 transactions), savings goals, Splitwise balances, rules that file
 merchants automatically, category emoji, credit-card statement cycles,
-optional bank sync through Plaid, JSON/CSV export, and a classic
+bank statement CSV import (any bank, US or Indian layouts), optional bank
+sync through SimpleFIN Bridge (US) or Plaid, JSON/CSV export, and a classic
 13-month planner with planned vs actual.
 
 **New here? Read the [guide](docs/GUIDE.md)** — setup, using it on your

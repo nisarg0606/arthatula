@@ -788,3 +788,36 @@ test("Send feedback links point at a new GitHub issue, with only non-personal co
   expect(ctx).toContain("Screen width: ");
   expect(ctx).not.toContain("$");
 });
+
+test("import a bank CSV: columns are matched, rows land in a new account, and importing it again skips them", async ({ page }, info) => {
+  const tag = "E2E CSV " + info.project.name + (info.retry ? " r" + info.retry : "");
+  const t = today();
+  const dmy = t.slice(8, 10) + "/" + t.slice(5, 7) + "/" + t.slice(0, 4);
+  /* An Indian-bank layout: a preamble line, Withdrawal / Deposit columns, lakh commas. */
+  const csv = Buffer.from(["Statement of account,,,,", "Date,Narration,Withdrawal Amt.,Deposit Amt.,Closing Balance",
+    dmy + "," + tag + " chai,\"1,250.00\",,\"10,000.00\"", dmy + "," + tag + " salary,,\"50,000.00\",\"60,000.00\""].join("\n"));
+  const pick = async () => {
+    await page.locator("#v2ImportCsv").click();
+    await page.locator("#v2CsvFile").setInputFiles({ name: "statement.csv", mimeType: "text/csv", buffer: csv });
+    await expect(page.locator("dialog.v2-dialog .v2-import-row")).toHaveCount(2);
+    await expect(page.locator("dialog.v2-dialog .v2-import-preview")).toContainText("-$1,250.00");
+  };
+  await openTab(page, "transactions");
+  await pick();
+  await (await dialogField(page, "New account name")).fill(tag + " bank");
+  await page.locator("dialog.v2-dialog .btn-primary").click();
+  await expect(page.locator("#v2ImportSummary")).toContainText("2 transactions added");
+  await saveDialog(page);
+  await page.fill("#v2Transactions .v2-search", tag);
+  await expect(page.locator("#v2Transactions .v2-tx")).toHaveCount(2);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: "chai" })).toContainText("-$1,250.00");
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: "salary" })).toContainText(tag + " bank");
+
+  await pick();
+  await (await dialogField(page, "Add to account")).selectOption({ label: tag + " bank" });
+  await page.locator("dialog.v2-dialog .btn-primary").click();
+  await expect(page.locator("#v2ImportSummary")).toContainText("0 transactions added");
+  await expect(page.locator("#v2ImportSummary")).toContainText("2 were already here");
+  await saveDialog(page);
+  await expect(page.locator("#v2Transactions .v2-tx")).toHaveCount(2);
+});

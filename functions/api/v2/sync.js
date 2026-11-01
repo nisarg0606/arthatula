@@ -27,6 +27,31 @@ function cents(v) { return typeof v === "number" && Number.isInteger(v) && Math.
 function num(v) { return typeof v === "number" && Number.isFinite(v) ? v : null; }
 function dateStr(v, fallback) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : fallback; }
 
+/* Upsert one bank account by its feed id (ext, e.g. "plaid:…") and
+   record the day's balance snapshot. Also used by ./simplefin.js. */
+export function accountStmts(ext, a, asOf, source) {
+  const type = ACCOUNT_TYPES.indexOf(a.type) !== -1 ? a.type : "other";
+  const bal = cents(a.balanceCents);
+  const stmts = [[
+    "INSERT INTO accounts (id, owner_id, external_id, name, institution, type, subtype, mask, balance_cents, available_cents, balance_at, source) " +
+    "VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12) " +
+    "ON CONFLICT(owner_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = excluded.name, institution = excluded.institution, type = excluded.type, " +
+    "subtype = excluded.subtype, mask = excluded.mask, balance_cents = excluded.balance_cents, available_cents = excluded.available_cents, " +
+    "balance_at = excluded.balance_at, updated_at = datetime('now')",
+    newId("acc_"), ext, str(a.name, 200) || "Account", str(a.institution, 200), type, str(a.subtype, 60), str(a.mask, 20),
+    bal, cents(a.availableCents), asOf, source
+  ]];
+  if (bal !== null) {
+    stmts.push([
+      "INSERT INTO balance_snapshots (owner_id, account_id, date, balance_cents) " +
+      "SELECT ?1, id, ?3, ?4 FROM accounts WHERE owner_id = ?1 AND external_id = ?2 " +
+      "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents",
+      ext, asOf, bal
+    ]);
+  }
+  return stmts;
+}
+
 export const onRequestPost = (context) => handleV2(context, async ({ s, request }) => {
   const b = await bodyOf(request);
   if (!Array.isArray(b.accounts)) throw new HttpError(400, "accounts must be a list.");
@@ -35,26 +60,7 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
   let n = 0;
   for (const a of b.accounts.slice(0, CAP)) {
     if (!a || typeof a !== "object" || !str(a.id, 200)) continue;
-    const type = ACCOUNT_TYPES.indexOf(a.type) !== -1 ? a.type : "other";
-    const bal = cents(a.balanceCents);
-    const ext = "plaid:" + str(a.id, 200);
-    stmts.push([
-      "INSERT INTO accounts (id, owner_id, external_id, name, institution, type, subtype, mask, balance_cents, available_cents, balance_at, source) " +
-      "VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'plaid') " +
-      "ON CONFLICT(owner_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = excluded.name, institution = excluded.institution, type = excluded.type, " +
-      "subtype = excluded.subtype, mask = excluded.mask, balance_cents = excluded.balance_cents, available_cents = excluded.available_cents, " +
-      "balance_at = excluded.balance_at, updated_at = datetime('now')",
-      newId("acc_"), ext, str(a.name, 200) || "Account", str(a.institution, 200), type, str(a.subtype, 60), str(a.mask, 20),
-      bal, cents(a.availableCents), asOf
-    ]);
-    if (bal !== null) {
-      stmts.push([
-        "INSERT INTO balance_snapshots (owner_id, account_id, date, balance_cents) " +
-        "SELECT ?1, id, ?3, ?4 FROM accounts WHERE owner_id = ?1 AND external_id = ?2 " +
-        "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents",
-        ext, asOf, bal
-      ]);
-    }
+    stmts.push(...accountStmts("plaid:" + str(a.id, 200), a, asOf, "plaid"));
     n++;
   }
   let holdingsCount = 0;

@@ -12,7 +12,7 @@ yours alone.
 - [5. Turn on the AI (Gemini, Grok or others)](#5-turn-on-the-ai-gemini-grok-or-others)
 - [6. Let your AI agent manage it (MCP)](#6-let-your-ai-agent-manage-it-mcp)
 - [7. Getting updates](#7-getting-updates)
-- [8. Bank sync (optional, technical)](#8-bank-sync-optional-technical)
+- [8. Getting your bank transactions in](#8-getting-your-bank-transactions-in)
 - [9. Privacy and safety](#9-privacy-and-safety)
 - [10. Help, something's wrong](#10-help-somethings-wrong)
 
@@ -293,14 +293,51 @@ button; the daily job does that work instead. GitHub pauses daily jobs
 in a repository nobody has touched for 60 days. If that happens, the
 **Actions** tab shows a button to turn it back on.
 
-## 8. Bank sync (optional, technical)
+## 8. Getting your bank transactions in
 
-Arthatula can import your bank and card transactions through
-[Plaid](https://plaid.com). This needs your own Plaid developer account
-and a small program running on a computer that's always on, so it's for
-people comfortable with a terminal. See the README's "Pairing the Plaid
-sync script" and "What the app expects from the sync". Everything else in
-the app works without it — you can add expenses by hand with **＋**.
+You don't have to type every expense. Pick whichever of these suits
+you, or use more than one: Arthatula skips a transaction it already has.
+
+**Import a statement (any bank, any country, free).** On your bank's
+website or app, download a statement as **CSV** (some banks call it
+"Excel" or "spreadsheet"). In Arthatula, open **Transactions → Import
+from your bank (CSV)**, pick the file, and choose the account it belongs
+to (or name a new one). Arthatula works out the columns itself — date,
+description, amount or separate debit / credit columns, Dr / Cr, balance
+— for US banks and Indian ones (HDFC, ICICI, SBI, Axis, Kotak and
+others), and shows the first few rows so you can check. If a column
+looks wrong, change it there. For dates like 03/04/2026, say whether the
+day or the month comes first. If a credit card file shows spending as
+positive numbers, tick the box that says so.
+
+After the import you see what happened: how many were added, how many
+were already there (the same date, amount and a similar name — so
+importing overlapping statements is safe), how many your rules filed,
+and how many wait on **To review**. With the AI on (section 5), it
+checks those first, the next time you open the app.
+
+**Connect your bank with SimpleFIN (US banks, about $15 a year).**
+[SimpleFIN Bridge](https://beta-bridge.simplefin.org/) links US (and
+some Canadian) banks and cards without a computer left on. It doesn't
+cover banks in India or elsewhere — use CSV import for those.
+
+1. Make an account at SimpleFIN Bridge and link your bank there.
+2. Create a **setup token** and copy it.
+3. In Arthatula, open **Transactions → Bank sync**, paste the token and
+   tap **Connect**.
+
+The token works once: your copy swaps it for a private connection that
+stays on your server and never goes to your phone or browser. Arthatula
+then pulls new transactions and balances when you open it (at most every
+few hours) and you can tap **Sync now** any time. SimpleFIN itself
+refreshes about once a day and goes back up to 90 days. **Disconnect**
+stops it; what was already imported stays.
+
+**Plaid (technical).** The original sync uses [Plaid](https://plaid.com)
+with your own Plaid developer account and a small program running on a
+computer that's always on, so it's for people comfortable with a
+terminal. See the README's "Pairing the Plaid sync script" and "What the
+app expects from the sync".
 
 ## 9. Privacy and safety
 

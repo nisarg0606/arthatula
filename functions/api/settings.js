@@ -53,6 +53,17 @@ export async function getSplitwiseApiKey(env) {
   return saved || null;
 }
 
+/* The SimpleFIN Bridge access URL (it carries the credentials), or
+   null. Server-side only, like the keys above: ./v2/simplefin.js reads
+   and writes it here and never sends it to the browser. */
+export async function getSimplefinUrl(db) {
+  await ensureTables(db);
+  return (await getSetting(db, "simplefin_access_url")) || null;
+}
+export async function setSimplefinUrl(db, url) {
+  await setSetting(db, "simplefin_access_url", url || "");
+}
+
 /* The Splitwise snapshot cache lives in budget_settings too, so the
    v2 route never touches the database outside its scoped helper —
    it goes through these two functions instead. */

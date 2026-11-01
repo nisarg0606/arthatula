@@ -8,6 +8,7 @@ import {
   v2, api, h, clear, money, parseMoney, dayLabel, todayIso, loadBasics, categoryById, accountById, categoryName,
   categorySelect, accountSelect, field, openDialog, section, button, emptyState, errorState, loading
 } from "./kit.js";
+import { openCsvImport, openSimplefin } from "./bankimport.js";
 
 const state = { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, page: 1, list: [], total: 0 };
 let root = null, listEl = null, countEl = null;
@@ -248,7 +249,7 @@ function editTx(t) {
     actions.push({ label: "Looks right", onClick: verdict(false) });
     actions.push({ label: "Not right — I'll review it", onClick: verdict(true) });
   }
-  if (!isNew && (tx.source === "manual" || tx.source === "v1exp")) {
+  if (!isNew && (tx.source === "manual" || tx.source === "v1exp" || tx.source === "csv")) {
     actions.push({ label: "Delete", danger: true, onClick: function (close) {
       if (!window.confirm("Delete this transaction?" + (tx.source === "v1exp" ? " It is also removed from the classic daily log." : ""))) return;
       return api("DELETE", "transactions?id=" + encodeURIComponent(tx.id)).then(function () { close(); load(); });
@@ -286,7 +287,10 @@ export function render(container) {
     clear(root);
     countEl = h("p", { class: "hint v2-count" });
     listEl = h("div", { class: "v2-tx-list", attrs: { "aria-live": "polite" } });
-    root.appendChild(section("Transactions", [button("+ Add transaction", function () { editTx(null); }, "btn-primary", { id: "v2AddTx" })],
+    root.appendChild(section("Transactions", [
+      button("Import from your bank (CSV)", function () { openCsvImport(load); }, "", { id: "v2ImportCsv" }),
+      button("Bank sync", function () { openSimplefin(load); }, "", { id: "v2BankSync" }),
+      button("+ Add transaction", function () { editTx(null); }, "btn-primary", { id: "v2AddTx" })],
       h("div", null, filters(), countEl, listEl)));
     return load();
   }).catch(function (e) { errorState(root, e); });

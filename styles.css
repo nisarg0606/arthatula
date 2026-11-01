@@ -608,6 +608,11 @@ button.v2-tile:focus-visible{outline:2px solid var(--accent-bright);outline-offs
 .v2-tile.ai .v2-tile-value{color:#4f46e5}
 .dark .v2-tile.ai .v2-tile-value{color:#a5b4fc}
 .v2-bulk{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sunken)}
+.v2-import-preview{display:grid;gap:6px}
+.v2-import-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+.v2-import-date{color:var(--muted);white-space:nowrap}
+.v2-import-desc{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v2-steps{margin:0;padding-left:20px;display:grid;gap:4px}
 .v2-ai-note{margin:0;padding:10px 12px;border-radius:12px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);font-size:14px}
 
 /* ---- iOS-style polish (lists, headers, tab bar, pager) ----
