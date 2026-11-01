@@ -1,8 +1,11 @@
 /* Arthatula — visual layer on top of Tailwind.
+   The "Apple system" layer at the end of this file (iOS look: system
+   font, grouped colors, flat surfaces) overrides the older depth
+   effects described below.
    Layout comes from Tailwind classes in index.html; this file owns the
    tokens, the dynamically built pieces (forms, tables, lists), and the
    depth effects. Rules of the system:
-   - one typeface (Geist), weights 400–700, sizes on the Tailwind scale
+   - one typeface (the system font: SF Pro on Apple devices), weights 400–700, sizes on the Tailwind scale
    - flat backgrounds; depth comes from layered shadows, tilt and lift,
      never from background gradients
    - spacing 2/4/8/12/16/24/32/40/48px, Tailwind radii, nested radius =
@@ -277,7 +280,7 @@ body.auth-locked header,body.auth-locked nav,body.auth-locked main,body.auth-loc
 .kind-badge.sync{background:#fef3c7;color:#92400e}
 .dark .kind-badge{background:#042f2e;color:#5eead4}
 .dark .kind-badge.sync{background:#451a03;color:#fcd34d}
-.pair-fp{font-family:"Geist Mono",ui-monospace,Menlo,monospace;font-size:16px;letter-spacing:.08em;background:#ccfbf1;color:#0f766e;padding:2px 8px;border-radius:4px}
+.pair-fp{font-family:ui-monospace,Menlo,monospace;font-size:16px;letter-spacing:.08em;background:#ccfbf1;color:#0f766e;padding:2px 8px;border-radius:4px}
 .dark .pair-fp{background:#042f2e;color:#5eead4}
 #pairOpenStatus{font-weight:600}
 
@@ -615,3 +618,169 @@ button.v2-tile:focus-visible{outline:2px solid var(--accent-bright);outline-offs
 .dark .v2-tile.ai .v2-tile-value{color:#a5b4fc}
 .v2-bulk{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sunken)}
 .v2-ai-note{margin:0;padding:10px 12px;border-radius:12px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);font-size:14px}
+
+/* ---- iOS-style polish (lists, headers, tab bar, pager) ----
+   Patterns from the best iPhone finance apps: compact one-line
+   transaction rows in inset grouped lists, small uppercase day headers
+   with the day's total, one hero number per screen, a tab bar that
+   tints the active item instead of filling it, and instant press
+   feedback. */
+
+/* Transaction rows: denser, rounded-square category chip, press state. */
+.tx-main{min-height:56px;padding:10px 16px;gap:12px}
+.tx-main:active{background:var(--sunken);transition:none}
+.tx-badge{width:36px;height:36px;border-radius:10px;font-size:15px}
+.tx .desc{font-size:15px;letter-spacing:-.005em}
+.amt-main{font-size:15px;letter-spacing:-.01em}
+.tx-group > .tx + .tx{position:relative;border-top:0}
+.tx-group > .tx + .tx::before{content:"";position:absolute;top:0;left:64px;right:0;border-top:1px solid var(--line)}
+.tx-group{border-radius:14px}
+
+/* Section headers: month as a large title, days as small caps with the total. */
+.month-head{border-bottom:0;margin:32px 4px 4px;padding:0}
+.month-total{font-size:22px;line-height:28px;letter-spacing:-.02em}
+.month-sum{font-size:17px;line-height:28px;font-weight:600;color:var(--muted)}
+.day-head{margin:20px 4px 6px;font-size:12px;line-height:16px;letter-spacing:.06em;text-transform:uppercase}
+.day-head h4{margin:0;font:inherit}
+.v2-day-head{font-size:12px;line-height:16px;letter-spacing:.06em;text-transform:uppercase}
+.v2-tx:active{background:var(--sunken);transition:none}
+
+/* Daily summary: the month's spend is the hero number. */
+.daily-summary{grid-template-columns:2fr 1fr 1fr 1fr}
+.sum-tile:first-child .sum-value{font-size:min(34px,14cqi);line-height:1.15;letter-spacing:-.03em}
+
+/* Pager */
+.pager{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px;margin:24px 0 8px}
+.pager-btn{min-width:40px;height:40px;padding:0 10px;border-radius:9999px;border:1px solid transparent;background:transparent;color:var(--ink);font:inherit;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;
+  transition:background-color .2s var(--ease),transform .1s ease-out}
+.pager-btn:hover:not(:disabled){background:var(--sunken)}
+.pager-btn:active:not(:disabled){transform:scale(.94)}
+.pager-btn:focus-visible{outline:2px solid var(--accent-bright);outline-offset:2px}
+.pager-btn:disabled{color:var(--muted);opacity:.45;cursor:default}
+.pager-btn.current{background:var(--accent);color:#fff;opacity:1}
+.pager-gap{min-width:24px;text-align:center;color:var(--muted)}
+.pager-label{flex-basis:100%;text-align:center;margin-top:4px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+
+@media (max-width:640px){
+  /* Compact header: title + status, no tagline, so content starts higher. */
+  header > div{padding-top:16px;padding-bottom:16px}
+  header .app-title + p{display:none}
+  .storage-badge{padding:2px 10px;font-size:11px}
+  #themeToggle{top:calc(env(safe-area-inset-top) + 14px);min-height:36px;padding:4px 10px}
+  main{padding-top:12px}
+  .tab-btn:active{transform:scale(.94);transition:transform .1s ease-out}
+  .daily-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sum-tile:first-child,.sum-tile:last-child{grid-column:1 / -1}
+  .sum-tile:first-child .sum-value{font-size:34px}
+  .tx-main{padding:10px 12px}
+  .tx-group > .tx + .tx::before{left:60px}
+  .month-head{margin-top:24px}
+  .pager-btn{min-width:44px;height:44px}
+}
+@media (prefers-reduced-transparency: reduce){
+  .nav-float{background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+@media (prefers-contrast: more){
+  .nav-float{background:var(--surface);border-color:var(--ink)}
+  .tx-group,.card{border-color:var(--line-strong)}
+}
+
+/* ==== Apple system ====
+   iOS Human Interface Guidelines, applied as one layer over everything
+   above: the system font (SF Pro on Apple devices), the grouped
+   background and label/separator colors, a Large Title header on the
+   page background, flat inset cards, tinted and filled buttons that dim
+   on press, a segmented control for the desktop tabs and a translucent
+   tab bar on phones. Teal stays the app's one tint color. */
+:root{
+  --bg:#f2f2f7; --surface:#ffffff; --raised:#f2f2f7; --sunken:#e5e5ea;
+  --ink:#000000; --muted:#6c6c70; --line:#e5e5ea; --line-strong:#d1d1d6;
+  --accent:#0f766e; --accent-bright:#0d9488; --accent-tint:rgba(15,118,110,.12);
+  --pos:#248a3d; --neg:#d70015; --fill:rgba(118,118,128,.12);
+  --shadow-1:none; --shadow-2:none;
+  --shadow-3:0 10px 40px rgba(0,0,0,.18);
+}
+.dark{
+  --bg:#000000; --surface:#1c1c1e; --raised:#2c2c2e; --sunken:#3a3a3c;
+  --ink:#ffffff; --muted:#98989f; --line:#38383a; --line-strong:#48484a;
+  --accent:#0d9488; --accent-bright:#2dd4bf; --accent-tint:rgba(45,212,191,.16);
+  --pos:#30d158; --neg:#ff453a; --fill:rgba(118,118,128,.24);
+  --shadow-3:0 10px 40px rgba(0,0,0,.6);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.006em}
+
+/* Large Title header */
+.app-header{background:var(--bg);color:var(--ink)}
+.app-title{background:none;color:var(--ink);-webkit-text-fill-color:currentColor;margin:0;font-size:40px;line-height:48px;font-weight:700;letter-spacing:-.02em}
+.app-sub{margin:2px 0 0;font-size:17px;line-height:22px;color:var(--muted)}
+.app-sub2{margin:4px 0 0;font-size:15px;line-height:20px;color:var(--muted)}
+#headerBaseline{color:var(--ink);font-weight:600}
+.storage-badge{border:0;background:rgba(255,149,0,.14);color:#c93400;font-weight:600}
+.storage-badge.database{background:rgba(52,199,89,.15);color:#248a3d}
+.storage-badge.connecting{background:var(--fill);color:var(--muted)}
+.dark .storage-badge{color:#ffb340} .dark .storage-badge.database{color:#30d158} .dark .storage-badge.connecting{color:var(--muted)}
+.btn-ghost{background:var(--fill);color:var(--ink);border:0;border-radius:9999px}
+.btn-ghost:hover{background:var(--sunken)}
+.icon-btn{width:40px;height:40px;min-height:40px;padding:0;display:inline-grid;place-items:center}
+.icon-btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8}
+
+/* Surfaces: flat inset groups */
+.card{border:0;border-radius:16px;box-shadow:none}
+.card-title{font-size:22px;line-height:28px;letter-spacing:-.015em}
+.stat,.sum-tile,.chart-panel,.card-panel,.v2-tile{border:0;box-shadow:none;border-radius:12px;background:var(--raised)}
+.stat,.stat:hover{transform:none!important}
+.stat::after{display:none}
+.chart-panel:hover,.card-panel:hover,.stat:hover{transform:none;box-shadow:none}
+.sum-tile:first-child{box-shadow:none}
+.tx-group{border:1px solid var(--line);border-radius:12px;box-shadow:none}
+.tx-badge{width:36px;height:36px;border-radius:9px;box-shadow:none}
+.tx-main:hover,.tx[open] .tx-main{background:var(--raised)}
+
+/* Buttons: tinted (secondary) and filled (primary); they dim on press. */
+.actions button,.button-like,button.toggle{background:var(--accent-tint);color:var(--accent);border:0;border-radius:12px;box-shadow:none;font-weight:600}
+.dark .actions button,.dark .button-like,.dark button.toggle{color:var(--accent-bright)}
+.actions button:hover,.button-like:hover,button.toggle:hover{background:var(--accent-tint);color:var(--accent);transform:none;box-shadow:none;filter:brightness(.96)}
+.dark .actions button:hover,.dark .button-like:hover,.dark button.toggle:hover{color:var(--accent-bright);filter:brightness(1.15)}
+.btn-primary,button.toggle.active,.dark button.toggle.active{background:var(--accent);color:#fff;border:0;border-radius:12px;box-shadow:none}
+.btn-primary:hover{background:var(--accent);transform:none;box-shadow:none;filter:brightness(1.08)}
+button.danger,.actions button.danger{background:rgba(255,59,48,.12);color:var(--neg)}
+.actions button:active,.button-like:active,button.toggle:active,.btn-primary:active,.btn-ghost:active,.pager-btn:active:not(:disabled){transform:none;box-shadow:none;opacity:.6;transition:none}
+.tx-edit button:not(.date-btn){border:0;background:var(--fill);border-radius:10px}
+.tx-edit button.danger{background:rgba(255,59,48,.12)}
+
+/* Inputs: filled, borderless, accent focus ring */
+.field input,.field textarea,.field select,.month-picker select,.mini-select,.tx-edit select,.tx-edit .share-input,.tx-edit .note-input{border:1px solid transparent;background:var(--fill);border-radius:10px;box-shadow:none}
+.field input:focus,.field textarea:focus,.field select:focus,.month-picker select:focus,.mini-select:focus{border-color:var(--accent-bright);box-shadow:0 0 0 3px var(--accent-tint)}
+.cal-day.sel{box-shadow:none}
+
+/* Desktop tabs: an iOS segmented control */
+.nav-float{background:rgba(242,242,247,.8);border:0;box-shadow:0 1px 0 var(--line),0 8px 24px -12px rgba(0,0,0,.18);border-radius:12px;padding:3px;gap:2px}
+.dark .nav-float{background:rgba(28,28,30,.8)}
+.nav-float .tab-btn{border-radius:9px;color:var(--ink);font-weight:500;padding:6px 14px}
+.nav-float .tab-btn:hover{background:var(--fill)}
+.nav-float .tab-btn.active{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04)}
+.dark .nav-float .tab-btn.active{background:#636366;color:#fff}
+.nav-sep{color:var(--muted)}
+
+@media (max-width:640px){
+  .app-title{font-size:34px;line-height:41px}
+  header > div{padding-top:12px;padding-bottom:8px}
+  /* Tab bar: full width, translucent material, tint marks the current tab. */
+  body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+  .nav-float{left:0;right:0;bottom:0;border-radius:0;padding:4px 4px env(safe-area-inset-bottom);gap:0;
+    background:rgba(249,249,249,.88);box-shadow:0 -0.5px 0 rgba(0,0,0,.25);backdrop-filter:blur(20px) saturate(1.8);-webkit-backdrop-filter:blur(20px) saturate(1.8)}
+  .dark .nav-float{background:rgba(22,22,24,.88);box-shadow:0 -0.5px 0 rgba(255,255,255,.15)}
+  .nav-float .tab-btn,.nav-float .tab-btn:hover{min-height:49px;padding:4px 0 2px;border-radius:0;background:transparent;color:#8e8e93;font-size:10px;line-height:12px;font-weight:500;letter-spacing:.01em}
+  .nav-float .tab-btn.active,.dark .nav-float .tab-btn.active{background:transparent;color:var(--accent);box-shadow:none}
+  .dark .nav-float .tab-btn.active{color:var(--accent-bright)}
+  .nav-float .tab-ico{width:25px;height:25px}
+  .nav-float .tab-btn:active{opacity:.6;transform:none}
+  #themeToggle{top:calc(env(safe-area-inset-top) + 16px);width:36px;height:36px;min-height:36px;padding:0}
+  #addExpenseTopBtn{bottom:calc(72px + env(safe-area-inset-bottom));box-shadow:0 6px 16px rgba(0,0,0,.2)}
+  .card{border-radius:12px}
+  .sum-tile:first-child .sum-value{font-size:34px}
+}
+@media (prefers-reduced-transparency: reduce){
+  .nav-float,.dark .nav-float{background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none}
+}

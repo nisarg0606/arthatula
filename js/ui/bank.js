@@ -4,6 +4,7 @@ import { fillCardSelect } from "./banklink.js";
 import { fmtDate } from "./cards.js";
 import { app, els } from "./context.js";
 import { renderDaily } from "./daily.js";
+import { PAGE_SIZE, clampPage, pager } from "./pager.js";
 import { currentIgnoreRules, sameRule, saveIgnoreRules } from "./review.js";
 import { apiFetch } from "./storage.js";
 
@@ -138,7 +139,9 @@ export function renderBank() {
   var table = document.createElement("table");
   table.innerHTML = "<thead><tr><th>Date</th><th>Description</th><th class=\"col-cat\">Account</th><th>Amount</th></tr></thead>";
   var tbody = document.createElement("tbody");
-  shown.forEach(function (t) {
+  app.bankPage = clampPage(app.bankPage, shown.length);
+  var start = (app.bankPage - 1) * PAGE_SIZE;
+  shown.slice(start, start + PAGE_SIZE).forEach(function (t) {
     var tr = document.createElement("tr");
     var moneyIn = (t.amount || 0) < 0;
     var cells = [
@@ -161,6 +164,8 @@ export function renderBank() {
   table.appendChild(tbody);
   wrap.appendChild(table);
   els.bankTxList.appendChild(wrap);
+  var pages = pager(app.bankPage, shown.length, function (n) { app.bankPage = n; renderBank(); }, els.bankTxList);
+  if (pages) els.bankTxList.appendChild(pages);
 }
 
 /* Wires up this part of the app; main.js calls every init() in order. */
@@ -168,6 +173,7 @@ export function init() {
   if (els.bankAccountFilter) {
     els.bankAccountFilter.addEventListener("change", function () {
       app.bankFilter = els.bankAccountFilter.value || "";
+      app.bankPage = 1;
       renderBank();
     });
   }

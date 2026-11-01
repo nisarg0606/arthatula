@@ -137,7 +137,8 @@ functions/api/sync-requests.js + sync-requests/  Pages Functions: the "Sync now"
 tools/sync-poller.mjs   VM poller: claims queued sync requests and runs the Plaid sync engine (no agent)
 functions/api/auth.js     Pages Function: /api/auth (setup, sign-in, sessions, pairing)
 functions/_middleware.js  security headers (CSP, framing, no-store on the API) for every response
-theme-init.js, tw-config.js  head scripts (kept out of index.html for the CSP)
+theme-init.js         head script (kept out of index.html for the CSP)
+tailwind.config.js, tailwind.css  Tailwind config and the prebuilt CSS the page loads (CI checks it is current)
 vendor/                   vendored Chart.js 4.4.1 (MIT, see vendor/chart.js-LICENSE.md)
 functions/api/_categories.js  fixed category list, category->field map, keyword rules
 schema.sql            D1 tables: budget_settings, monthly_budgets, monthly_actuals, daily_expenses (money as integer cents in the budget tables)
@@ -179,11 +180,11 @@ The deployed app holds real financial data behind a public URL, so:
   `_worker.js`, build it with `npx wrangler pages functions build
   --outdir=<dir>` so the middleware is included.
 - **Third-party code.** Chart.js is vendored in `vendor/` (from npm
-  `chart.js@4.4.1`). The Tailwind Play CDN is pinned to 3.4.17; to
-  vendor it too, run
-  `curl -fsSL https://cdn.tailwindcss.com/3.4.17 -o vendor/tailwindcss-play-3.4.17.js`,
-  point the `<script>` in `index.html` at it, and drop
-  `https://cdn.tailwindcss.com` from `script-src` in the middleware.
+  `chart.js@4.4.1`). Tailwind is built ahead of time into
+  `tailwind.css`, so no third-party script runs on the page
+  (`script-src 'self'`). After changing Tailwind classes in
+  `index.html` or `js/`, rebuild it:
+  `npx -y tailwindcss@3.4.17 -c tailwind.config.js -o tailwind.css --minify`.
 
 ### Pairing the Plaid sync script
 

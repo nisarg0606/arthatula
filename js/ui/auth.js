@@ -1,7 +1,7 @@
 /* Sign-in gate, pairing and session security. */
 import { deviceLabel } from "../core/format.js";
 import { app, els } from "./context.js";
-import { apiFetch, clearSessionToken, getSessionToken, load, setSessionToken } from "./storage.js";
+import { apiFetch, clearSessionToken, getSessionToken, load, prefetchBudget, setSessionToken } from "./storage.js";
 
 /* ================= Sign-in gate + security =================
    Boot flow: ask /api/auth?action=status. setupRequired -> the
@@ -67,6 +67,7 @@ export function bootAuth() {
   var headers = {};
   var token = getSessionToken();
   if (token) headers.Authorization = "Bearer " + token;
+  prefetchBudget();
   fetch("/api/auth?action=status", { headers: headers }).then(function (res) {
     if (!res.ok) throw new Error("auth status " + res.status);
     return res.json();

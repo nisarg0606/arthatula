@@ -93,8 +93,21 @@ export function persist() {
   }, 350);
 }
 
+/* bootAuth starts the budget download alongside its sign-in check
+   (they used to run one after the other); load() takes it once. */
+var prefetched = null;
+export function prefetchBudget() {
+  var token = getSessionToken();
+  if (!token) return;
+  prefetched = fetch(API_URL, { headers: { Authorization: "Bearer " + token } }).catch(function () { return null; });
+}
+
 export function load() {
-  apiRequest("GET").then(function (data) {
+  var early = prefetched;
+  prefetched = null;
+  (early ? early.then(function (res) {
+    return res && res.ok ? res.json() : apiRequest("GET");
+  }) : apiRequest("GET")).then(function (data) {
     /* A new database: start its plan and baseline on the user's own
        today (the server only knows UTC). */
     if (data && data.planStart === null) {
@@ -106,11 +119,12 @@ export function load() {
     app.state = sanitizeState(data);
     setMode("database");
     saveLocal();
-    render();
+    /* Requests first, so they download while render() runs. */
     loadBank();
     loadPending();
     checkSyncStatus(true);
     refreshGeminiStatus();
+    render();
   }).catch(function () {
     var local = loadLocal();
     app.state = local || blankState();

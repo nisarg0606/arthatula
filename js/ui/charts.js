@@ -77,10 +77,10 @@ export const centerText = {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = isDark() ? "#fafafa" : "#0a0a0a";
-    ctx.font = "700 24px Geist, system-ui, sans-serif";
+    ctx.font = "700 24px -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
     ctx.fillText(opts.value, x, y - 8);
     ctx.fillStyle = chartTextColor();
-    ctx.font = "600 12px Geist, system-ui, sans-serif";
+    ctx.font = "600 12px -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
     ctx.fillText(opts.caption || "", x, y + 16);
     ctx.restore();
   }
@@ -97,13 +97,13 @@ export function baseOptions() {
     plugins: {
       legend: { position: "top", align: isNarrow() ? "start" : "end",
         labels: { color: chartTextColor(), usePointStyle: true, pointStyle: "circle", boxWidth: 8, boxHeight: 8, padding: isNarrow() ? 12 : 16,
-          font: { family: "Geist, system-ui, sans-serif", size: 12, weight: "600" } } },
+          font: { family: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif", size: 12, weight: "600" } } },
       tooltip: {
         backgroundColor: isDark() ? "rgba(31,31,31,.96)" : "rgba(10,10,10,.92)",
         borderColor: isDark() ? "#313131" : "rgba(10,10,10,.92)", borderWidth: 1,
         titleColor: "#fafafa", bodyColor: "#e4e4e7",
-        titleFont: { family: "Geist, system-ui, sans-serif", size: 12, weight: "600" },
-        bodyFont: { family: "Geist, system-ui, sans-serif", size: 14, weight: "600" },
+        titleFont: { family: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif", size: 12, weight: "600" },
+        bodyFont: { family: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif", size: 14, weight: "600" },
         padding: 12, cornerRadius: 12, boxPadding: 4, usePointStyle: true, caretSize: 6,
         callbacks: { label: function (c) {
           return " " + c.dataset.label + "  " + (c.parsed.y === null || c.parsed.y === undefined ? "—" : fmt(c.parsed.y));
@@ -112,10 +112,10 @@ export function baseOptions() {
     },
     scales: {
       x: { border: { display: false }, grid: { display: false },
-        ticks: { color: chartTextColor(), maxRotation: 0, autoSkipPadding: 16, font: { family: "Geist, system-ui, sans-serif", size: 12 } } },
+        ticks: { color: chartTextColor(), maxRotation: 0, autoSkipPadding: 16, font: { family: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif", size: 12 } } },
       y: { border: { display: false }, grid: { color: chartGridColor(), drawTicks: false },
         ticks: { color: chartTextColor(), padding: 8, maxTicksLimit: isNarrow() ? 5 : 6, callback: money,
-          font: { family: "Geist, system-ui, sans-serif", size: 12 } } }
+          font: { family: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif", size: 12 } } }
     }
   };
 }
@@ -225,7 +225,7 @@ export function renderCharts(cmp) {
      month in focus gets a bold label. */
   barOpts.onClick = function (evt, elements) { if (elements.length) selectMonth(MONTHS[elements[0].index].key); };
   barOpts.onHover = function (evt, elements) { evt.native.target.style.cursor = elements.length ? "pointer" : ""; };
-  barOpts.scales.x.ticks.font = function (c) { return { family: "Geist, system-ui, sans-serif", size: 12, weight: c.index === selIdx ? "700" : "400" }; };
+  barOpts.scales.x.ticks.font = function (c) { return { family: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif", size: 12, weight: c.index === selIdx ? "700" : "400" }; };
   barOpts.scales.x.ticks.color = function (c) { return c.index === selIdx ? (isDark() ? "#fafafa" : "#0a0a0a") : chartTextColor(); };
   app.chartBars = new window.Chart(els.barsChart, {
     type: "bar",
@@ -336,7 +336,7 @@ export function renderCharts(cmp) {
     /* Phones: drop the right-hand axis; the running total is in the
        header KPI and the tooltip. */
     dailyOpts.scales.y1 = { display: !isNarrow(), position: "right", border: { display: false }, grid: { display: false },
-      ticks: { color: chartTextColor(), maxTicksLimit: 6, callback: money, font: { family: "Geist, system-ui, sans-serif", size: 12 } } };
+      ticks: { color: chartTextColor(), maxTicksLimit: 6, callback: money, font: { family: "-apple-system, BlinkMacSystemFont, system-ui, sans-serif", size: 12 } } };
     dailyOpts.onClick = function (evt, elements) {
       if (!elements.length) return;
       var dayKey = app.selectedKey + "-" + String(elements[0].index + 1).padStart(2, "0");
