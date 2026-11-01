@@ -86,8 +86,8 @@ assert.ok(state.actuals.every((a) => a.entered === false && a.takeHomePay === 0)
 res = await onRequestGet({ env: {}, request: new Request("http://local/api/budget") });
 assert.equal(res.status, 503);
 
-// 5. ensureTables runs on every request, so on an up-to-date database
-//    it must be a single D1 round trip (it was ~36 sequential ones).
+// 5. ensureTables is called by every request but does its work once
+//    per binding: later calls make no D1 round trip at all.
 {
   const db = new FakeD1();
   await ensureTables(db); // first call creates everything
@@ -100,7 +100,17 @@ assert.equal(res.status, 503);
     return st;
   };
   await ensureTables(db);
-  assert.equal(calls, 1, "ensureTables should make exactly one round trip");
+  assert.equal(calls, 0, "a later ensureTables makes no round trip");
+}
+// ...and a failed first run is retried by the next request.
+{
+  const db = new FakeD1();
+  const realBatch = db.batch.bind(db);
+  db.batch = async () => { throw new Error("D1 hiccup"); };
+  await assert.rejects(ensureTables(db), /D1 hiccup/);
+  db.batch = realBatch;
+  await ensureTables(db);
+  assert.ok(await db.prepare("SELECT 1 FROM sessions").all(), "tables exist after the retry");
 }
 
 // The plan window: 13 months from plan_start, on through the current month.

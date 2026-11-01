@@ -213,10 +213,17 @@ function noDb() {
   return json({ error: "No database bound. Bind a D1 database as DB (see README) or use the app in local-only mode." }, 503);
 }
 
-/* Runs on every API request, so it is one D1 batch (one round trip, one
-   transaction) rather than ~36 sequential statements, which cost ~3s a
-   request. Every statement is idempotent. */
-export async function ensureTables(db) {
+/* Called by every API request, but does its work once per DB binding
+   per isolate (a warm isolate serves many requests): one D1 batch (one
+   round trip, one transaction) rather than ~36 sequential statements.
+   Every statement is idempotent, so a second isolate running it too is
+   harmless. A failure is retried on the next request. */
+const tablesReady = new WeakMap();
+export function ensureTables(db) {
+  if (!tablesReady.has(db)) tablesReady.set(db, createTables(db).catch((e) => { tablesReady.delete(db); throw e; }));
+  return tablesReady.get(db);
+}
+async function createTables(db) {
   const stmts = [
     db.prepare(CREATE_SETTINGS),
     db.prepare(CREATE_MONTHS),
@@ -521,11 +528,10 @@ export function extractSessionToken(request) {
    /api/mcp does, so an MCP token can never touch the raw API, settings,
    or session management. */
 export async function requireAuth(db, request, { allowSync = false, allowMcp = false } = {}) {
-  const codeHash = await getAccessCodeHash(db);
+  const [codeHash, session] = await Promise.all([getAccessCodeHash(db), getSessionForToken(db, extractSessionToken(request))]);
   if (!codeHash) {
     return { response: json({ error: "Access code setup required", setupRequired: true }, 403) };
   }
-  const session = await getSessionForToken(db, extractSessionToken(request));
   if (!session) return { response: json({ error: "Sign-in required" }, 401) };
   if (session.kind === "sync" && !allowSync) {
     return { response: json({ error: "Sync tokens can't use this endpoint." }, 403) };
@@ -1134,14 +1140,19 @@ export async function completeSyncRequest(db, id, status, result) {
 
 export async function readState(db) {
   await ensureTables(db);
-  const startingRaw = await getSetting(db, "starting_balance_cents");
+  /* Independent reads, sent together: one round-trip wait, not eight. */
+  const [startingRaw, baselineRaw, planStart, baselineNoteRaw, { results }, actualsResult, dailyResult, cards, merchantRules] = await Promise.all([
+    getSetting(db, "starting_balance_cents"), getSetting(db, "baseline_date"), getSetting(db, "plan_start"), getSetting(db, "baseline_note"),
+    db.prepare("SELECT * FROM monthly_budgets ORDER BY month_key").all(),
+    db.prepare("SELECT * FROM monthly_actuals ORDER BY month_key").all(),
+    db.prepare("SELECT * FROM daily_expenses ORDER BY date DESC, id DESC").all(),
+    listCards(db), getMerchantRules(db)
+  ]);
   const startingBalance = startingRaw !== null ? toDollars(parseInt(startingRaw, 10)) : 0;
-  const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
-  /* null until the app sends its setup (a new database). */
-  const planStart = await getSetting(db, "plan_start");
+  const baselineDate = baselineRaw || todayIso();
+  /* planStart is null until the app sends its setup (a new database). */
   const keys = planMonthKeys(planStart || thisMonth(), thisMonth());
-  const baselineNote = (await getSetting(db, "baseline_note")) || "";
-  const { results } = await db.prepare("SELECT * FROM monthly_budgets ORDER BY month_key").all();
+  const baselineNote = baselineNoteRaw || "";
   const byKey = new Map((results || []).map((r) => [r.month_key, r]));
   const months = keys.map((key) => {
     const row = byKey.get(key) || {};
@@ -1150,7 +1161,6 @@ export async function readState(db) {
     for (const [field, col] of TEXT_FIELDS) m[field] = row[col] || "";
     return m;
   });
-  const actualsResult = await db.prepare("SELECT * FROM monthly_actuals ORDER BY month_key").all();
   const actualByKey = new Map((actualsResult.results || []).map((r) => [r.month_key, r]));
   const actuals = keys.map((key) => {
     const row = actualByKey.get(key) || {};
@@ -1158,9 +1168,6 @@ export async function readState(db) {
     for (const [field, col] of MONEY_FIELDS) a[field] = toDollars(row[col] || 0);
     return a;
   });
-  const dailyResult = await db.prepare(
-    "SELECT * FROM daily_expenses ORDER BY date DESC, id DESC"
-  ).all();
   const dailyExpenses = (dailyResult.results || []).map((r) => ({
     id: r.id, date: r.date, description: r.description,
     amount: Math.round((r.amount || 0) * 100) / 100,
@@ -1174,8 +1181,6 @@ export async function readState(db) {
     note: r.note || "",
     createdAt: r.created_at, updatedAt: r.updated_at
   }));
-  const cards = await listCards(db);
-  const merchantRules = await getMerchantRules(db);
   return { planStart, baselineDate, baselineNote, startingBalance, months, actuals, dailyExpenses, cards, merchantRules };
 }
 

@@ -69,8 +69,8 @@ async function fingerprint(db) {
 export async function mirrorV1(db, opts) {
   await ensureV2(db);
   const s = scope(db, OWNER_ID);
-  const fp = await fingerprint(db);
-  if (!(opts && opts.force) && fp === (await s.getSetting("mirror_fp"))) return { skipped: true };
+  const [fp, saved] = await Promise.all([fingerprint(db), s.getSetting("mirror_fp")]);
+  if (!(opts && opts.force) && fp === saved) return { skipped: true };
 
   const state = await readState(db);
   const baseline = state.baselineDate;

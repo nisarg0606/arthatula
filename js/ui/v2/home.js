@@ -20,17 +20,18 @@ function tile(label, value, sub, cls, onClick) {
 export function render(container) {
   loadLayout();
   if (!container.firstChild) loading(container);
-  return loadBasics().then(function () { return api("GET", "reports?kind=summary"); }).then(function (s) {
-    keepScroll(function () { draw(container, s); });
+  /* The market recap is its own card (#v2Market) and loads on its own:
+     a slow quote never holds up the overview. Empty until there's a key. */
+  const marketBox = document.getElementById("v2Market");
+  if (marketBox) api("GET", "market").then(function (m) { clear(marketBox); if (m.status !== "nokey" || m.latest) marketBox.appendChild(marketCard(m)); }, function () { /* the overview still shows */ });
+  /* Categories/accounts and the summary download side by side. */
+  return Promise.all([loadBasics(), api("GET", "reports?kind=summary")]).then(function (r) {
+    keepScroll(function () { draw(container, r[1]); });
   }).catch(function (e) { errorState(container, e); });
 }
 
 function draw(container, s) {
     clear(container);
-    /* The market recap is its own card (#v2Market) and loads on its own:
-       a slow quote never holds up the overview. Empty until there's a key. */
-    const marketBox = document.getElementById("v2Market");
-    if (marketBox) api("GET", "market").then(function (m) { clear(marketBox); if (m.status !== "nokey" || m.latest) marketBox.appendChild(marketCard(m)); }, function () { /* the overview still shows */ });
     const nwDelta = s.netWorth30dAgoCents === null ? null : s.netWorthCents - s.netWorth30dAgoCents;
     const spendPct = s.plannedSpendingCents > 0 ? Math.round(s.spendingCents / s.plannedSpendingCents * 100) : null;
     const tiles = h("div", { class: "v2-tiles" },

@@ -72,8 +72,10 @@ export function rowToGoal(r) {
 }
 
 export async function loadCategories(s) {
-  const groups = await s.all("SELECT * FROM category_groups WHERE owner_id = ?1 ORDER BY sort, name");
-  const cats = await s.all("SELECT * FROM categories WHERE owner_id = ?1 ORDER BY sort, name");
+  const [groups, cats] = await Promise.all([
+    s.all("SELECT * FROM category_groups WHERE owner_id = ?1 ORDER BY sort, name"),
+    s.all("SELECT * FROM categories WHERE owner_id = ?1 ORDER BY sort, name")
+  ]);
   return {
     groups: groups.map((g) => ({ id: g.id, name: g.name, kind: g.kind, sort: g.sort })),
     categories: cats.map(rowToCategory)
@@ -93,11 +95,13 @@ export async function loadTransactions(s, opts) {
   const params = [];
   if (o.from) { params.push(o.from); where.push("date >= ?" + (params.length + 1)); }
   if (o.to) { params.push(o.to); where.push("date <= ?" + (params.length + 1)); }
-  const rows = await s.all("SELECT * FROM transactions WHERE " + where.join(" AND ") + " ORDER BY date DESC, created_at DESC, id", ...params);
-  const splitRows = await s.all("SELECT * FROM transaction_splits WHERE owner_id = ?1");
+  const [rows, splitRows, auto] = await Promise.all([
+    s.all("SELECT * FROM transactions WHERE " + where.join(" AND ") + " ORDER BY date DESC, created_at DESC, id", ...params),
+    s.all("SELECT * FROM transaction_splits WHERE owner_id = ?1"),
+    loadAutoReviews(s)
+  ]);
   const byTx = {};
   splitRows.forEach((r) => { (byTx[r.transaction_id] = byTx[r.transaction_id] || []).push(rowToSplit(r)); });
-  const auto = await loadAutoReviews(s);
   return rows.map((r) => rowToTransaction(r, byTx[r.id], auto[r.id]));
 }
 
