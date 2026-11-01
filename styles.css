@@ -1025,3 +1025,16 @@ textarea{min-height:88px}
   .brand .app-sub,.brand .app-sub2{display:none}
   .brand > p:last-child{margin:0}
 }
+
+/* Eye button: amounts hidden. The formatters print $•••; these cover
+   what they don't: typed amounts and AI-written answers. */
+#hideAmountsBtn .eye-shut{display:none}
+.hide-amounts #hideAmountsBtn .eye-open{display:none} .hide-amounts #hideAmountsBtn .eye-shut{display:block}
+.hide-amounts #hideAmountsBtn{color:var(--accent)}
+.hide-amounts input[type="number"],.hide-amounts input[inputmode="decimal"],.hide-amounts #askLog{filter:blur(6px)}
+.hide-amounts input[type="number"]:focus,.hide-amounts input[inputmode="decimal"]:focus{filter:none}
+@media (max-width:640px){
+  /* Beside the theme button, pinned top-right the same way. */
+  #hideAmountsBtn{position:absolute;top:calc(env(safe-area-inset-top) + 16px);right:60px;width:36px;height:36px;min-height:36px;padding:0}
+  .app-title{padding-right:112px}
+}

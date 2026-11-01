@@ -1,5 +1,5 @@
 /* Chart.js setup and the dashboard charts. */
-import { fmt } from "../core/format.js";
+import { fmt, amountsHidden, HIDDEN } from "../core/format.js";
 import { MONTHS } from "../core/plan.js";
 import { expenseShare, isSpending } from "../core/spending.js";
 import { fmtDate } from "./cards.js";
@@ -41,7 +41,7 @@ export const compactMoney = typeof Intl !== "undefined"
   ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 })
   : null;
 
-export function money(v) { return compactMoney ? compactMoney.format(v) : fmt(v); }
+export function money(v) { return amountsHidden() ? HIDDEN : compactMoney ? compactMoney.format(v) : fmt(v); }
 
 /* Depth: every line, bar and arc casts a soft coloured shadow, so the
    marks float above the panel. */

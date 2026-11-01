@@ -3,7 +3,7 @@ import { renderSecurity } from "./auth.js";
 import { loadBank, renderBank } from "./bank.js";
 import { renderCards } from "./cards.js";
 import { els } from "./context.js";
-import { renderSummary } from "./dashboard.js";
+import { renderSummary, render as renderAll } from "./dashboard.js";
 import { loadPending, renderPending } from "./pending.js";
 import { onShow as onShowV2 } from "./v2/index.js";
 
@@ -196,6 +196,24 @@ export function init() {
       if (els.expDescription) els.expDescription.focus();
     });
   });
+  /* Eye: hide every amount (see js/core/format.js), remembered on this device. */
+  var eye = document.getElementById("hideAmountsBtn");
+  if (eye) {
+    var syncEye = function () {
+      var on = document.documentElement.classList.contains("hide-amounts");
+      eye.setAttribute("aria-pressed", String(on));
+      eye.setAttribute("aria-label", on ? "Show amounts" : "Hide amounts");
+      eye.title = on ? "Show amounts" : "Hide amounts (for showing the app to someone)";
+    };
+    syncEye();
+    eye.addEventListener("click", function () {
+      var on = document.documentElement.classList.toggle("hide-amounts");
+      try { localStorage.setItem("arthatula-hide-amounts", on ? "1" : "0"); } catch (e) {}
+      syncEye();
+      renderAll();
+      showTab(document.body.getAttribute("data-tab") || "dashboard");
+    });
+  }
   if (els.themeToggle) {
     els.themeToggle.addEventListener("click", function () {
       var dark = document.documentElement.classList.toggle("dark");

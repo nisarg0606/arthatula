@@ -7,5 +7,6 @@
     if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
       document.documentElement.classList.add("dark");
     }
+    if (localStorage.getItem("arthatula-hide-amounts") === "1") document.documentElement.classList.add("hide-amounts");
   } catch (e) {}
 })();
