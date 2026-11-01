@@ -108,7 +108,7 @@ assert.ok(!byExt["bank:b_rent"], "a bank row backing an expense is not duplicate
 assert.ok(!byExt["bank:b_pend"], "pending bank rows are not mirrored");
 assert.equal(byExt["exp:" + rent.id].accountId !== null, true, "expense linked to its bank account");
 const before = txs.find((t) => t.merchant === "Before baseline lunch");
-assert.ok(before.excludeReports, "pre-baseline spending is listed but excluded from totals");
+assert.ok(!before.excludeReports, "pre-baseline spending counts in reports as history");
 const tj = txs.find((t) => t.merchant === "Corner Market");
 const accounts = await loadAccounts(me);
 assert.equal(accounts.find((a) => a.id === tj.accountId).name, "Test Card", "card tag becomes the card account");

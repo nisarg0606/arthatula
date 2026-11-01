@@ -203,7 +203,7 @@ assert.ok(!bm.rows.some((r) => r.categoryId === id("Groceries") && r.plannedCent
 /* ---------- reports ---------- */
 const cf = await ok(reports, "GET", "reports?kind=cashflow&from=2026-08&to=2026-11");
 assert.equal(cf.months.length, 4);
-assert.equal(cf.months[0].spendingCents, 0, "August is before the baseline date: listed, not counted");
+assert.equal(cf.months[0].spendingCents, 1549, "August is before the baseline date: it still counts as history");
 assert.equal(cf.months[3].spendingCents, 9000, "November = the split Whole Foods row (card payment is a transfer)");
 assert.equal((await call(reports, "GET", "reports?kind=cashflow&from=2026-12&to=2026-11")).status, 400);
 const fc = await ok(reports, "GET", "reports?kind=forecast&months=6");
