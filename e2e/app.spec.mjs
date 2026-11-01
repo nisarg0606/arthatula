@@ -765,3 +765,26 @@ test("Customize dashboard: a hidden card stays hidden after a reload; Reset brin
   await expect(page.locator(".ask-card")).toBeVisible();
   expect(await order()).toEqual(["v2Overview", "month-card", "ask-card", "dash-card"]);
 });
+
+test("Send feedback links point at a new GitHub issue, with only non-personal context", async ({ page }) => {
+  const ISSUE = /^https:\/\/github\.com\/nisarg0606\/arthatula\/issues\/new\?/;
+  await page.locator("#moreTab").click();
+  const sheetLink = page.locator("#moreSheet .feedback-link");
+  await expect(sheetLink).toBeVisible();
+  await expect(sheetLink).toHaveAttribute("href", ISSUE);
+  await page.locator("#moreDone").click();
+  await expect(page.locator("#moreSheet")).toBeHidden();
+  await openTab(page, "settings");
+  const link = page.locator('[data-section="settings"] .feedback-link');
+  await expect(link).toHaveAttribute("href", ISSUE);
+  /* Click without leaving: the handler fills the context, a later listener stops the navigation. */
+  const href = await link.evaluate((a) => {
+    window.addEventListener("click", (e) => e.preventDefault(), { once: true });
+    a.click();
+    return a.href;
+  });
+  const ctx = new URL(href).searchParams.get("context");
+  expect(ctx).toContain("Tab: settings");
+  expect(ctx).toContain("Screen width: ");
+  expect(ctx).not.toContain("$");
+});

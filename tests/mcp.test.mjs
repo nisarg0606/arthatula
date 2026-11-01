@@ -128,7 +128,7 @@ const okText = (result) => JSON.parse(result.content[0].text);
   assert.deepEqual(names, [
     "add_expense", "categorize_expense", "delete_expense", "get_bank_snapshot",
     "get_budget", "get_budget_status", "get_sync_status", "list_accounts", "list_cards",
-    "list_expenses", "list_pending_charges", "list_transactions", "request_sync", "update_expense"
+    "list_expenses", "list_pending_charges", "list_transactions", "request_sync", "send_feedback", "update_expense"
   ]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.type, "object", t.name + " has an object schema");
@@ -244,6 +244,35 @@ const okText = (result) => JSON.parse(result.content[0].text);
   assert.equal(req2.structuredContent.request.id, req1.structuredContent.request.id);
   const status1 = await call(env, mcpToken, "get_sync_status");
   assert.equal(status1.structuredContent.request.id, req1.structuredContent.request.id);
+
+  /* ---------- 7b. send_feedback: a link, nothing filed ------------- */
+  const fb = await call(env, mcpToken, "send_feedback", {
+    kind: "bug", title: "Chart & legend overlap?", details: "Paid $1,234.56 to me@example.com\ncard 4111 1111 1111 1111"
+  });
+  assert.ok(!fb.isError, "send_feedback ok");
+  const u = new URL(fb.structuredContent.url);
+  assert.equal(u.origin + u.pathname, "https://github.com/nisarg0606/arthatula/issues/new");
+  assert.equal(u.searchParams.get("template"), "bug_report.yml");
+  assert.equal(u.searchParams.get("title"), "Chart & legend overlap?", "title survives URL encoding");
+  assert.ok(fb.structuredContent.url.includes("title=Chart+%26+legend"), "title is encoded");
+  const sent = u.searchParams.get("what-happened");
+  assert.ok(sent.includes("\n"), "details go to the bug form's field, newlines kept");
+  assert.ok(!/1,234|example\.com|4111/.test(sent + fb.structuredContent.body), "amounts, emails and card numbers are blanked");
+  assert.match(fb.structuredContent.body, /\[amount\][\s\S]*\[email\][\s\S]*\[number\]/);
+  assert.match(fb.structuredContent.instructions, /nisarg0606\/arthatula/);
+  const feat = await call(env, mcpToken, "send_feedback", { kind: "feature", title: "Idea", details: "Dark charts" });
+  assert.equal(new URL(feat.structuredContent.url).searchParams.get("problem"), "Dark charts");
+  for (const [args, re] of [
+    [{ kind: "bug", title: "  ", details: "x" }, /title/],
+    [{ kind: "rant", title: "t", details: "x" }, /kind/],
+    [{ kind: "bug", title: "t", details: "" }, /details/],
+    [{ kind: "bug", title: "t".repeat(121), details: "x" }, /120/],
+    [{ kind: "bug", title: "t", details: "x".repeat(4001) }, /4000/]
+  ]) {
+    const bad = await call(env, mcpToken, "send_feedback", args);
+    assert.equal(bad.isError, true, "send_feedback rejects " + JSON.stringify(args).slice(0, 60));
+    assert.match(bad.content[0].text, re);
+  }
 
   /* ---------- 8. Revoke kills the token ------------------------------ */
   const revoke = await authPost(makeCtx(env, { action: "revoke", id: mcpSessionId }, "POST", "http://local/api/auth", authHeaders(device)));

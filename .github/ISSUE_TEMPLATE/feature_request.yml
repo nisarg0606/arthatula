@@ -1,0 +1,25 @@
+name: Feature request
+description: An idea for something Arthatula should do.
+title: "Idea: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues here are **public**. Please keep your real budget data out of it.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What you were trying to do, and what got in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you picture it working. Rough is fine.
+  - type: textarea
+    id: context
+    attributes:
+      label: Device, browser and app version (optional)

@@ -10,6 +10,8 @@
  *   Read (v2 money model, cents): list_accounts, list_transactions,
  *          get_budget_status
  *   Write: add_expense, update_expense, delete_expense, request_sync
+ *   About the app itself: send_feedback (builds a GitHub issue link for
+ *          the maintainer; files nothing and reads no budget data)
  *
  * Transport: stateless Streamable HTTP — POST JSON-RPC 2.0 messages,
  * get JSON back. No server-side session: every request carries the
@@ -42,6 +44,7 @@ import { ensureV2, scope, ownerFor, OWNER_ID } from "./_v2db.js";
 import { mirrorV1 } from "./_v2mirror.js";
 import { loadAccounts, loadTransactions, loadCategories } from "./_v2store.js";
 import { netWorthNow } from "./v2/accounts.js";
+import { FEEDBACK_KINDS, FEEDBACK_REPO, TITLE_MAX, DETAILS_MAX, scrub, feedbackUrl } from "../../js/core/feedback.js";
 import { monthView } from "./v2/budgets.js";
 
 const PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-18"];
@@ -223,6 +226,20 @@ const TOOLS = [
       required: ["month"],
       additionalProperties: false
     }
+  },
+  {
+    name: "send_feedback",
+    description: "Send feedback about the Arthatula app itself (a bug, a feature idea, or general feedback) to its maintainer as a PUBLIC GitHub issue in " + FEEDBACK_REPO + ". Not for budget questions. Never put the user's amounts, merchants, account names or other personal data in it; emails, dollar amounts, long numbers and tokens are blanked out anyway. Files nothing by itself: returns a prefilled new-issue URL plus the title and body, for you to open for the user or file with the GitHub CLI / GitHub MCP.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: Object.keys(FEEDBACK_KINDS) },
+        title: { type: "string", description: "Short summary, up to " + TITLE_MAX + " characters" },
+        details: { type: "string", description: "What happened / the idea, up to " + DETAILS_MAX + " characters" }
+      },
+      required: ["kind", "title", "details"],
+      additionalProperties: false
+    }
   }
 ];
 
@@ -322,6 +339,24 @@ async function callTool(db, env, session, name, args) {
       const names = await categoryNames(s);
       view.rows = view.rows.map((r) => ({ ...r, categoryName: names[r.categoryId] || null }));
       return toolOk(view);
+    }
+    case "send_feedback": {
+      if (!FEEDBACK_KINDS[args.kind]) return toolError("kind must be one of: " + Object.keys(FEEDBACK_KINDS).join(", "));
+      const rawTitle = typeof args.title === "string" ? args.title.replace(/\s+/g, " ").trim() : "";
+      const rawDetails = typeof args.details === "string" ? args.details.trim() : "";
+      if (!rawTitle) return toolError("title is required");
+      if (!rawDetails) return toolError("details is required");
+      if (rawTitle.length > TITLE_MAX) return toolError("title is over " + TITLE_MAX + " characters");
+      if (rawDetails.length > DETAILS_MAX) return toolError("details is over " + DETAILS_MAX + " characters");
+      const title = scrub(rawTitle), details = scrub(rawDetails);
+      const context = "Sent from an AI agent via the Arthatula MCP server (send_feedback).";
+      return toolOk({
+        url: feedbackUrl(args.kind, title, details, context),
+        repo: FEEDBACK_REPO,
+        title,
+        body: details + "\n\n---\n" + context,
+        instructions: "Open this link for the user so they can review and submit it, or if you can use the GitHub CLI or GitHub MCP, create the issue in " + FEEDBACK_REPO + " with this title and body. It will be public."
+      });
     }
     default:
       return toolError("Unknown tool: " + name);

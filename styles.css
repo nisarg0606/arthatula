@@ -1015,7 +1015,8 @@ body:not([data-tab="dashboard"]) .demo-welcome{display:none}
 .brand-mark{width:20px;height:20px;border-radius:5px;vertical-align:-5px}
 
 /* "Guide & help" at the foot of the More sheet */
-.sheet-help{display:block;margin:0 16px calc(16px + env(safe-area-inset-bottom));padding:12px;border-radius:14px;text-align:center;font-weight:600;color:var(--accent);background:var(--fill);text-decoration:none}
+.sheet-links{display:flex;gap:8px;margin:0 16px calc(16px + env(safe-area-inset-bottom))}
+.sheet-help{display:block;flex:1;padding:12px;border-radius:14px;text-align:center;font-weight:600;color:var(--accent);background:var(--fill);text-decoration:none}
 .dark .sheet-help{color:var(--accent-bright)}
 .sheet-help:active{opacity:.6}
 

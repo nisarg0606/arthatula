@@ -2,6 +2,7 @@
 import { renderSecurity } from "./auth.js";
 import { loadBank, renderBank } from "./bank.js";
 import { renderCards } from "./cards.js";
+import { feedbackUrl } from "../core/feedback.js";
 import { els } from "./context.js";
 import { renderSummary, render as renderAll } from "./dashboard.js";
 import { loadPending, renderPending } from "./pending.js";
@@ -157,6 +158,14 @@ export function init() {
     sheet.addEventListener("cancel", function (e) { e.preventDefault(); closeSheet(sheet); });
     dragToDismiss(sheet, sheet.querySelector(".sheet-head"));
   }
+  /* Send feedback: fill in non-personal context just before it opens
+     (browser, screen width, open tab), never any budget data. */
+  document.querySelectorAll(".feedback-link").forEach(function (a) {
+    a.addEventListener("click", function () {
+      a.href = feedbackUrl("feedback", "", "", "Browser / OS: " + navigator.userAgent +
+        "\nScreen width: " + window.innerWidth + "px\nTab: " + (document.body.getAttribute("data-tab") || "dashboard"));
+    });
+  });
   if (summaryGridEl && !reduceMotion) {
     summaryGridEl.addEventListener("pointermove", function (ev) {
       var tile = ev.target.closest && ev.target.closest(".stat");
