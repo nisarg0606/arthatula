@@ -256,15 +256,42 @@ up in the app right away.
 
 ## 7. Getting updates
 
-Your copy is yours: new versions of Arthatula don't reach it until you
-say so.
+Your copy updates itself. Once a day, a small job in your copy on GitHub
+(**Actions → Update from the original**) brings in what's new in
+Arthatula and saves it to your copy. Cloudflare then redeploys your app
+within a couple of minutes. Your data isn't touched.
 
-1. Open your copy of the project on GitHub (Cloudflare created it in
-   your account in step 1).
-2. If GitHub shows **This branch is behind**, click **Sync fork** →
-   **Update branch**.
-3. Cloudflare notices and redeploys within a couple of minutes. Your data
-   isn't touched.
+- **Update right now:** open your copy on GitHub (Cloudflare created it
+  in your account in step 1), go to **Actions → Update from the
+  original** and press **Run workflow**.
+- **Turn automatic updates off:** in your copy go to **Settings →
+  Secrets and variables → Actions → Variables → New repository
+  variable**. Name it `AUTO_UPDATE` and set it to `false`. **Run
+  workflow** still updates when you ask. Delete the variable to turn
+  updates back on.
+- **Workflow files (optional):** GitHub doesn't let the update change
+  the files in `.github/workflows/`. When those change, everything else
+  still updates and an issue in your copy lists the files left behind.
+  To have them updated too, create a
+  [fine-grained token](https://github.com/settings/personal-access-tokens/new)
+  for just your Arthatula repository with **Contents** and **Workflows**
+  set to *Read and write*. Add it under **Settings → Secrets and
+  variables → Actions → Secrets** as `UPSTREAM_SYNC_TOKEN`.
+- **If an update clashes with your own changes:** nothing changes and
+  your app keeps working. An issue named *"Update: your changes clash
+  with the original's"* lists the files. Make those files match the
+  original's again, then press **Run workflow**. Once it has updated,
+  add your own change back.
+- **Made your copy before automatic updates existed?** Add these two
+  files to your copy unchanged:
+  [`.github/workflows/upstream-sync.yml`](https://github.com/nisarg0606/arthatula/blob/main/.github/workflows/upstream-sync.yml)
+  and
+  [`.github/upstream-sync.sh`](https://github.com/nisarg0606/arthatula/blob/main/.github/upstream-sync.sh).
+
+Your copy isn't a GitHub "fork", so GitHub won't show a **Sync fork**
+button; the daily job does that work instead. GitHub pauses daily jobs
+in a repository nobody has touched for 60 days. If that happens, the
+**Actions** tab shows a button to turn it back on.
 
 ## 8. Bank sync (optional, technical)
 
