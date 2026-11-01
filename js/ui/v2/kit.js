@@ -145,7 +145,12 @@ export function openDialog(title, body, actions) {
   })));
   if (typeof dialogEl.showModal === "function") dialogEl.showModal(); else dialogEl.setAttribute("open", "");
   const first = dialogEl.querySelector("input,select,textarea");
-  if (first) setTimeout(function () { try { first.focus({ preventScroll: true }); } catch (e) { /* noop */ } }, 30);
+  /* Don't steal focus from a field the person (or a test) already moved to. */
+  if (first) setTimeout(function () {
+    const at = document.activeElement;
+    if (at && at !== first && dialogEl.contains(at) && /^(INPUT|SELECT|TEXTAREA)$/.test(at.tagName)) return;
+    try { first.focus({ preventScroll: true }); } catch (e) { /* noop */ }
+  }, 30);
   return { close: close, fail: fail, el: dialogEl };
 }
 

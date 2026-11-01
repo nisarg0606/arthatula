@@ -1012,3 +1012,16 @@ textarea{min-height:88px}
 .sheet-help{display:block;margin:0 16px calc(16px + env(safe-area-inset-bottom));padding:12px;border-radius:14px;text-align:center;font-weight:600;color:var(--accent);background:var(--fill);text-decoration:none}
 .dark .sheet-help{color:var(--accent-bright)}
 .sheet-help:active{opacity:.6}
+
+/* Wide screens: the header is one slim row (logo, name, status) so the
+   tabs sit near the top. Phones keep their own header (above). */
+@media (min-width:641px){
+  .app-header > div{padding-top:16px;padding-bottom:12px}
+  .nav-float{margin-top:0}
+  .head-row{align-items:center}
+  .brand{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+  .brand .brand-logo{width:32px;height:32px;margin:0;border-radius:8px}
+  .brand .app-title{font-size:24px;line-height:32px}
+  .brand .app-sub,.brand .app-sub2{display:none}
+  .brand > p:last-child{margin:0}
+}
