@@ -483,6 +483,29 @@
             <button type="button" id="pairDenyBtn" class="danger">Deny</button>
           </div>
         </div>
+        <h4 class="chart-title mt-4">AI assistant (MCP)</h4>
+        <p class="hint">Connect an AI assistant (Claude, ChatGPT, Cursor, and other MCP clients) to this budget. Create a token, then paste the endpoint and token into the assistant's MCP settings. The token can <strong>only</strong> use the MCP tools — read the budget, accounts, transactions, bank snapshot and pending charges, add / edit / delete expenses, and request a sync. It can't open the app, call the raw API, change settings or the access code, or manage devices. Each token appears in the list below as its own session: revoke it there any time, and changing your access code signs it out too.</p>
+        <div class="actions mt-2">
+          <button type="button" id="mcpCreateBtn">Create MCP token</button>
+        </div>
+        <div id="mcpReveal" hidden>
+          <p class="hint"><strong>Copy these now — the token is shown only once.</strong> If you lose it, create a new one and revoke the old one below.</p>
+          <div class="grid sm:grid-cols-2 gap-4 max-w-3xl">
+            <div class="field">
+              <label for="mcpEndpoint">MCP endpoint</label>
+              <input id="mcpEndpoint" readonly>
+            </div>
+            <div class="field">
+              <label for="mcpToken">Token</label>
+              <input id="mcpToken" readonly>
+            </div>
+          </div>
+          <div class="field max-w-3xl mt-2">
+            <label for="mcpConfig">Client config (Claude Code / Claude Desktop / Cursor — merge into the MCP settings file)</label>
+            <textarea id="mcpConfig" rows="11" readonly></textarea>
+          </div>
+        </div>
+        <p class="hint" id="mcpStatus" aria-live="polite"></p>
         <h4 class="chart-title mt-4">Signed-in devices</h4>
         <div id="sessionList"></div>
         <div class="actions mt-3">

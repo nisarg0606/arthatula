@@ -22,6 +22,10 @@
  *                                                               -> { ok, fingerprint }
  *   POST /api/auth { action: "pair-approve", fingerprint }      (device)
  *   POST /api/auth { action: "pair-deny" }                      (device)
+ *   POST /api/auth { action: "mcp-create", label? }             (device) -> { token, expiresAt, session }
+ *        Mints a least-privilege 'mcp' session token for an AI
+ *        assistant; it can call /api/mcp only and is revocable from
+ *        the sessions list like any other session.
  *
  * Setup is locked behind the SETUP_SECRET environment secret (set it on
  * the Pages project before first use; it can be deleted once the code
@@ -214,6 +218,17 @@ export async function onRequestPost(context) {
     if (action === "pair-deny") {
       await clearPendingPairing(db);
       return json({ ok: true });
+    }
+    if (action === "mcp-create") {
+      /* The raw token is returned ONCE, here; only its SHA-256 is
+         stored. An mcp session can call /api/mcp and nothing else (see
+         requireAuth), shows in the sessions list, and dies with a code
+         change like every other session. */
+      const created = await createSession(db, { kind: "mcp", label: cleanLabel(body.label) || "AI assistant (MCP)" });
+      return json({
+        token: created.token, expiresAt: created.session.expiresAt, session: created.session,
+        sessions: await listSessions(db, currentHash)
+      });
     }
     if (action === "sessions") {
       return json({ sessions: await listSessions(db, currentHash) });

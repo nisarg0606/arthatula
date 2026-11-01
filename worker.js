@@ -20,6 +20,7 @@ import * as budget from "./functions/api/budget.js";
 import * as cards from "./functions/api/cards.js";
 import * as categorize from "./functions/api/categorize.js";
 import * as expenses from "./functions/api/expenses.js";
+import * as mcp from "./functions/api/mcp.js";
 import * as pending from "./functions/api/pending.js";
 import * as settings from "./functions/api/settings.js";
 import * as syncRequests from "./functions/api/sync-requests.js";
@@ -52,6 +53,7 @@ export const ROUTES = [
   ["/api/cards", cards, "api/cards.js"],
   ["/api/categorize", categorize, "api/categorize.js"],
   ["/api/expenses", expenses, "api/expenses.js"],
+  ["/api/mcp", mcp, "api/mcp.js"],
   ["/api/pending", pending, "api/pending.js"],
   ["/api/settings", settings, "api/settings.js"],
   ["/api/sync-requests", syncRequests, "api/sync-requests.js"],

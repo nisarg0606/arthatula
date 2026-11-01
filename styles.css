@@ -271,8 +271,10 @@ body.auth-locked header,body.auth-locked nav,body.auth-locked main,body.auth-loc
 .session-row button:hover{border-color:var(--neg);color:var(--neg)}
 .kind-badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:12px;font-weight:600;background:#ccfbf1;color:#0f766e;margin-left:8px;vertical-align:middle}
 .kind-badge.sync{background:#fef3c7;color:#92400e}
+.kind-badge.mcp{background:#ede9fe;color:#6d28d9}
 .dark .kind-badge{background:#042f2e;color:#5eead4}
 .dark .kind-badge.sync{background:#451a03;color:#fcd34d}
+.dark .kind-badge.mcp{background:#2e1065;color:#c4b5fd}
 .pair-fp{font-family:ui-monospace,Menlo,monospace;font-size:16px;letter-spacing:.08em;background:#ccfbf1;color:#0f766e;padding:2px 8px;border-radius:4px}
 .dark .pair-fp{background:#042f2e;color:#5eead4}
 #pairOpenStatus{font-weight:600}
