@@ -78,8 +78,8 @@ function loadLayout() {
 }
 
 /* Moves the cards into the saved order; anything else in the section
-   (a card added later) follows them. Charts in a card shown again
-   resize themselves (Chart.js watches its box). */
+   (a card added later) follows them. Charts in a card shown again fit
+   their new box by themselves (Chart.js watches it). */
 function applyLayout() {
   const dash = document.querySelector('[data-section="dashboard"]');
   if (!dash) return;
