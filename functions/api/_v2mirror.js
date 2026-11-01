@@ -25,7 +25,7 @@
 import { MONEY_FIELDS, readState } from "./budget.js";
 import { OWNER_ID, ensureV2, scope, newId } from "./_v2db.js";
 import { loadCategories, loadTransactions, loadRules, categoryIndex } from "./_v2store.js";
-import { summarize, monthOf, applyRules } from "../../js/core/v2/money.js";
+import { summarize, monthOf, applyRules, daysBetween } from "../../js/core/v2/money.js";
 
 /* Classic plan field -> v2 category name. */
 export const FIELD_CATEGORY = {
@@ -42,7 +42,8 @@ const FIELD_LABEL = {
   creditCardPayment: "Card payment", otherLoan: "Other loan", oneOffs: "One-off", otherExpenses: "Other expenses"
 };
 const MIRRORED = ["v1exp", "v1bank", "v1actual"];
-const MIRROR_VERSION = "2"; /* 2: rows before the baseline count in reports */
+const MIRROR_VERSION = "3"; /* 2: rows before the baseline count in reports
+                                3: unbooked months' bank inflows count as income */
 
 async function fingerprint(db) {
   const r = await db.prepare(
@@ -163,16 +164,59 @@ export async function mirrorV1(db, opts) {
       notes: e.note || "", pending: 0, hidden: 0, exclude: 0, review: 0, v1: e.id
     });
   }
+  /* Months whose income is already on record through the classic
+     actuals (an entered month with take-home pay booked): bank
+     inflows there stay neutral transfers, so a paycheck is never
+     counted twice — once in the actuals, once at the bank. Every
+     other month has NO income record in the classic app (its planner
+     starts at the baseline), so an unlinked bank inflow there is the
+     only income record there is: default it to Other income, or
+     cash flow pits months of (backfilled) spending against zero
+     income and every net reads deeply negative. */
+  const incomeBooked = {};
+  for (const a of state.actuals) {
+    if (a.entered && Math.round((a.takeHomePay || 0) * 100) > 0) incomeBooked[a.monthKey] = true;
+  }
+  /* Moves between his own accounts pair up even when the name gives
+     nothing away: an inflow matched by an equal outflow from a
+     DIFFERENT account within 3 days is a transfer, not income. */
+  const ownOutflows = bankTx.filter((t) => !t.pending && t.amount_cents > 0 && !linked[t.plaid_transaction_id]);
+  const pairsWithOwnOutflow = (inflow) => ownOutflows.some((o) =>
+    o.account_id !== inflow.account_id && o.amount_cents === -inflow.amount_cents &&
+    Math.abs(daysBetween(o.date, inflow.date)) <= 3);
+  const SELF_MOVE_NAME = /zelle payment from nisarg|requested transfer|internal transfer|online transfer|internet transfer|acct transfer|account transfer|xfer|funds transfer|americanexpress transfer|external transfer|ext trnsfr/i;
+  const P2P_NAME = /zelle payment from|venmo|cash app/i;
+  /* Is this unlinked bank inflow income? Only asked in months whose
+     income is not already booked in the classic actuals. His pay
+     arrives in two halves: a "…PAYROLL…" credit Plaid tags INCOME,
+     and an "Online Transfer / Payment: Credit" Plaid tags
+     TRANSFER_IN into his Amex checking — the second half counts
+     unless it pairs with an outflow of his own (a real move).
+     Settlements from other people count on the cash basis; moves
+     between his own accounts never do; anything unrecognized stays
+     a neutral transfer rather than inflating income. */
+  const inflowIsIncome = (t, amount) => {
+    if (amount <= 0 || incomeBooked[monthOf(t.date)]) return false;
+    const name = t.name || "";
+    if (t.pfc === "INCOME" || /payroll/i.test(name)) return true;
+    const paired = pairsWithOwnOutflow(t);
+    if (/online transfer \/ payment: credit/i.test(name)) return !paired;
+    if (paired || SELF_MOVE_NAME.test(name)) return false;
+    return P2P_NAME.test(name);
+  };
+
   const reviewedIncome = {};
   for (const t of bankTx) {
     if (t.pending || linked[t.plaid_transaction_id]) continue;
     const kind = reviews[t.plaid_transaction_id] || null;
     const amount = -t.amount_cents;
     if (kind === "income") reviewedIncome[monthOf(t.date)] = (reviewedIncome[monthOf(t.date)] || 0) + amount;
+    let defaultCat = cat("Transfer");
+    if (!kind && inflowIsIncome(t, amount)) defaultCat = cat("Other income");
     desired.push({
       ext: "bank:" + t.plaid_transaction_id, source: "v1bank", date: t.date, merchant: t.name, description: t.name,
       amount: amount, share: null,
-      categoryId: kind === "income" ? cat("Other income") : kind === "repayment" ? cat("Repayment") : cat("Transfer"),
+      categoryId: kind === "income" ? cat("Other income") : kind === "repayment" ? cat("Repayment") : defaultCat,
       accountId: acctByExt["plaid:" + t.account_id] || null, notes: "",
       pending: 0, hidden: kind === "ignore" ? 1 : 0, exclude: 0, review: kind ? 0 : 1, v1: null
     });
