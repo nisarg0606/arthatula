@@ -16,11 +16,11 @@ export function setMode(newMode) {
   setSignedIn(newMode === "database");
   if (newMode === "database" && !wasDb) onShowV2(document.body.getAttribute("data-tab") || "dashboard");
   if (els.storageMode) {
-    els.storageMode.textContent = app.mode === "database" ? "● Database" : "● Local only";
+    els.storageMode.textContent = app.mode === "database" ? "● Saved" : "● This browser only";
     els.storageMode.className = "storage-badge " + app.mode;
     els.storageMode.title = app.mode === "database"
-      ? "Saved to the shared database — your data follows you across devices."
-      : "API unreachable — saving only in this browser (localStorage).";
+      ? "Saved online in your own database: your data follows you to every device you sign in on."
+      : "Can't reach the server, so changes are saved only in this browser for now.";
   }
 }
 

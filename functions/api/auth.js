@@ -14,6 +14,9 @@
  *                                                window: null | { expiresAt } }
  *   POST /api/auth { action: "setup", setupSecret, code, label? } -> { token, expiresAt, session }
  *   POST /api/auth { action: "login", code, label? }            -> { token, expiresAt, session }
+ *   POST /api/auth { action: "reset-code", setupSecret, newCode, label? } -> { token, expiresAt, session }
+ *        Forgotten code: the SETUP_SECRET from first setup sets a new
+ *        code and signs out every session (devices, sync, MCP).
  *   POST /api/auth { action: "logout" }                         (any session)
  *   POST /api/auth { action: "revoke", id }                     (device)
  *   POST /api/auth { action: "change-code", currentCode, newCode } (device)
@@ -28,8 +31,8 @@
  *        the sessions list like any other session.
  *
  * Setup is locked behind the SETUP_SECRET environment secret (set it on
- * the Pages project before first use; it can be deleted once the code
- * exists), and the first code is claimed atomically — a racing second
+ * the Pages project before first use; keep it, since it also resets a
+ * forgotten code), and the first code is claimed atomically — a racing second
  * setup gets 409 and every pre-setup session is wiped.
  *
  * Every secret check reserves an attempt first: 5 per IP and 20 overall
@@ -159,6 +162,27 @@ export async function onRequestPost(context) {
     if (action === "login") {
       const check = await verifyCode(db, context.request, body.code);
       if (check.response) return check.response;
+      const created = await createSession(db, { kind: "device", label: cleanLabel(body.label) });
+      return json({ token: created.token, expiresAt: created.session.expiresAt, session: created.session });
+    }
+
+    if (action === "reset-code") {
+      if (!(await getAccessCodeHash(db))) return json({ error: "Access code setup required", setupRequired: true }, 409);
+      const expected = context.env.SETUP_SECRET;
+      if (typeof expected !== "string" || !expected) {
+        return json({ error: "Resetting needs your SETUP_SECRET. Add it back in Cloudflare (your app → Settings → Variables and Secrets), redeploy, then try again." }, 403);
+      }
+      if (!validNewCode(body.newCode)) return json({ error: SHORT_CODE_ERROR }, 400);
+      /* Same attempt budget as sign-in: reserved before the check. */
+      const slot = await reserveAttempt(db, context.request);
+      if (!slot.ok) return tooManyAttempts(slot.retryAfterMs);
+      const okSecret = timingSafeEqualHex(await sha256Hex(String(body.setupSecret || "")), await sha256Hex(expected));
+      if (!okSecret) return slot.atLimit ? tooManyAttempts(slot.retryAfterMs) : json({ error: "Wrong setup secret." }, 401);
+      await setAccessCodeHash(db, await hashAccessCode(body.newCode));
+      /* Whoever knew the old code is out, sync and MCP tokens included. */
+      await deleteAllSessions(db);
+      await clearPendingPairing(db);
+      await clearAttempts(db);
       const created = await createSession(db, { kind: "device", label: cleanLabel(body.label) });
       return json({ token: created.token, expiresAt: created.session.expiresAt, session: created.session });
     }

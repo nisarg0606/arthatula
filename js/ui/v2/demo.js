@@ -3,6 +3,7 @@
    every screen while the sample data is loaded. Loading or clearing it
    reloads the page, so every screen (and cache) starts over. */
 import { api, h, clear, button } from "./kit.js";
+import { renderChecklist } from "./home.js";
 
 export function check() {
   const box = document.getElementById("demoBox");
@@ -25,7 +26,7 @@ function draw(box, st) {
       " · ", b));
   } else if (st.empty && !st.dismissed) {
     const go = button("Explore with sample data", function () { act("POST", {}, go); }, "btn-primary");
-    const skip = button("Start fresh", function () { api("POST", "demo", { action: "dismiss" }).then(function () { clear(box); }); });
+    const skip = button("Start fresh", function () { api("POST", "demo", { action: "dismiss" }).then(function () { clear(box); renderChecklist(); }); });
     box.appendChild(h("section", { class: "card demo-welcome" },
       h("h2", { class: "card-title", text: "Welcome to Arthatula" }),
       h("p", { class: "hint", text: "Want a look around first? Load a few months of made-up accounts, spending, budgets and investments, then clear it with one tap when you're ready to add your own." }),

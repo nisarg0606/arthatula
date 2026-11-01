@@ -1,12 +1,13 @@
-/* Settings additions for the new model: categories and groups, rules,
-   export (JSON / CSV), and the migration check (classic actuals vs the
-   new model, month by month). */
+/* Settings additions for the new model. Basics (#v2Manage): categories
+   and groups, market data, export (JSON / CSV). Advanced
+   (#v2ManageAdvanced, inside the collapsed Advanced card): rules and the
+   data check (classic actuals vs the new model, month by month). */
 import { keepScroll } from "../scroll.js";
 import { v2, api, h, clear, money, monthLabel, loadBasics, categorySelect, accountSelect, field, openDialog, section, button, errorState, loading, categoryName } from "./kit.js";
 import { apiFetch } from "../storage.js";
 import { app } from "../context.js";
 
-let root = null;
+let root = null, adv = null;
 
 function categoriesCard() {
   const body = h("div", { class: "v2-cats" });
@@ -135,8 +136,8 @@ function migrationCard() {
       if (m.mirroredAt) box.appendChild(h("p", { class: "hint", text: "Last copied from the classic app: " + new Date(m.mirroredAt).toLocaleString() }));
     }).catch(function (e) { errorState(box, e); });
   };
-  return { el: section("New model check", [button("Check now", function () { run("GET"); }, "v2-mini"), button("Re-copy everything", function () { run("POST"); }, "v2-mini")],
-    h("div", null, h("p", { class: "hint", text: "The new screens read a copy of your classic data that refreshes whenever it changes. This compares the copy with the classic actuals, month by month; rows you add on the new screens are listed separately." }), box)), run: run };
+  return { el: section("Data check", [button("Check now", function () { run("GET"); }, "v2-mini"), button("Re-copy everything", function () { run("POST"); }, "v2-mini")],
+    h("div", null, h("p", { class: "hint", text: "Makes sure the new screens and the classic ones show the same money. The new screens read a copy of your classic data that refreshes whenever it changes; this compares the two month by month. Rows you add on the new screens are listed separately." }), box)), run: run };
 }
 
 /* The Finnhub key behind the nightly market recap (see functions/api/_market.js). */
@@ -176,17 +177,20 @@ function drawNow() {
   clear(root);
   root.appendChild(categoriesCard());
   root.appendChild(marketKeyCard());
-  const rulesBox = h("div");
-  root.appendChild(rulesBox);
-  api("GET", "rules").then(function (r) { clear(rulesBox).appendChild(rulesCard(r.rules)); }).catch(function (e) { errorState(rulesBox, e); });
   root.appendChild(section("Export", [], h("div", null,
-    h("p", { class: "hint", text: "Everything in the new model: accounts, transactions, categories, budgets, rules, recurring, goals and balance history." }),
+    h("p", { class: "hint", text: "A copy of everything on the new screens: accounts, transactions, categories, budgets, rules, recurring, goals and balance history. CSV opens in Excel or Google Sheets." }),
     h("div", { class: "actions" }, button("Download JSON", function () { download("export?format=json", "money-export.json"); }), button("Transactions CSV", function () { download("export?format=csv", "transactions.csv"); })))));
-  root.appendChild(migrationCard().el);
+  if (!adv) return;
+  clear(adv);
+  const rulesBox = h("div");
+  adv.appendChild(rulesBox);
+  api("GET", "rules").then(function (r) { clear(rulesBox).appendChild(rulesCard(r.rules)); }).catch(function (e) { errorState(rulesBox, e); });
+  adv.appendChild(migrationCard().el);
 }
 
 export function render(container) {
   root = container;
+  adv = document.getElementById("v2ManageAdvanced");
   loading(root);
   return loadBasics(true).then(draw).catch(function (e) { errorState(root, e); });
 }

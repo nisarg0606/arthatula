@@ -12,19 +12,20 @@ function info() { return app.geminiInfo || {}; }
 export function renderGeminiStatus() {
   var ai = info(), name = SHORT[ai.provider] || "AI";
   var txt = ai.hasKey
-    ? "✦ " + name + ": on (key ••••" + (ai.last4 || "") + ", " + (ai.model || "") + ")"
-    : "✦ AI: off — keyword rules";
+    ? "✦ AI on · " + name
+    : "✦ AI off · sorting by keywords";
   if (els.geminiStatus) {
     els.geminiStatus.textContent = txt;
+    els.geminiStatus.title = ai.hasKey ? name + " key ••••" + (ai.last4 || "") + ", model " + (ai.model || "") : "Add a free AI key in Settings to sort expenses by AI.";
     els.geminiStatus.className = "storage-badge " + (ai.hasKey ? "database" : "local");
   }
   if (els.geminiSettingsStatus) {
     els.geminiSettingsStatus.textContent = app.mode !== "database"
-      ? "Local-only mode: an AI key can only be saved with the database connected. Categories currently use keyword rules."
+      ? "Can't reach the server, so an AI key can't be saved right now. Expenses are sorted by keywords."
       : ai.hasKey
         ? (ai.label || name) + " is on (key " + (ai.source === "env" ? "from a Cloudflare secret" : "saved in the app") +
           ", ••••" + (ai.last4 || "") + "). Model: " + (ai.model || "") + "."
-        : "No key for " + (ai.label || "this provider") + " yet — expenses are sorted by keyword rules until you add one.";
+        : "No key for " + (ai.label || "this provider") + " yet, so expenses are sorted by keywords until you add one.";
   }
   if (els.aiProviderSelect && ai.provider) els.aiProviderSelect.value = ai.provider;
   /* The box holds a model only when one is saved; empty means "use the
@@ -72,6 +73,14 @@ export function renderSplitwiseStatus() {
 
 /* Wires up this part of the app; main.js calls every init() in order. */
 export function init() {
+  /* Settings → Advanced stays open or shut the way you left it (this browser). */
+  var adv = document.getElementById("settingsAdvanced");
+  if (adv) {
+    try { adv.open = localStorage.getItem("arthatula-settings-advanced") === "1"; } catch (e) { /* storage blocked */ }
+    adv.addEventListener("toggle", function () {
+      try { localStorage.setItem("arthatula-settings-advanced", adv.open ? "1" : "0"); } catch (e) { /* storage blocked */ }
+    });
+  }
   if (els.aiProviderSelect) {
     els.aiProviderSelect.addEventListener("change", function () {
       putAi({ aiProvider: els.aiProviderSelect.value })

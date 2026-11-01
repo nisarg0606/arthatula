@@ -35,6 +35,7 @@ import * as v2accounts from "./functions/api/v2/accounts.js";
 import * as v2autoreview from "./functions/api/v2/autoreview.js";
 import * as v2budgets from "./functions/api/v2/budgets.js";
 import * as v2categories from "./functions/api/v2/categories.js";
+import * as v2checklist from "./functions/api/v2/checklist.js";
 import * as v2demo from "./functions/api/v2/demo.js";
 import * as v2export from "./functions/api/v2/export.js";
 import * as v2import from "./functions/api/v2/import.js";
@@ -74,6 +75,7 @@ export const ROUTES = [
   ["/api/v2/autoreview", v2autoreview, "api/v2/autoreview.js"],
   ["/api/v2/budgets", v2budgets, "api/v2/budgets.js"],
   ["/api/v2/categories", v2categories, "api/v2/categories.js"],
+  ["/api/v2/checklist", v2checklist, "api/v2/checklist.js"],
   ["/api/v2/demo", v2demo, "api/v2/demo.js"],
   ["/api/v2/export", v2export, "api/v2/export.js"],
   ["/api/v2/goals", v2goals, "api/v2/goals.js"],

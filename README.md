@@ -241,7 +241,7 @@ This app has two storage modes, shown by the badge in the header:
 - **Local only mode (fallback):** if the API is unreachable — local
   development with a plain static server, or a static deploy on Netlify or
   Vercel (D1 is a Cloudflare feature) — the app stores everything in the
-  browser's `localStorage` instead. The badge reads "Local only" so you
+  browser's `localStorage` instead. The badge reads "This browser only" so you
   always know where your numbers are going. A local mirror is also kept as
   a safety net while in database mode.
 
@@ -287,14 +287,16 @@ The deployed app holds real financial data behind a public URL, so:
   `SETUP_SECRET` environment secret. Before the first sign-in, add it:
   Pages project → Settings → Variables and Secrets → Add → type
   *Secret*, name `SETUP_SECRET`, a long random value → Save, then
-  redeploy. The setup screen asks for it. Once your code exists you can
-  delete the secret — setup then stays locked for good. Without the
-  secret nobody (including you) can claim a fresh database.
+  redeploy. The setup screen asks for it. Keep it set: it is also how
+  you reset a forgotten access code (sign-in screen → **Forgot your
+  access code?**, which sets a new code and signs out every session,
+  sync and MCP tokens included). Without the secret nobody (including
+  you) can claim a fresh database or reset the code.
 - **Access code.** At least 12 characters, stored as salted
   PBKDF2-SHA256 (100k iterations). Codes stored by v6.x as plain SHA-256
   still work and are upgraded on the next sign-in.
 - **Attempt limit.** Every secret check (sign-in, change-code, setup
-  secret, pairing code) is counted *before* it's checked: 5 per IP and
+  secret, code reset, pairing code) is counted *before* it's checked: 5 per IP and
   20 overall per 10 minutes, then HTTP 429. Parallel bursts get no
   extra guesses. Devices that are already signed in are unaffected.
 - **Old deployments.** Cloudflare keeps every deployment reachable at
@@ -319,7 +321,7 @@ The deployed app holds real financial data behind a public URL, so:
 
 ### Pairing the Plaid sync script
 
-1. Settings → Security → **Pair automation**. A one-time code like
+1. Settings → Advanced → **Pair automation**. A one-time code like
    `K7QD-9MXR` appears; it works once and expires in 10 minutes.
 2. The script generates its own token locally (32 random bytes,
    base64url), keeps it, and sends only the hash:
@@ -355,7 +357,7 @@ the budget through tools instead of the raw API:
   so auto-categorization, dedupe, bank auto-link and the monthly rollup
   behave exactly as in the app (and the new screens see them too).
 
-Connect one in Settings → Security → **AI assistant (MCP)** → *Create
+Connect one in Settings → Advanced → **Connect an AI app (MCP)** → *Create
 MCP token*. The token is shown once, together with the endpoint
 (`https://<your-app>/api/mcp`) and a ready-to-paste config. For Claude
 Code (`.mcp.json`) or Cursor (`.cursor/mcp.json`), merge it into the MCP
@@ -538,7 +540,7 @@ ones whenever they change: daily expenses, bank rows that aren't
 already an expense (income, repayments, card payments, transfers),
 typed-in actuals, bank accounts, cards and the plan. The daily log stays
 the record for its rows: editing one on the new screens writes the
-change back to the classic log. **Settings → New model check** compares
+change back to the classic log. **Settings → Advanced → Data check** compares
 classic actuals with the new model month by month; every plan month must
 match to the cent (rows added on the new screens are listed apart).
 Spending from before the baseline date counts on the new screens as
@@ -622,7 +624,7 @@ apps share one database, so one backup covers both).
    D1 database → variable name `DB` → select `monthly-budget`.
    Then redeploy once so the binding takes effect.
 6. **Load your numbers** — open the deployed app, check the badge says
-   **Database**, and either type your figures in or use **Import JSON**
+   **Saved**, and either type your figures in or use **Import JSON**
    with a previously exported `budget-data.json`. Imports save through the
    API in database mode.
 7. **(Optional) Turn on Gemini** — either add the `GEMINI_API_KEY`
@@ -667,7 +669,7 @@ D1 also keeps its own point-in-time history ("Time Travel") for recent days.
 2. Build command: *leave empty*. Publish directory: `.` (already set in
    `netlify.toml`).
 3. Deploy. The API/D1 parts don't run on Netlify, so the app automatically
-   uses its localStorage fallback ("Local only" badge).
+   uses its localStorage fallback ("This browser only" badge).
 
 ## Deploy on Vercel (static, local-only mode)
 

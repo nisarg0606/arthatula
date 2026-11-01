@@ -18,9 +18,10 @@ export function showGate(kind, note) {
   els.authGate.hidden = false;
   if (els.gateSetupForm) els.gateSetupForm.hidden = kind !== "setup";
   if (els.gateLoginForm) els.gateLoginForm.hidden = kind !== "login";
-  var errEl = kind === "setup" ? els.gateSetupError : els.gateLoginError;
+  if (els.gateResetForm) els.gateResetForm.hidden = kind !== "reset";
+  var errEl = gateErrorEl(kind);
   if (errEl) { errEl.hidden = !note; errEl.textContent = note || ""; }
-  var input = kind === "setup" ? (els.gateSetupSecret || els.gateSetupCode) : els.gateLoginCode;
+  var input = kind === "setup" ? (els.gateSetupSecret || els.gateSetupCode) : kind === "reset" ? els.gateResetSecret : els.gateLoginCode;
   if (input) setTimeout(function () { try { input.focus(); } catch (e) { /* noop */ } }, 50);
 }
 
@@ -29,8 +30,12 @@ export function hideGate() {
   if (els.authGate) els.authGate.hidden = true;
 }
 
+function gateErrorEl(kind) {
+  return kind === "setup" ? els.gateSetupError : kind === "reset" ? els.gateResetError : els.gateLoginError;
+}
+
 export function gateError(kind, msg) {
-  var errEl = kind === "setup" ? els.gateSetupError : els.gateLoginError;
+  var errEl = gateErrorEl(kind);
   if (errEl) { errEl.hidden = false; errEl.textContent = msg; }
 }
 
@@ -93,6 +98,8 @@ export function renderSecurity(force) {
   if (!els.securitySection) return;
   var inDb = app.mode === "database";
   els.securitySection.hidden = !inDb; /* local-only: no server sessions to manage */
+  var adv = document.getElementById("securityAdvanced");
+  if (adv) adv.hidden = !inDb;
   if (inDb && (force || Date.now() - app.sessionsLoadedAt > 15000)) { loadSessions(); loadPairing(); }
 }
 
@@ -208,6 +215,22 @@ export function init() {
         els.gateLoginCode.value = "";
         enterApp();
       }).catch(function (e) { gateError("login", e.message); });
+    });
+  }
+  /* Forgotten code: the setup secret sets a new one (signs out everything else). */
+  if (els.gateForgotBtn) els.gateForgotBtn.addEventListener("click", function () { showGate("reset"); });
+  if (els.gateResetBack) els.gateResetBack.addEventListener("click", function () { showGate("login"); });
+  if (els.gateResetForm) {
+    els.gateResetForm.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var code = els.gateResetCode.value;
+      if (code.length < 12) { gateError("reset", "Access code must be at least 12 characters."); return; }
+      if (code !== els.gateResetConfirm.value) { gateError("reset", "The two codes don't match — type the same code twice."); return; }
+      authPost({ action: "reset-code", setupSecret: els.gateResetSecret.value, newCode: code, label: deviceLabel() }).then(function (data) {
+        setSessionToken(data.token);
+        els.gateResetSecret.value = ""; els.gateResetCode.value = ""; els.gateResetConfirm.value = "";
+        enterApp();
+      }).catch(function (e) { gateError("reset", e.message); });
     });
   }
   /* ---------- Settings -> Security ---------- */

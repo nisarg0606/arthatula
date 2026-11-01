@@ -62,6 +62,21 @@ budgets and investments to click around in (the classic tabs stay empty).
 A banner on every screen has **Clear sample data**, which removes only the
 sample rows — anything you added yourself stays.
 
+**Getting started checklist.** Once you start for real (tap **Start
+fresh**, or clear the sample data and add something), Home shows a short
+checklist. Tap a step to jump to the right place; each one ticks itself
+when it's done:
+
+- **Set your starting balance**
+- **Log your first expense**
+- **Set a budget**
+- **Turn on AI (optional)** — see section 5
+- **Add the app to your Home Screen** — ticks itself the first time you
+  open the app from the icon, or tap **I've added it**
+
+It goes away when every step is done, or tap **Hide this for good**.
+The steps below are the same thing in more detail.
+
 1. **Tell it where you're starting.** Home → scroll to **Plan settings**
    at the bottom → enter today's balance in **Starting balance**. The app
    counts everything from today on top of it.
@@ -94,8 +109,15 @@ On a phone the bar at the bottom has the things you use most:
   time (from the daily balances your sync records), with an S&P 500 line to
   compare, and the evening **Market today** recap (see below).
 - **Goals** — things you're saving for.
-- **Splitwise** — your balances with friends (needs a Splitwise key in Settings).
-- **Settings** — AI, Splitwise, market data, rules, categories, and security.
+- **Splitwise** — your balances with friends (needs a Splitwise key in **Settings → Advanced**).
+- **Settings** — split in two:
+  - **Basics** (always shown): the AI assistant (with step-by-step help to
+    get a free Gemini key), your access code and signed-in devices,
+    categories, market data and export.
+  - **Advanced** (tap to open; it stays open or shut the way you left it):
+    connecting an AI app (MCP), bank sync pairing, rules, merchant rules,
+    Splitwise and the **Data check** (which compares the classic and new
+    screens). You don't need any of it for everyday use.
 - **Month editor**, **Daily expenses**, **Cards**, **Bank** — the classic
   screens (on a computer, under **More** at the end of the tab bar): plan each month line by line, the daily expense log, credit-card
   statement cycles, and synced bank data.
@@ -108,6 +130,14 @@ Tips:
 - **Customize** (top of Home) picks which cards Home shows and their order.
   It's saved to your account, so every device gets the same layout.
   **Reset to default** brings everything back.
+- The badges at the top: **Saved** means your data is safe online and
+  follows you to every device; **This browser only** means the app can't
+  reach its server right now (see section 10). **AI off · sorting by
+  keywords** means no AI key is set, so expenses are sorted by simple
+  keyword matching.
+- In Budget, **Roll over** carries what's left (or what you overspent) in
+  a category into next month's budget for it. Tap **What's "Roll over"?**
+  at the bottom of Budget for a reminder.
 - In Budget, the **avg $…** chip is what you spent on average over the last
   three months. Tap it to plan that much.
 - Give a category an emoji in **Settings → Categories** (tap the category).
@@ -210,7 +240,7 @@ $18 on lunch", "what did I spend on groceries last month?", "how is my
 food budget doing?").
 
 **Step 1 — make a key for your agent.** In your app: **More → Settings →
-Security → AI assistant (MCP) → Create MCP token**. It shows three things
+Advanced → Connect an AI app (MCP) → Create MCP token**. It shows three things
 once: the **address** (`https://<your-app>/api/mcp`), the **token**, and
 a ready-made **config**. Copy them now; the token isn't shown again.
 
@@ -345,7 +375,7 @@ app expects from the sync".
   else's copy can read it — including the person who shared this app
   with you.
 - The app is locked behind your access code. Manage signed-in devices in
-  **Settings → Security**, and sign out any you don't recognize.
+  **Settings → Access code & devices**, and sign out any you don't recognize.
 - If you turn on AI, the text of an expense (and for Ask, your question
   plus budget totals) is sent to the provider you chose. Without a key,
   nothing leaves your account.
@@ -363,15 +393,21 @@ secret wasn't set. Cloudflare dashboard → **Workers & Pages** → your app
 → **Settings → Variables and Secrets** → add a secret named
 `SETUP_SECRET` → deploy again.
 
-**I forgot the setup secret.** Set a new one the same way; it's only used
-before an access code exists.
+**I forgot my access code.** On the sign-in screen tap **Forgot your
+access code?**, enter your setup secret (the `SETUP_SECRET` you chose when
+you deployed) and pick a new code. Your data stays as it is; every device,
+the bank sync and any connected AI app are signed out, so sign in again
+on each device (and pair the sync / create a new MCP token if you use
+them). Wrong guesses count toward the same lock as sign-in: 5 tries per
+10 minutes.
 
-**I forgot my access code.** It can't be recovered. In the Cloudflare
-dashboard you can delete the app's D1 database and deploy again to start
-fresh (this erases your data — export it first from the Month editor if
-you're still signed in somewhere).
+**I forgot the setup secret too** (or deleted it). Set a new one:
+Cloudflare dashboard → **Workers & Pages** → your app → **Settings →
+Variables and Secrets** → edit or add `SETUP_SECRET` → deploy again. Then
+use **Forgot your access code?** with the new secret. The secret is only
+ever checked at first setup and for this reset, so keep it set.
 
-**The badge says "Local only".** The app can't reach its database. Check
+**The badge says "This browser only".** The app can't reach its database. Check
 your connection and reload; if it stays, open the Cloudflare dashboard and
 make sure the app has a D1 database bound as `DB`.
 

@@ -97,7 +97,7 @@
     <p class="auth-brand"><img class="brand-mark" src="icons/icon-192.png" alt=""> Arthatula</p>
     <form id="gateSetupForm" hidden>
       <h1 class="auth-title">Create your access code</h1>
-      <p class="hint">This budget is private. Pick an access code — you'll use it to sign in on each of your devices, and each device stays signed in for 90 days. There's no recovery if you forget it, so pick one you'll remember (a password manager is ideal).</p>
+      <p class="hint">This budget is private. Pick an access code — you'll use it to sign in on each of your devices, and each device stays signed in for 90 days. A password manager is the easiest place to keep it. If you ever forget it, you can set a new one with this same setup secret, so keep the secret somewhere safe too.</p>
       <div class="field">
         <label for="gateSetupSecret">Setup secret (the SETUP_SECRET you chose when you deployed the app)</label>
         <input id="gateSetupSecret" type="password" autocomplete="off" required>
@@ -126,6 +126,28 @@
       <div class="actions">
         <button type="submit">Sign in</button>
       </div>
+      <p class="auth-alt"><button type="button" id="gateForgotBtn" class="link-btn">Forgot your access code?</button></p>
+    </form>
+    <form id="gateResetForm" hidden>
+      <h1 class="auth-title">Choose a new access code</h1>
+      <p class="hint">Enter the setup secret (the SETUP_SECRET you chose when you deployed the app) and pick a new code. Every device, sync and AI app that was signed in is signed out; your data stays as it is.</p>
+      <div class="field">
+        <label for="gateResetSecret">Setup secret</label>
+        <input id="gateResetSecret" type="password" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="gateResetCode">New access code (at least 12 characters)</label>
+        <input id="gateResetCode" type="password" autocomplete="new-password" minlength="12" required>
+      </div>
+      <div class="field">
+        <label for="gateResetConfirm">Type it again</label>
+        <input id="gateResetConfirm" type="password" autocomplete="new-password" minlength="12" required>
+      </div>
+      <p class="auth-error" id="gateResetError" hidden></p>
+      <div class="actions">
+        <button type="submit">Set new code &amp; sign in</button>
+      </div>
+      <p class="auth-alt"><button type="button" id="gateResetBack" class="link-btn">Back to sign in</button></p>
     </form>
   </div>
 </div>
@@ -190,6 +212,8 @@
 <main id="main" class="max-w-6xl mx-auto px-4 pt-8 pb-6">
   <!-- Sample data: the first-run card (Dashboard) or the banner (everywhere). -->
   <div id="demoBox"></div>
+  <!-- First-run checklist (Home only; see js/ui/v2/home.js). -->
+  <div id="setupBox"></div>
 
   <!-- ============ DASHBOARD ============ -->
   <div data-section="dashboard">
@@ -290,11 +314,11 @@
       <h3 class="chart-title plan-settings-title">Plan settings</h3>
       <div class="baseline-fields grid sm:grid-cols-2 gap-4 max-w-2xl">
         <div class="field">
-          <label for="startingBalance">Starting balance ($) — actual balance at the baseline date</label>
+          <label for="startingBalance">Starting balance ($) — what was in your account on the start date</label>
           <input id="startingBalance" type="number" inputmode="decimal" step="0.01" placeholder="0">
         </div>
         <div class="field">
-          <span class="field-label">Actuals start on</span>
+          <span class="field-label">Start date (real numbers count from here)</span>
           <p class="baseline-fixed" id="baselineDateDisplay"></p><input type="hidden" id="baselineDate" value="">
         </div>
       </div>
@@ -425,9 +449,9 @@
   <div data-section="settings" hidden>
     <section class="card" aria-labelledby="settings-heading">
       <h2 id="settings-heading" class="card-title">Settings</h2>
-      <p class="hint">New here, or setting up AI or an AI agent? Read the <a href="https://github.com/nisarg0606/arthatula/blob/main/docs/GUIDE.md" target="_blank" rel="noopener">guide</a>. Found a bug or have an idea? <a class="feedback-link" href="https://github.com/nisarg0606/arthatula/issues/new?template=feedback.yml" target="_blank" rel="noopener">Send feedback</a> (opens a public GitHub issue).</p>
+      <p class="hint">New here, or setting up AI? Read the <a href="https://github.com/nisarg0606/arthatula/blob/main/docs/GUIDE.md" target="_blank" rel="noopener">guide</a>. Found a bug or have an idea? <a class="feedback-link" href="https://github.com/nisarg0606/arthatula/issues/new?template=feedback.yml" target="_blank" rel="noopener">Send feedback</a> (opens a public GitHub issue).</p>
       <h3 class="chart-title">AI assistant</h3>
-      <p class="hint">Sorts expenses into categories, answers "Ask about your budget" and checks bank payments to review. Pick a provider and paste its key; without one, the app sorts by keyword rules.</p>
+      <p class="hint">Optional. Sorts expenses into categories, answers "Ask about your budget" and checks bank payments for you. Google Gemini is free: follow the steps below. Without a key, the app sorts expenses by keywords (like "uber" → Transport).</p>
       <p class="hint" id="geminiSettingsStatus">Checking…</p>
       <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
         <div class="field">
@@ -452,30 +476,24 @@
         </div>
       </div>
       <p class="hint" id="aiKeyHelp"></p>
+      <details class="howto gemini-help">
+        <summary>Get a free Gemini key, step by step (about 2 minutes)</summary>
+        <ol class="setup-howto">
+          <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> and sign in with any Google account.</li>
+          <li>Accept the terms if asked, then tap <strong>Create API key</strong>.</li>
+          <li>Copy the key it shows (a long line of letters and numbers).</li>
+          <li>Back here: keep the provider on <strong>Google Gemini (free tier)</strong>, paste the key into <strong>API key</strong> and tap <strong>Save</strong>.</li>
+        </ol>
+        <p class="hint">That's it: new expenses get sorted by AI and "Ask about your budget" starts answering. The free tier is plenty for one person; you can leave the Model box empty.</p>
+      </details>
       <div class="actions mt-2">
         <button type="button" id="geminiSaveBtn" class="btn-primary">Save</button>
         <button type="button" id="geminiClearBtn" class="danger">Clear saved key</button>
       </div>
       <p class="hint">The key is stored only in your database and used only by the server; you'll see just its last 4 characters. A Cloudflare secret (<code>GEMINI_API_KEY</code>, <code>XAI_API_KEY</code> or <code>OPENAI_API_KEY</code>) takes precedence. Never commit a key to git.</p>
-      <h3 class="chart-title mt-6">Splitwise — live balances</h3>
-      <p class="hint" id="splitwiseSettingsStatus">Checking…</p>
-      <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
-        <div class="field">
-          <label for="splitwiseKeyInput">Splitwise API key (saved server-side, never shown back)</label>
-          <input id="splitwiseKeyInput" type="password" autocomplete="off" placeholder="Paste your personal API key from Splitwise">
-        </div>
-      </div>
-      <div class="actions mt-2">
-        <button type="button" id="splitwiseSaveBtn">Save key</button>
-        <button type="button" id="splitwiseClearBtn" class="danger">Disconnect Splitwise</button>
-      </div>
-      <p class="hint">Get the key from Splitwise: sign in at splitwise.com → your account → Privacy and Security → Your Apps → register an app (any name) → generate a personal API key on its page. The key is stored only in the database and used only by the server to read your balances — the Splitwise tab is read-only and nothing is ever written back to Splitwise. Or set the <code>SPLITWISE_API_KEY</code> secret on the Cloudflare Pages project, which takes precedence.</p>
-      <h3 class="chart-title mt-6">Merchant rules</h3>
-      <p class="hint">Expenses from these merchants always go under the category you chose, before the AI or the keyword rules are asked.</p>
-      <ul id="merchantRulesList" class="merchant-rules"></ul>
       <div id="securitySection" hidden>
-        <h3 class="chart-title mt-6">Security — access code &amp; devices</h3>
-        <p class="hint">Your budget is protected by an access code. Each device that signs in gets its own session (90 days, renewed as you use it) — revoke any device here and it is signed out immediately. Changing the code signs out every other device.</p>
+        <h3 class="chart-title mt-6">Access code &amp; devices</h3>
+        <p class="hint">Your budget is protected by an access code. Each device that signs in stays signed in for 90 days (renewed as you use it) — sign any device out here and it is out immediately. Changing the code signs out every other device. Forgot it? Use "Forgot your access code?" on the sign-in screen.</p>
         <form id="secChangeForm">
           <div class="grid sm:grid-cols-3 gap-4 max-w-3xl">
             <div class="field">
@@ -496,7 +514,40 @@
           </div>
           <p class="hint" id="secChangeStatus"></p>
         </form>
-        <h4 class="chart-title mt-4">Automation (Plaid sync)</h4>
+        <h4 class="chart-title mt-4">Signed-in devices</h4>
+        <div id="sessionList"></div>
+        <div class="actions mt-3">
+          <button type="button" id="signOutBtn" class="danger">Sign out of this device</button>
+        </div>
+      </div>
+      <h3 class="chart-title mt-6">Your data</h3>
+      <p class="hint">Back up the classic screens with <strong>Export JSON</strong> in the Month editor tab: it downloads your plan, actuals, daily expenses, credit cards and starting balance as <code>budget-data.json</code>. <strong>Import JSON</strong> puts a backup back (older backups without cards work too). Keep the file somewhere private. The new screens have their own Export below.</p>
+    </section>
+    <div id="v2Manage"></div>
+    <!-- Advanced: for power users. Collapsed until opened; the choice is
+         remembered in this browser (js/ui/settings.js). -->
+    <details id="settingsAdvanced" class="settings-advanced">
+      <summary class="card"><span class="card-title">Advanced</span><span class="hint">Connecting AI apps, bank sync, rules, Splitwise and the data check. You don't need any of it to use the app.</span></summary>
+      <section class="card" aria-label="Advanced settings">
+      <h3 class="chart-title">Splitwise — live balances</h3>
+      <p class="hint" id="splitwiseSettingsStatus">Checking…</p>
+      <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
+        <div class="field">
+          <label for="splitwiseKeyInput">Splitwise API key (saved server-side, never shown back)</label>
+          <input id="splitwiseKeyInput" type="password" autocomplete="off" placeholder="Paste your personal API key from Splitwise">
+        </div>
+      </div>
+      <div class="actions mt-2">
+        <button type="button" id="splitwiseSaveBtn">Save key</button>
+        <button type="button" id="splitwiseClearBtn" class="danger">Disconnect Splitwise</button>
+      </div>
+      <p class="hint">Get the key from Splitwise: sign in at splitwise.com → your account → Privacy and Security → Your Apps → register an app (any name) → generate a personal API key on its page. The key is stored only in the database and used only by the server to read your balances — the Splitwise tab is read-only and nothing is ever written back to Splitwise. Or set the <code>SPLITWISE_API_KEY</code> secret on the Cloudflare Pages project, which takes precedence.</p>
+      <h3 class="chart-title mt-6">Merchant rules</h3>
+      <p class="hint">Expenses from these merchants always go under the category you chose, before the AI or the keyword rules are asked.</p>
+      <ul id="merchantRulesList" class="merchant-rules"></ul>
+      <div id="securityAdvanced" hidden>
+        <h3 class="chart-title mt-6">Bank sync (Plaid automation)</h3>
+        <details class="explain"><summary>What's this?</summary><p>An optional script you run yourself that copies your bank and card transactions in through Plaid. It needs to be paired once with a one-time code from here. Without it, you add expenses by hand.</p></details>
         <p class="hint">To connect the automatic expense sync, open a pairing window and give the one-time code to the sync script. The code works once and expires in 10 minutes. A paired script can only add and list expenses and update card statement dates — it can't read your plan, change settings, or manage devices — and it stays paired for 180 days.</p>
         <div class="actions mt-2">
           <button type="button" id="pairOpenBtn">Pair automation</button>
@@ -511,7 +562,8 @@
             <button type="button" id="pairDenyBtn" class="danger">Deny</button>
           </div>
         </div>
-        <h4 class="chart-title mt-4">AI assistant (MCP)</h4>
+        <h3 class="chart-title mt-6" title="MCP is a standard way for AI apps to use other apps.">Connect an AI app (MCP)</h3>
+        <details class="explain"><summary>What's MCP?</summary><p>MCP (Model Context Protocol) is a standard way for AI apps such as Claude or ChatGPT to use other apps. Here it lets one read your budget and add expenses when you ask it to. Skip it if you don't use one.</p></details>
         <p class="hint">Connect an AI assistant (Claude, ChatGPT, Cursor, and other MCP clients) to this budget. Create a token, then paste the endpoint and token into the assistant's MCP settings. The token can <strong>only</strong> use the MCP tools — read the budget, accounts, transactions, bank snapshot and pending charges, add / edit / delete expenses, and request a sync. It can't open the app, call the raw API, change settings or the access code, or manage devices. Each token appears in the list below as its own session: revoke it there any time, and changing your access code signs it out too.</p>
         <div class="actions mt-2">
           <button type="button" id="mcpCreateBtn">Create MCP token</button>
@@ -534,16 +586,10 @@
           </div>
         </div>
         <p class="hint" id="mcpStatus" aria-live="polite"></p>
-        <h4 class="chart-title mt-4">Signed-in devices</h4>
-        <div id="sessionList"></div>
-        <div class="actions mt-3">
-          <button type="button" id="signOutBtn" class="danger">Sign out of this device</button>
-        </div>
       </div>
-      <h3 class="chart-title mt-6">Your data</h3>
-      <p class="hint">Export JSON (in the Month editor tab) downloads everything — plan, actuals, daily expenses, credit cards and baseline. Import JSON restores it, saving through the database when in Database mode; older exports without cards still import fine. The exported file is named <code>budget-data.json</code> and is git-ignored by design.</p>
-    </section>
-    <div id="v2Manage"></div>
+      </section>
+      <div id="v2ManageAdvanced"></div>
+    </details>
   </div>
 </main>
 
