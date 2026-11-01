@@ -161,7 +161,17 @@
   <button type="button" class="tab-btn classic" data-tab="daily"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg><span class="lbl-long">Daily expenses</span><span class="lbl-short">Daily</span><span class="tab-badge" id="reviewBadge" hidden></span></button>
   <button type="button" class="tab-btn classic" data-tab="cards"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/></svg><span class="lbl-long">Cards</span><span class="lbl-short">Cards</span></button>
   <button type="button" class="tab-btn classic" data-tab="bank"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg><span class="lbl-long">Bank</span><span class="lbl-short">Bank</span></button>
+  <!-- Phones: four tabs + More, which opens a sheet with every section. -->
+  <button type="button" id="moreTab" class="more-tab" aria-haspopup="dialog" aria-controls="moreSheet"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg><span>More</span></button>
 </nav>
+<dialog id="moreSheet" class="more-sheet" aria-labelledby="moreTitle">
+  <div class="sheet-head">
+    <span class="sheet-grabber" aria-hidden="true"></span>
+    <h2 id="moreTitle">All sections</h2>
+    <button type="button" class="sheet-done" id="moreDone">Done</button>
+  </div>
+  <div class="sheet-body" id="moreBody"></div>
+</dialog>
 
 <main id="main" class="max-w-6xl mx-auto px-4 pt-8 pb-6">
 

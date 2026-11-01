@@ -55,7 +55,7 @@ export function buildForm() {
     var hasDaily = (dailyRollupByMonth(app.state)[app.selectedKey] || {}).count > 0;
     enteredBox.checked = !!month.entered || hasDaily;
     enteredBox.disabled = hasDaily;
-    enteredBox.style.width = "auto"; enteredBox.style.marginRight = "8px";
+    enteredBox.style.marginRight = "8px";
     enteredLabel.appendChild(enteredBox);
     enteredLabel.appendChild(document.createTextNode(
       "Actuals entered for this month (months without actuals stay blank in the comparison, they are not treated as zero)"));
