@@ -4,6 +4,7 @@
    layout: which cards show and in what order (Customize). */
 import { keepScroll } from "../scroll.js";
 import { api, h, clear, money, shortDay, monthLabel, loadBasics, categoryName, button, errorState, loading, openDialog } from "./kit.js";
+import { marketCard } from "./investments.js";
 
 let goTo = null;
 export function setNavigator(fn) { goTo = fn; }
@@ -26,6 +27,10 @@ export function render(container) {
 
 function draw(container, s) {
     clear(container);
+    /* The market recap is its own card (#v2Market) and loads on its own:
+       a slow quote never holds up the overview. Empty until there's a key. */
+    const marketBox = document.getElementById("v2Market");
+    if (marketBox) api("GET", "market").then(function (m) { clear(marketBox); if (m.status !== "nokey" || m.latest) marketBox.appendChild(marketCard(m)); }, function () { /* the overview still shows */ });
     const nwDelta = s.netWorth30dAgoCents === null ? null : s.netWorthCents - s.netWorth30dAgoCents;
     const spendPct = s.plannedSpendingCents > 0 ? Math.round(s.spendingCents / s.plannedSpendingCents * 100) : null;
     const tiles = h("div", { class: "v2-tiles" },
@@ -69,7 +74,7 @@ function draw(container, s) {
 /* The Dashboard's cards: [key, name, selector]. Keys match SECTIONS in
    functions/api/v2/layout.js, which saves the layout per owner so it
    follows you across devices. */
-const CARDS = [["overview", "Overview", "#v2Overview"], ["month", "This month", ".month-card"], ["ask", "Ask about your budget", ".ask-card"], ["trends", "Trends & plan settings", ".dash-card"]];
+const CARDS = [["overview", "Overview", "#v2Overview"], ["market", "Market today", "#v2Market"], ["month", "This month", ".month-card"], ["ask", "Ask about your budget", ".ask-card"], ["trends", "Trends & plan settings", ".dash-card"]];
 let layout = null;
 
 function loadLayout() {

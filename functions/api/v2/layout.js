@@ -7,7 +7,7 @@
  */
 import { handleV2, bodyOf, HttpError } from "../_v2http.js";
 
-export const SECTIONS = ["overview", "month", "ask", "trends"];
+export const SECTIONS = ["overview", "market", "month", "ask", "trends"];
 const KEY = "dashboard_layout";
 
 function keys(v, name) {

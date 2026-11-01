@@ -1025,6 +1025,20 @@ textarea{min-height:88px}
   .brand .app-sub,.brand .app-sub2{display:none}
   .brand > p:last-child{margin:0}
 }
+
+/* Market recap + investments */
+.v2-market-chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
+.v2-market-chip{display:inline-flex;gap:6px;align-items:baseline;padding:4px 10px;border-radius:9999px;background:var(--sunken);font-size:13px;line-height:18px;font-variant-numeric:tabular-nums}
+.v2-market-chip.pos span{color:var(--pos)} .v2-market-chip.neg span{color:var(--neg)}
+.v2-market-text{margin:0;font-size:15px;line-height:22px}
+.v2-market-date{margin:0 0 4px}
+.v2-market-news{margin-top:12px} .v2-market-news summary{cursor:pointer;font-weight:600}
+.v2-market-news ul{margin:8px 0 0;padding-left:18px} .v2-market-news li{margin:4px 0;font-size:14px;line-height:20px}
+.v2-tile-value.v2-chg{font-size:18px;line-height:26px}
+.v2-chg.pos{color:var(--pos)} .v2-chg.neg{color:var(--neg)}
+.v2-range{display:flex;gap:6px;margin:12px 0}
+.v2-range .v2-mini.on{border-color:var(--accent);color:var(--accent)}
+.more-tile[data-go="investments"]{--c:#5ac8fa}
 /* Customize dashboard: one row per card. */
 .layout-row{flex-wrap:nowrap}
 .layout-row .v2-mini{min-width:44px}

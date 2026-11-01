@@ -20,7 +20,7 @@ assert.deepEqual((await call("GET")).data, { order: layout.SECTIONS, hidden: [] 
 
 const saved = await call("PUT", { order: ["trends", "ask", "trends"], hidden: ["month"] });
 assert.equal(saved.status, 200);
-assert.deepEqual(saved.data, { order: ["trends", "ask", "overview", "month"], hidden: ["month"] }, "dupes dropped, missing appended");
+assert.deepEqual(saved.data, { order: ["trends", "ask", "overview", "market", "month"], hidden: ["month"] }, "dupes dropped, missing appended");
 assert.deepEqual((await call("GET")).data, saved.data, "loads what was saved");
 
 assert.equal((await call("PUT", { order: ["nope"] })).status, 400);

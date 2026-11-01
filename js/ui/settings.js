@@ -42,7 +42,7 @@ export function renderGeminiStatus() {
 export function refreshGeminiStatus() {
   if (app.mode !== "database") { app.geminiInfo = { hasKey: false, last4: null, model: "", source: null }; app.splitwiseInfo = { hasKey: false, last4: null, source: null }; renderGeminiStatus(); renderSplitwiseStatus(); return; }
   apiFetch("/api/settings").then(function (res) { if (!res.ok) throw new Error("settings"); return res.json(); })
-    .then(function (data) { app.geminiInfo = data.ai || data.gemini || app.geminiInfo; app.splitwiseInfo = data.splitwise || app.splitwiseInfo; renderGeminiStatus(); renderSplitwiseStatus(); })
+    .then(function (data) { app.geminiInfo = data.ai || data.gemini || app.geminiInfo; app.splitwiseInfo = data.splitwise || app.splitwiseInfo; app.finnhubInfo = data.finnhub || null; renderGeminiStatus(); renderSplitwiseStatus(); })
     .catch(function () { renderGeminiStatus(); renderSplitwiseStatus(); });
 }
 

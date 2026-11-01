@@ -428,7 +428,7 @@ test("new screens: every tab renders without a script error", async ({ page }) =
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await expect(page.locator("#v2Overview .v2-tile").first()).toBeVisible();
   for (const [tab, sel] of [["accounts", "#v2Accounts .v2-tiles"], ["transactions", "#v2Transactions .v2-filters"], ["cashflow", "#v2Cashflow .v2-tiles"],
-    ["budget", "#v2Budget .v2-month-nav"], ["recurring", "#v2Recurring .v2-card"], ["goals", "#v2Goals .v2-card"], ["settings", "#v2Manage .v2-cats"]]) {
+    ["budget", "#v2Budget .v2-month-nav"], ["recurring", "#v2Recurring .v2-card"], ["goals", "#v2Goals .v2-card"], ["investments", "#v2Investments .v2-market-card"], ["settings", "#v2Manage .v2-cats"]]) {
     await openTab(page, tab);
     await expect(page.locator(sel).first()).toBeVisible();
   }
