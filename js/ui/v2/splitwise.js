@@ -46,7 +46,7 @@ function draw(container, data) {
       h("p", { class: "hint", text: "1. Sign in at splitwise.com → your account → Privacy and Security → Your Apps." }),
       h("p", { class: "hint", text: "2. Register an app (any name) and generate a personal API key on its page." }),
       h("p", { class: "hint", text: "3. Paste the key in Settings → Splitwise. It stays on the server; this view is read-only." }),
-      button("Open Settings", function () { goTo && goTo("settings"); }, "primary"));
+      button("Open Settings", function () { goTo && goTo("settings"); }, "btn-primary"));
     container.appendChild(section("Splitwise", [], body));
     return;
   }

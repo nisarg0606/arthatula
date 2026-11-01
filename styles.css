@@ -299,11 +299,6 @@ header{padding-top:env(safe-area-inset-top)}
   .app-title{padding-right:72px}
   /* Dashboard: numbers and charts first; the set-once baseline fields
      move to the end of the card. */
-  .dash-card{display:flex;flex-direction:column}
-  .dash-card > *{order:2}
-  .dash-card > .card-title,.dash-card > .compare-toggle{order:1}
-  .dash-card > .baseline-fields{order:3}
-  .dash-card > .baseline-fields.grid{margin-top:24px;padding-top:16px;border-top:1px solid var(--line)}
   #addExpenseTopBtn{position:fixed;z-index:45;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));width:56px;height:56px;padding:0;border-radius:9999px}
   #addExpenseTopBtn .fab-label{display:none}
   body[data-tab="daily"] #addExpenseTopBtn{display:none}
@@ -850,6 +845,163 @@ input[type="checkbox"]:disabled{opacity:.5;cursor:default}
   .more-sheet,.more-sheet[open],.more-sheet::backdrop{animation:none;transition:none}
   input[type="checkbox"]::after{transition:none}
 }
+
+/* ==== Liquid Glass ====
+   iOS 26's material language over the Apple system layer above: a soft
+   color field behind everything, translucent glass for cards and
+   chrome, raised tiles with a lit top edge, a 3D hero number, controls
+   that sink when pressed, a floating glass tab bar and an inset glass
+   sheet. Blur is used only on floating chrome (tab bar, sheet, FAB):
+   blurring every card makes iPhone scrolling stutter, and the color
+   field already reads through the translucent cards. */
+:root{
+  --bg:#eef1f7; --glass:rgba(255,255,255,.62); --glass-strong:rgba(255,255,255,.9); --glass-line:rgba(255,255,255,.8); --glass-edge:rgba(15,23,42,.06);
+  --raised:rgba(255,255,255,.72); --fill:rgba(118,118,128,.1); --field:rgba(255,255,255,.88); --field-line:rgba(15,23,42,.1);
+  --shadow-card:0 1px 0 rgba(255,255,255,.9) inset,0 1px 2px rgba(15,23,42,.04),0 16px 40px -20px rgba(15,23,42,.28);
+  --shadow-tile:0 1px 0 rgba(255,255,255,.95) inset,0 1px 2px rgba(15,23,42,.05),0 8px 20px -12px rgba(15,23,42,.25);
+  --spring:cubic-bezier(.3,1,.4,1);
+}
+.dark{
+  --bg:#06080c; --glass:rgba(28,30,36,.6); --glass-strong:rgba(34,36,42,.9); --glass-line:rgba(255,255,255,.09); --glass-edge:rgba(255,255,255,.06);
+  --raised:rgba(255,255,255,.06); --fill:rgba(118,118,128,.24); --field:rgba(255,255,255,.07); --field-line:rgba(255,255,255,.12);
+  --shadow-card:0 1px 0 rgba(255,255,255,.06) inset,0 20px 48px -24px rgba(0,0,0,.9);
+  --shadow-tile:0 1px 0 rgba(255,255,255,.07) inset,0 10px 24px -14px rgba(0,0,0,.8);
+}
+/* touch-action: taps fire at once (no double-tap-to-zoom wait); pinch zoom still works. */
+html{background:var(--bg);touch-action:manipulation}
+body{background:transparent}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(70% 45% at 0% 0%,rgba(45,212,191,.34),transparent 70%),radial-gradient(60% 40% at 100% 6%,rgba(129,140,248,.3),transparent 70%),
+    radial-gradient(70% 45% at 90% 100%,rgba(244,114,182,.2),transparent 70%),radial-gradient(55% 40% at 0% 80%,rgba(56,189,248,.2),transparent 70%)}
+.dark body::before{background:radial-gradient(70% 45% at 0% 0%,rgba(45,212,191,.2),transparent 70%),radial-gradient(60% 40% at 100% 6%,rgba(129,140,248,.18),transparent 70%),
+    radial-gradient(70% 45% at 90% 100%,rgba(244,114,182,.1),transparent 70%),radial-gradient(55% 40% at 0% 80%,rgba(56,189,248,.1),transparent 70%)}
+.app-header{background:transparent}
+:focus:not(:focus-visible){outline:none}
+button,summary,.tab-btn,.more-tab,.more-tile{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+
+/* Glass cards and raised tiles */
+.card{background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--shadow-card);border-radius:24px}
+.stat,.sum-tile,.v2-tile,.chart-panel,.card-panel,.compare-toggle,.month-switch,.tx-group,.v2-bulk,.ms-card{background:var(--raised);border:1px solid var(--glass-edge);box-shadow:var(--shadow-tile);border-radius:18px}
+button.v2-tile,.tx-main,.v2-tx,.more-tile{transition:transform .35s var(--spring),background-color .2s ease}
+button.v2-tile:active,.tx-main:active,.v2-tx:active,.more-tile:active{transform:scale(.97);transition:transform .12s ease-out}
+
+/* The 3D hero number: a lit teal slab with a sheen across its top. */
+.sum-tile:first-child,.v2-tiles > .v2-tile:first-child{position:relative;overflow:hidden;border:0;color:#fff;
+  background:linear-gradient(150deg,#2dd4bf 0%,#0f766e 52%,#134e4a 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,.4) inset,0 -1px 0 rgba(0,0,0,.15) inset,0 18px 36px -14px rgba(15,118,110,.65)}
+.sum-tile:first-child::before,.v2-tiles > .v2-tile:first-child::before{content:"";position:absolute;inset:0 0 45% 0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0))}
+.v2-tiles > .v2-tile:first-child *{color:#fff!important}
+.v2-tiles > .v2-tile:first-child > :not(:first-child):not(:nth-child(2)){color:rgba(255,255,255,.82)!important}
+.sum-tile:first-child .sum-label{color:rgba(255,255,255,.85)}
+
+/* Buttons: a lit gradient for primary, glass for secondary; both sink when pressed. */
+.btn-primary,.actions .btn-primary,.dark .actions .btn-primary,.actions .btn-primary:hover,.dark .actions .btn-primary:hover,button.toggle.active,.dark button.toggle.active,.pager-btn.current{background:linear-gradient(180deg,#14b8a6,#0f766e);color:#fff;border:0;
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 8px 18px -8px rgba(15,118,110,.7)}
+.actions button,.button-like,button.toggle,.tx-edit button:not(.date-btn),.btn-ghost{background:var(--field);border:1px solid var(--field-line);box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 2px 6px -3px rgba(15,23,42,.15)}
+.dark .actions button,.dark .button-like,.dark button.toggle,.dark .tx-edit button:not(.date-btn),.dark .btn-ghost{box-shadow:0 1px 0 rgba(255,255,255,.06) inset}
+.actions button,.button-like,button.toggle,.btn-primary,.btn-ghost,.pager-btn,.tx-edit button,.sheet-done,.date-btn{transition:transform .35s var(--spring),filter .2s ease,background-color .2s ease}
+.actions button:active,.button-like:active,button.toggle:active,.btn-primary:active,.btn-ghost:active,.pager-btn:active:not(:disabled),.tx-edit button:active,.date-btn:active{transform:scale(.95);opacity:1;filter:brightness(.94);transition:transform .1s ease-out}
+
+/* Fields: one style everywhere, 16px text so iOS never zooms on focus,
+   44px tall, and selects drawn by us (WebKit otherwise ignores their size). */
+:is(input:not([type=checkbox]):not([type=hidden]):not([type=radio]):not([type=range]):not([type=file]),select,textarea){-webkit-appearance:none;appearance:none;
+  font:inherit;font-size:16px;line-height:22px;min-height:44px;padding:10px 14px;border:1px solid var(--field-line);border-radius:12px;background-color:var(--field);color:var(--ink);
+  box-shadow:0 1px 2px rgba(15,23,42,.05) inset;transition:border-color .2s ease,box-shadow .2s ease}
+:is(input:not([type=checkbox]):not([type=hidden]):not([type=radio]):not([type=range]):not([type=file]),select,textarea):focus{outline:none;border-color:var(--accent-bright);box-shadow:0 0 0 4px var(--accent-tint)}
+select{padding-right:36px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;background-position:right 14px center!important;background-size:12px 8px!important;text-overflow:ellipsis}
+::placeholder{color:var(--muted);opacity:.75}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+input::-webkit-date-and-time-value{text-align:left}
+textarea{min-height:88px}
+
+.txd-head h3{font-size:20px;line-height:26px;font-weight:700;letter-spacing:-.015em}
+/* Small controls: glass, and 44px tall on phones (below). */
+.v2-mini{background:var(--field);border:1px solid var(--field-line);box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 2px 6px -3px rgba(15,23,42,.15);transition:transform .35s var(--spring)}
+.v2-mini:active{transform:scale(.92);transition:transform .1s ease-out}
+/* Day headers sit on the glass, not on a white band. */
+.v2-day-head{background:transparent;position:static}
+
+/* Desktop tabs: a glass segmented control */
+.nav-float{background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--shadow-card);backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8)}
+
+/* Inset glass sheet (iOS 26): floats off the edges, rounded all round. */
+.more-sheet{inset:auto 8px calc(8px + env(safe-area-inset-bottom)) 8px;width:auto;border-radius:32px;background:var(--glass-strong);border:1px solid var(--glass-line);
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 24px 60px -12px rgba(0,0,0,.35);backdrop-filter:blur(30px) saturate(1.8);-webkit-backdrop-filter:blur(30px) saturate(1.8)}
+.more-sheet::backdrop{background:rgba(0,0,0,.28)}
+.more-sheet.closing{transform:translateY(calc(100% + 24px))!important}
+.sheet-body{padding-bottom:20px}
+.more-ico{box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 6px 14px -6px var(--c,#8e8e93);background:linear-gradient(160deg,color-mix(in srgb,var(--c,#8e8e93) 80%,#fff),var(--c,#8e8e93) 60%)}
+
+@media (max-width:640px){
+  header > div{padding-bottom:4px}
+  /* Floating glass tab bar, lifted clear of the home indicator and of
+     Safari's own floating toolbar on iOS 26. */
+  body{padding-bottom:calc(104px + env(safe-area-inset-bottom))}
+  .nav-float{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));padding:6px;gap:2px;border-radius:32px;
+    background:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.85);box-shadow:0 1px 0 rgba(255,255,255,.85) inset,0 14px 34px -10px rgba(15,23,42,.35);
+    backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8)}
+  .dark .nav-float{background:rgba(32,34,40,.8);border-color:rgba(255,255,255,.1);box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 14px 34px -10px rgba(0,0,0,.8)}
+  .nav-float .tab-btn,.nav-float .tab-btn:hover,.more-tab{min-height:54px;border-radius:26px;color:var(--muted);transition:transform .35s var(--spring),background-color .25s ease,color .25s ease}
+  .nav-float .tab-btn.active,.dark .nav-float .tab-btn.active,.more-tab.active{background:var(--accent-tint);color:var(--accent);box-shadow:0 1px 0 rgba(255,255,255,.6) inset}
+  .dark .nav-float .tab-btn.active,.dark .more-tab.active{color:var(--accent-bright);box-shadow:none}
+  .nav-float .tab-btn:active,.more-tab:active{transform:scale(.9);opacity:1;transition:transform .1s ease-out}
+  #addExpenseTopBtn{right:20px;bottom:calc(92px + env(safe-area-inset-bottom));width:54px;height:54px;border:1px solid rgba(255,255,255,.35);
+    background:linear-gradient(180deg,#14b8a6,#0f766e);box-shadow:0 1px 0 rgba(255,255,255,.4) inset,0 14px 28px -8px rgba(15,118,110,.7)}
+  #addExpenseTopBtn:active{transform:scale(.9)}
+  .card{border-radius:22px;padding:16px}
+  .v2-mini{min-height:44px;min-width:44px;font-size:15px}
+  /* The calendar is a bottom sheet on phones: dim the page behind it so
+     it reads as one, and a tap on the dimmed part closes it (the
+     document click handler in datepicker.js). */
+  .cal-pop{z-index:70;border-radius:28px;background:var(--glass-strong);border:1px solid var(--glass-line);
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.28),0 24px 60px -12px rgba(0,0,0,.35);backdrop-filter:blur(30px) saturate(1.8);-webkit-backdrop-filter:blur(30px) saturate(1.8)}
+}
+/* Installed to the Home Screen there is no browser toolbar to clear. */
+@media (max-width:640px) and (display-mode: standalone){
+  .nav-float{bottom:calc(4px + env(safe-area-inset-bottom))}
+  #addExpenseTopBtn{bottom:calc(84px + env(safe-area-inset-bottom))}
+}
+
+/* Tab changes: the new screen rises in (goTab in shell.js adds .entering). */
+[data-section].entering{animation:tabIn .38s var(--spring) both}
+@keyframes tabIn{from{opacity:0;transform:translateY(14px)}}
+
+@media (prefers-reduced-motion: reduce){
+  [data-section].entering{animation:none}
+  .actions button:active,.btn-primary:active,.tx-main:active,.v2-tx:active,.more-tile:active,.nav-float .tab-btn:active,.more-tab:active{transform:none}
+}
+@media (prefers-reduced-transparency: reduce){
+  .nav-float,.dark .nav-float,.more-sheet{background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none}
+  .card{background:var(--surface)}
+}
+
+/* ---- Dashboard sections and the phone tab bar's center Add button ---- */
+.month-card .review-banner{margin:0 0 12px}
+.plan-settings-title{margin:28px 0 12px;padding-top:20px;border-top:1px solid var(--line)}
+.add-tab{display:none}
+@media (max-width:640px){
+  /* Home · Activity · ＋ · Budget · More. Daily opens from ＋ (and More),
+     so its own tab and the floating + button step aside. */
+  .nav-float .tab-btn[data-tab="daily"],#addExpenseTopBtn{display:none!important}
+  .nav-float .tab-btn[data-tab="budget"]{order:4}
+  .add-tab{order:3;flex:0 0 auto;display:grid;place-items:center;width:58px;height:54px;margin:0 2px;padding:0;border:0;border-radius:27px;cursor:pointer;color:#fff;
+    background:linear-gradient(180deg,#14b8a6,#0f766e);box-shadow:0 1px 0 rgba(255,255,255,.45) inset,0 10px 20px -8px rgba(15,118,110,.75);
+    transition:transform .35s var(--spring),filter .2s ease}
+  .add-tab svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round}
+  .add-tab:active{transform:scale(.9);filter:brightness(.95);transition:transform .1s ease-out}
+  .add-tab.active{box-shadow:0 0 0 3px var(--accent-tint),0 1px 0 rgba(255,255,255,.45) inset,0 10px 20px -8px rgba(15,118,110,.75)}
+  .add-tab:focus-visible{outline:2px solid var(--accent-bright);outline-offset:3px}
+  body{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+}
+/* A chart with nothing to draw shows its one-line message, not a tall empty box. */
+.chart-box:has(.chart-fallback:not([hidden])){height:auto}
+
+/* Brand logo (lotus scale mark) */
+.brand-logo{width:46px;height:46px;border-radius:12px;display:block;margin-bottom:12px}
+.brand-mark{width:20px;height:20px;border-radius:5px;vertical-align:-5px}
 
 /* "Guide & help" at the foot of the More sheet */
 .sheet-help{display:block;margin:0 16px calc(16px + env(safe-area-inset-bottom));padding:12px;border-radius:14px;text-align:center;font-weight:600;color:var(--accent);background:var(--fill);text-decoration:none}

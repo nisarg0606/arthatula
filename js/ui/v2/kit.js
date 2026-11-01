@@ -145,7 +145,7 @@ export function openDialog(title, body, actions) {
   })));
   if (typeof dialogEl.showModal === "function") dialogEl.showModal(); else dialogEl.setAttribute("open", "");
   const first = dialogEl.querySelector("input,select,textarea");
-  if (first) setTimeout(function () { try { first.focus(); } catch (e) { /* noop */ } }, 30);
+  if (first) setTimeout(function () { try { first.focus({ preventScroll: true }); } catch (e) { /* noop */ } }, 30);
   return { close: close, fail: fail, el: dialogEl };
 }
 
