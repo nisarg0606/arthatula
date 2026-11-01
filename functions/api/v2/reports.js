@@ -47,15 +47,14 @@ export const onRequestGet = (context) => handleV2(context, async ({ s, url }) =>
   }
   if (kind === "summary") {
     const month = url.searchParams.get("month") ? cleanMonth(url.searchParams.get("month")) : monthOf(today());
-    const accounts = await loadAccounts(s);
-    const txAll = await loadTransactions(s);
+    const [accounts, txAll, budgets, snapRows] = await Promise.all([loadAccounts(s), loadTransactions(s), loadBudgets(s),
+      s.all("SELECT account_id, date, balance_cents FROM balance_snapshots WHERE owner_id = ?1")]);
     const monthTx = txAll.filter((t) => monthOf(t.date) === month);
     const sum = summarize(monthTx, idx);
-    const budget = budgetMonth(month, await loadBudgets(s), txAll, idx);
+    const budget = budgetMonth(month, budgets, txAll, idx);
     const acctIdx = {};
     accounts.forEach((a) => { acctIdx[a.id] = a; });
-    const snaps = (await s.all("SELECT account_id, date, balance_cents FROM balance_snapshots WHERE owner_id = ?1"))
-      .map((r) => ({ accountId: r.account_id, date: r.date, balanceCents: r.balance_cents }));
+    const snaps = snapRows.map((r) => ({ accountId: r.account_id, date: r.date, balanceCents: r.balance_cents }));
     const series = netWorthSeries(acctIdx, snaps);
     let now = 0;
     accounts.forEach((a) => {
