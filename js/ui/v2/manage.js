@@ -4,6 +4,7 @@
 import { keepScroll } from "../scroll.js";
 import { v2, api, h, clear, money, monthLabel, loadBasics, categorySelect, accountSelect, field, openDialog, section, button, errorState, loading, categoryName } from "./kit.js";
 import { apiFetch } from "../storage.js";
+import { app } from "../context.js";
 
 let root = null;
 
@@ -144,13 +145,16 @@ function marketKeyCard() {
   const input = h("input", { attrs: { type: "password", autocomplete: "off", placeholder: "Paste your Finnhub API key", "aria-label": "Finnhub API key" } });
   const show = function (r) {
     const f = r.finnhub || {};
+    app.finnhubInfo = f;
     status.textContent = f.hasKey ? "Connected (key " + (f.source === "env" ? "from the Cloudflare secret" : "saved in the app") + ", ••••" + (f.last4 || "") + "). The recap appears on Home and Investments after each US market close." : "Not connected.";
   };
   const put = function (body) {
     return apiFetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function (res) { return res.json().then(function (j) { if (!res.ok) throw new Error(j.error || "Could not save."); return j; }); });
   };
-  apiFetch("/api/settings").then(function (res) { return res.json(); }).then(show, function () { status.textContent = ""; });
+  /* Settings are already loaded at sign-in (../settings.js): only fetch if not yet. */
+  if (app.finnhubInfo) show({ finnhub: app.finnhubInfo });
+  else apiFetch("/api/settings").then(function (res) { return res.json(); }).then(show, function () { status.textContent = ""; });
   return section("Market data", [], h("div", { class: "v2-form" },
     h("p", { class: "hint", text: "A short recap of the US stock market every weekday evening, from Finnhub's free plan (S&P 500, Nasdaq and Dow moves plus the day's headlines). Get a key at finnhub.io/register. Your AI provider, if set, writes the summary; only market numbers and headlines are sent to it, never your balances." }),
     field("Finnhub API key", input), status,

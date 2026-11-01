@@ -133,10 +133,11 @@ function finnhub(tradeIso, calls) {
   const token = await setupTestAuth(env);
   /* Settings: save the Finnhub key, never shown back. */
   const ctx = authedCtx(env, token);
-  const put = await settingsRoute.onRequestPut(ctx({ finnhubApiKey: "  fh-saved-key-1234 " }, "PUT", "http://local/api/settings"));
+  const fakeKey = "x".repeat(16) + "1234"; /* made up */
+  const put = await settingsRoute.onRequestPut(ctx({ finnhubApiKey: "  " + fakeKey + " " }, "PUT", "http://local/api/settings"));
   const st = await put.json();
   assert.deepEqual(st.finnhub, { hasKey: true, last4: "1234", source: "saved" });
-  assert.ok(!JSON.stringify(st).includes("fh-saved-key"));
+  assert.ok(!JSON.stringify(st).includes(fakeKey));
 
   const get = (mod, path) => mod.onRequestGet(ctx(undefined, "GET", "http://local/api/v2/" + path));
   /* Investments from balance snapshots. */
