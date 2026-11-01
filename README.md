@@ -1,13 +1,30 @@
 # Arthatula — monthly budget planner
 
-A small 13-month budget planner, starting the month you set it up, built with vanilla
-HTML, CSS and JavaScript — no build step and no framework. Styling is
-Tailwind CSS via its Play CDN (with an inline theme config) plus a small
-custom stylesheet, and graphs are Chart.js via CDN; if a CDN fails to
-load, the charts degrade to plain-text summaries and everything else
-keeps working. The UI is dashboard-first and tabbed (Dashboard / Month
-editor / Daily expenses / Settings), with light and dark themes
-(defaulting to your device preference, remembered per device).
+A private budget app for your phone and computer: log what you spend,
+see where it went, plan the months ahead and keep a budget, with your
+bank accounts synced in if you want. Vanilla HTML, CSS and JavaScript —
+no framework and no build step — running on Cloudflare's free plan,
+with your data in your own Cloudflare database.
+
+## Get your own copy (about 5 minutes, free)
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula-v2)
+
+1. Click the button and sign in to Cloudflare (or create a free
+   account). Connect GitHub when it asks: it copies this project into
+   your account so you get updates on your own terms.
+2. When it asks for **SETUP_SECRET**, type any long phrase you make up
+   and keep it for step 3. Leave everything else as it is and deploy.
+   Cloudflare creates your app and its database.
+3. Open the address it gives you (`https://arthatula.<you>.workers.dev`),
+   enter the setup secret, and choose your **access code**: the password
+   you'll use on each of your devices.
+4. On iPhone: Share → **Add to Home Screen**, so it opens full screen
+   like an app.
+
+Your data lives only in your own Cloudflare account; nobody else's copy
+can see it. To turn on the AI features, open Settings in the app and
+paste a Gemini key (free at <https://aistudio.google.com/apikey>).
 
 For each month you enter take-home pay, other income, and your expenses
 (rent, utilities, phone/internet, groceries, eating out, gas/transport,
@@ -343,14 +360,21 @@ documents its routes.
 
 ## This deployment: arthatula + the shared database
 
-This repo deploys to the Cloudflare Pages project **arthatula**, bound
-(see `wrangler.toml`) to the **same D1 database** as the original
-`monthly-budget` app, so both sites show the same data and accept the
-same access code. The deploy workflow creates the Pages project on its
-first run. It needs one repository secret, `CLOUDFLARE_API_TOKEN`, with
-Cloudflare Pages: Edit and D1: Edit on the account. A deploy runs when a
-pull request is merged into `main`, or from Actions → "Test and deploy"
-→ Run workflow.
+The original deployment runs on Cloudflare **Pages** (copies made with
+the Deploy button run as a **Worker** from the same code: `worker.js`
+routes `/api/*` to the same handlers in `functions/`). It is bound to the
+**same D1 database** as the original `monthly-budget` app, so both sites
+show the same data and accept the same access code.
+
+`.github/workflows/deploy.yml` deploys it when a pull request is merged
+into `main` (or from Actions → "Test and deploy" → Run workflow). It
+writes the Pages config at deploy time from these repository settings
+(Settings → Secrets and variables → Actions):
+
+- secret `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit and D1: Edit)
+- variables `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID`, `PAGES_PROJECT`
+
+A fork without them skips the deploy job.
 
 The nightly encrypted database backup stays in the original repo (both
 apps share one database, so one backup covers both).

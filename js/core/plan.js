@@ -60,7 +60,7 @@ export const NUMBER_FIELDS = [
   { key: "insurance", label: "Insurance ($)", group: "Expenses" },
   { key: "subscriptions", label: "Subscriptions ($)", group: "Expenses" },
   { key: "shopping", label: "Shopping / personal ($)", group: "Expenses" },
-  { key: "credilaEmi", label: "Credila loan EMI ($)", group: "Debts & one-offs" },
+  { key: "credilaEmi", label: "Loan EMI ($)", group: "Debts & one-offs" },
   { key: "creditCardPayment", label: "Credit card payment ($)", group: "Debts & one-offs" },
   { key: "otherLoan", label: "Other loan payment ($)", group: "Debts & one-offs" },
   { key: "oneOffs", label: "One-off expenses ($)", group: "Debts & one-offs" },
