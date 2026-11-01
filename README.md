@@ -245,7 +245,8 @@ the budget through tools instead of the raw API:
 Connect one in Settings → Security → **AI assistant (MCP)** → *Create
 MCP token*. The token is shown once, together with the endpoint
 (`https://<your-app>/api/mcp`) and a ready-to-paste config. For Claude
-Code, Claude Desktop or Cursor, merge it into the MCP settings file:
+Code (`.mcp.json`) or Cursor (`.cursor/mcp.json`), merge it into the MCP
+settings file:
 
 ```json
 { "mcpServers": { "arthatula": {
@@ -257,6 +258,17 @@ Code, Claude Desktop or Cursor, merge it into the MCP settings file:
 
 (Claude Code can also add it in one line:
 `claude mcp add --transport http arthatula https://<your-app>/api/mcp --header "Authorization: Bearer <token>"`.)
+Claude Desktop's config file only starts local servers, so bridge to the
+remote one with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+(needs Node.js) in `claude_desktop_config.json`:
+
+```json
+{ "mcpServers": { "arthatula": {
+  "command": "npx",
+  "args": ["-y", "mcp-remote", "https://<your-app>/api/mcp", "--header", "Authorization:${ARTHATULA_AUTH}"],
+  "env": { "ARTHATULA_AUTH": "Bearer <token>" }
+} } }
+```
 Any other MCP client: choose the **Streamable HTTP** transport, point it
 at `https://<your-app>/api/mcp`, and send the header
 `Authorization: Bearer <token>`. The server is stateless, so `GET` (SSE)
