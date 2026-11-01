@@ -166,8 +166,10 @@ test("every screen works without a script error", async ({ page }, info) => {
 test("count a pending charge now; the posted charge updates it instead of adding another", async ({ page, request }, info) => {
   const token = await signIn(page, request);
   const sync = await pairSync(page, request, token, "pending-" + info.project.name);
-  const pendId = "e2e-pend-" + info.project.name;
-  const shop = "E2E Market " + info.project.name;
+  /* Unique per attempt: a failed try leaves its charge already counted. */
+  const key = info.project.name + "-" + info.retry;
+  const pendId = "e2e-pend-" + key;
+  const shop = "E2E Market " + key;
   expect((await request.post("/api/pending", { headers: sync, data: { transactions: [
     { id: pendId, date: today(), name: shop, amount: 25, accountLabel: "", category: "Groceries" }
   ] } })).ok()).toBeTruthy();
