@@ -9,6 +9,11 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: ".",
   timeout: 45_000,
+  /* Assertions get 10 s instead of the 5 s default: on a loaded CI
+     runner the page can need longer than 5 s to reflect a save, and a
+     short expect window turned that into intermittent failures whose
+     retries then collided with the first attempt's leftovers. */
+  expect: { timeout: 10_000 },
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: process.env.CI ? [["list"], ["github"]] : "list",
