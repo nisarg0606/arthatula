@@ -105,9 +105,12 @@ export function init() {
   /* Close on clicks outside any picker. Uses the event path, not
      target.closest(): the ‹ › buttons re-render the popover, so by the
      time this runs the clicked button is detached and closest() finds no
-     .datepicker — which used to close the calendar on every month change. */
+     .datepicker — which used to close the calendar on every month change.
+     pointerdown, not click: iOS Safari sends no click for a tap on
+     something that isn't clickable (the page, a heading), so a click
+     listener never saw the tap meant to close the calendar. */
 
-  document.addEventListener("click", function (e) {
+  document.addEventListener("pointerdown", function (e) {
     var path = e.composedPath ? e.composedPath() : [];
     var inside = path.some(function (n) { return n.classList && n.classList.contains("datepicker"); });
     if (!inside) closeDatePickers(null);

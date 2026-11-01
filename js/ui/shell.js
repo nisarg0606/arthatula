@@ -24,8 +24,9 @@ export function showTab(name) {
     t.classList.toggle("active", on);
     if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
   });
-  var more = document.getElementById("moreTab");
+  var more = document.getElementById("moreTab"), add = document.getElementById("addTab");
   if (more) more.classList.toggle("active", PHONE_TABS.indexOf(name) === -1);
+  if (add) add.classList.toggle("active", name === "daily");
   if (name === "dashboard") renderSummary(); /* charts need a visible canvas */
   if (name === "cards") renderCards();
   if (name === "bank") { renderBank(); loadBank(); } /* fresh snapshot on every visit */
@@ -40,7 +41,7 @@ export function showTab(name) {
    two never drift apart. The sheet follows the finger when dragged
    down and closes on a long enough drag or a quick flick. */
 
-export const PHONE_TABS = ["dashboard", "transactions", "daily", "budget"];
+export const PHONE_TABS = ["dashboard", "transactions", "budget", "daily"]; /* daily: the center Add button */
 
 function buildMoreSheet(sheet, body) {
   var groups = [["Money", ".nav-float .tab-btn:not(.classic)"], ["Classic", ".nav-float .tab-btn.classic"]];
@@ -60,9 +61,8 @@ function buildMoreSheet(sheet, body) {
       label.textContent = b.querySelector(".lbl-long").textContent;
       tile.appendChild(ico); tile.appendChild(label);
       tile.addEventListener("click", function () {
-        showTab(name);
-        window.scrollTo(0, 0);
         closeSheet(sheet);
+        goTab(name);
       });
       grid.appendChild(tile);
     });
@@ -110,6 +110,20 @@ function dragToDismiss(sheet, handle) {
   handle.addEventListener("pointercancel", end);
 }
 
+/* Open a tab from the bar or the More sheet: it starts at its top, like
+   an app, and rises in (CSS: [data-section].entering). A plain animation
+   on the new screen, not View Transitions: WebKit's snapshots of the old
+   page disturbed the scroll position afterwards. */
+export function goTab(name) {
+  showTab(name);
+  window.scrollTo(0, 0);
+  var sec = document.querySelector('[data-section="' + name + '"]');
+  if (!sec || reduceMotion) return;
+  sec.classList.remove("entering");
+  void sec.offsetWidth; /* restart the animation on a repeat visit */
+  sec.classList.add("entering");
+}
+
 /* Depth effects. Stat tiles tilt toward the pointer (up to 8°) with a
    glare that follows it; chart panels rise into view once. Both are
    skipped under prefers-reduced-motion (the CSS also neutralises them). */
@@ -122,10 +136,12 @@ export const revealEls = document.querySelectorAll(".reveal");
 
 /* Wires up this part of the app; main.js calls every init() in order. */
 export function init() {
+  /* iOS Safari shows :active press states only once the page listens
+     for touches. */
+  document.addEventListener("touchstart", function () {}, { passive: true });
   document.querySelectorAll(".tab-btn").forEach(function (b) {
     b.addEventListener("click", function () {
-      showTab(b.getAttribute("data-tab"));
-      window.scrollTo(0, 0); /* a new tab starts at its top, like an app */
+      goTab(b.getAttribute("data-tab"));
     });
   });
   var sheet = document.getElementById("moreSheet"), moreTab = document.getElementById("moreTab");
@@ -168,12 +184,15 @@ export function init() {
     }, { threshold: 0.12 });
     revealEls.forEach(function (el) { revealer.observe(el); });
   }
-  if (els.addExpenseTopBtn) {
-    els.addExpenseTopBtn.addEventListener("click", function () {
-      showTab("daily");
+  /* Add expense: the header button (desktop) and the center tab (phones).
+     Focus inside the tap so iOS opens the keyboard. */
+  [els.addExpenseTopBtn, document.getElementById("addTab")].forEach(function (b) {
+    if (!b) return;
+    b.addEventListener("click", function () {
+      goTab("daily");
       if (els.expDescription) els.expDescription.focus();
     });
-  }
+  });
   if (els.themeToggle) {
     els.themeToggle.addEventListener("click", function () {
       var dark = document.documentElement.classList.toggle("dark");

@@ -591,11 +591,14 @@ test("new screens: Mark reviewed keeps your place in Transactions", async ({ pag
   const row = page.locator("#v2Transactions .v2-tx", { hasText: name });
   await expect(row).toBeVisible();
   await row.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 120));
-  const before = await page.evaluate(() => window.scrollY);
-  expect(before).toBeGreaterThan(50);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
   /* the page can scroll further, so a shorter row can't drag it */
   expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY)).toBeGreaterThan(100);
   await row.click();
+  /* Measured once the dialog is open: Playwright's click can scroll the
+     row into place by itself (WebKit), which isn't the app moving. */
+  await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(1);
+  const before = await page.evaluate(() => window.scrollY);
   await page.locator("dialog.v2-dialog button", { hasText: "Mark reviewed" }).click();
   await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(0);
   await expect(page.locator("#v2Transactions .v2-tx", { hasText: name })).not.toHaveClass(/review/);

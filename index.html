@@ -161,7 +161,9 @@
   <button type="button" class="tab-btn classic" data-tab="daily"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg><span class="lbl-long">Daily expenses</span><span class="lbl-short">Daily</span><span class="tab-badge" id="reviewBadge" hidden></span></button>
   <button type="button" class="tab-btn classic" data-tab="cards"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/></svg><span class="lbl-long">Cards</span><span class="lbl-short">Cards</span></button>
   <button type="button" class="tab-btn classic" data-tab="bank"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg><span class="lbl-long">Bank</span><span class="lbl-short">Bank</span></button>
-  <!-- Phones: four tabs + More, which opens a sheet with every section. -->
+  <!-- Phones: Home, Activity, a center Add button, Budget and More (a
+       sheet with every section). Add opens Daily with the form ready. -->
+  <button type="button" id="addTab" class="add-tab" aria-label="Add expense"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
   <button type="button" id="moreTab" class="more-tab" aria-haspopup="dialog" aria-controls="moreSheet"><svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg><span>More</span></button>
 </nav>
 <dialog id="moreSheet" class="more-sheet" aria-labelledby="moreTitle">
@@ -177,56 +179,14 @@
 
   <!-- ============ DASHBOARD ============ -->
   <div data-section="dashboard">
+    <!-- Ordered by how often you need it: the overview, then this month
+         (spent, pace, where it went), the assistant, long-term trends,
+         and last the plan settings you set once. -->
     <div id="v2Overview"></div>
-    <section class="card ask-card" aria-labelledby="ask-heading">
-      <h2 id="ask-heading" class="card-title">Ask about your budget</h2>
-      <div id="askLog" class="ask-log" aria-live="polite" hidden></div>
-      <button type="button" id="askClear" class="ask-clear" hidden>Clear chat</button>
-      <div class="ask-suggest">
-        <button type="button">Can I afford $1,300 in December?</button>
-        <button type="button">Where did my money go this month?</button>
-        <button type="button">How much will I have by the end of the plan?</button>
-      </div>
-      <form id="askForm" class="ask-form" autocomplete="off">
-        <label class="sr-only" for="askInput">Your question</label>
-        <input id="askInput" type="text" maxlength="500" placeholder="e.g. Can I afford a $400 trip in January?">
-        <button type="submit" id="askBtn" class="btn-primary">Ask</button>
-      </form>
-      <p class="hint">The app works out the numbers from your plan and actuals; Gemini explains them. Your question and budget totals are sent to Gemini.</p>
-    </section>
-    <section class="card dash-card" aria-labelledby="summary-heading">
-      <h2 id="summary-heading" class="card-title">Summary</h2>
-      <div class="compare-toggle">
-        <label class="switch-label" for="compareToggle">
-          <input type="checkbox" id="compareToggle">
-          <span>Compare with plan</span>
-        </label>
-        <p class="hint" style="margin:4px 0 0">Off: this dashboard shows your <strong>actual</strong> income, expenses and savings only. On: actuals are compared with the plan (projected).</p>
-      </div>
-      <div class="baseline-fields grid sm:grid-cols-2 gap-4 max-w-2xl">
-        <div class="field">
-          <label for="startingBalance">Starting balance ($) — actual balance at the baseline date</label>
-          <input id="startingBalance" type="number" inputmode="decimal" step="0.01" placeholder="0">
-        </div>
-        <div class="field">
-          <span class="field-label">Actuals start on</span>
-          <p class="baseline-fixed" id="baselineDateDisplay"></p><input type="hidden" id="baselineDate" value="">
-        </div>
-      </div>
+    <section class="card month-card" aria-labelledby="month-heading">
+      <h2 id="month-heading" class="card-title">This month</h2>
       <button type="button" class="review-banner" id="reviewBanner" hidden></button>
-      <div class="summary-grid" id="summaryGrid">
-        <div class="stat highlight"><span class="stat-label">Ending balance</span><span class="stat-value" id="statEnding">—</span></div>
-        <div class="stat highlight"><span class="stat-label">Net saved</span><span class="stat-value" id="statNet">—</span></div>
-        <div class="stat"><span class="stat-label">Total income</span><span class="stat-value" id="statIncome">—</span></div>
-        <div class="stat"><span class="stat-label">Total expenses</span><span class="stat-value" id="statExpenses">—</span></div>
-        <div class="stat"><span class="stat-label">Average net / month</span><span class="stat-value" id="statAverage">—</span></div>
-        <div class="stat"><span class="stat-label">Savings rate</span><span class="stat-value" id="statRate">—</span></div>
-        <div class="stat"><span class="stat-label">Actual net saved (entered months)</span><span class="stat-value" id="statActualNet">—</span></div>
-        <div class="stat"><span class="stat-label">Variance, actual − predicted</span><span class="stat-value" id="statVariance">—</span></div>
-        <div class="stat"><span class="stat-label">Owed to me (shared expenses)</span><span class="stat-value" id="statOwed">—</span><span class="stat-sub neg" id="statOwedOld" hidden></span></div>
-      </div>
-      <p class="hint" id="actualEmptyNote" hidden></p>
-      <div class="grid lg:grid-cols-2 gap-6 mt-2">
+      <div class="grid lg:grid-cols-2 gap-6">
         <div class="month-switch lg:col-span-2" role="group" aria-label="Month shown in the category and daily charts">
           <button type="button" class="ms-nav" id="dashMonthPrev" aria-label="Previous month">&#8249;</button>
           <label class="sr-only" for="dashMonth">Month</label>
@@ -254,6 +214,46 @@
           </div>
           <div class="chart-box doughnut"><canvas id="doughnutChart"></canvas><p id="doughnutFallback" class="chart-fallback" hidden></p></div>
         </div>
+      </div>
+    </section>
+    <section class="card ask-card" aria-labelledby="ask-heading">
+      <h2 id="ask-heading" class="card-title">Ask about your budget</h2>
+      <div id="askLog" class="ask-log" aria-live="polite" hidden></div>
+      <button type="button" id="askClear" class="ask-clear" hidden>Clear chat</button>
+      <div class="ask-suggest">
+        <button type="button">Can I afford $1,300 in December?</button>
+        <button type="button">Where did my money go this month?</button>
+        <button type="button">How much will I have by the end of the plan?</button>
+      </div>
+      <form id="askForm" class="ask-form" autocomplete="off">
+        <label class="sr-only" for="askInput">Your question</label>
+        <input id="askInput" type="text" maxlength="500" placeholder="e.g. Can I afford a $400 trip in January?">
+        <button type="submit" id="askBtn" class="btn-primary">Ask</button>
+      </form>
+      <p class="hint">The app works out the numbers from your plan and actuals; Gemini explains them. Your question and budget totals are sent to Gemini.</p>
+    </section>
+    <section class="card dash-card" aria-labelledby="summary-heading">
+      <h2 id="summary-heading" class="card-title">Trends</h2>
+      <div class="compare-toggle">
+        <label class="switch-label" for="compareToggle">
+          <input type="checkbox" id="compareToggle">
+          <span>Compare with plan</span>
+        </label>
+        <p class="hint" style="margin:4px 0 0">Off: this dashboard shows your <strong>actual</strong> income, expenses and savings only. On: actuals are compared with the plan (projected).</p>
+      </div>
+      <div class="summary-grid" id="summaryGrid">
+        <div class="stat highlight"><span class="stat-label">Ending balance</span><span class="stat-value" id="statEnding">—</span></div>
+        <div class="stat highlight"><span class="stat-label">Net saved</span><span class="stat-value" id="statNet">—</span></div>
+        <div class="stat"><span class="stat-label">Total income</span><span class="stat-value" id="statIncome">—</span></div>
+        <div class="stat"><span class="stat-label">Total expenses</span><span class="stat-value" id="statExpenses">—</span></div>
+        <div class="stat"><span class="stat-label">Average net / month</span><span class="stat-value" id="statAverage">—</span></div>
+        <div class="stat"><span class="stat-label">Savings rate</span><span class="stat-value" id="statRate">—</span></div>
+        <div class="stat"><span class="stat-label">Actual net saved (entered months)</span><span class="stat-value" id="statActualNet">—</span></div>
+        <div class="stat"><span class="stat-label">Variance, actual − predicted</span><span class="stat-value" id="statVariance">—</span></div>
+        <div class="stat"><span class="stat-label">Owed to me (shared expenses)</span><span class="stat-value" id="statOwed">—</span><span class="stat-sub neg" id="statOwedOld" hidden></span></div>
+      </div>
+      <p class="hint" id="actualEmptyNote" hidden></p>
+      <div class="grid lg:grid-cols-2 gap-6 mt-2">
         <div class="chart-panel reveal">
           <div class="chart-head"><h3 class="chart-title" id="chartLineTitle">Cumulative balance — actual</h3><span class="chart-kpi" id="lineKpi"></span></div>
           <div class="chart-box"><canvas id="chart"></canvas><p id="chartFallback" class="chart-fallback" hidden></p></div>
@@ -270,6 +270,17 @@
               <tbody id="monthsTableBody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+      <h3 class="chart-title plan-settings-title">Plan settings</h3>
+      <div class="baseline-fields grid sm:grid-cols-2 gap-4 max-w-2xl">
+        <div class="field">
+          <label for="startingBalance">Starting balance ($) — actual balance at the baseline date</label>
+          <input id="startingBalance" type="number" inputmode="decimal" step="0.01" placeholder="0">
+        </div>
+        <div class="field">
+          <span class="field-label">Actuals start on</span>
+          <p class="baseline-fixed" id="baselineDateDisplay"></p><input type="hidden" id="baselineDate" value="">
         </div>
       </div>
     </section>
