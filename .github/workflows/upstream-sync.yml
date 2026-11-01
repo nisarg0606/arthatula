@@ -1,0 +1,103 @@
+name: Update from the original
+
+# Keeps a copy made with the "Deploy to Cloudflare" button up to date:
+# once a day it brings in what changed in nisarg0606/arthatula and pushes
+# it to this repository's default branch, and Cloudflare redeploys from
+# that push like any other. Your data stays in your own database; the app
+# updates its tables itself on first use.
+#
+# To stop automatic updates: Settings → Secrets and variables → Actions →
+# Variables → New repository variable AUTO_UPDATE = false. "Run workflow"
+# on this page still updates on demand.
+#
+# GitHub doesn't let this workflow's built-in token change files in
+# .github/workflows/. When the original changes one, everything else is
+# still updated and an issue lists the files left behind. To have those
+# updated too, add a secret UPSTREAM_SYNC_TOKEN: a fine-grained personal
+# access token for this repository with "Contents" and "Workflows" set to
+# read and write.
+#
+# If your own edits clash with the original's, nothing is pushed and an
+# issue explains how to update by hand.
+#
+# Never runs in the original repository itself.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    if: ${{ github.repository != 'nisarg0606/arthatula' && (github.event_name == 'workflow_dispatch' || vars.AUTO_UPDATE != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      UPSTREAM: nisarg0606/arthatula
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+      - name: Bring in the original's changes
+        id: sync
+        env:
+          HAS_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN != '' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags "https://github.com/$UPSTREAM.git" main
+          bash .github/upstream-sync.sh FETCH_HEAD "$HAS_TOKEN"
+      - name: Push
+        if: steps.sync.outputs.status == 'updated'
+        run: git push origin HEAD
+      - name: Report workflow files left behind
+        if: steps.sync.outputs.status == 'updated' && steps.sync.outputs.workflows != ''
+        env:
+          FILES: ${{ steps.sync.outputs.workflows }}
+        run: |
+          title="Update: some workflow files need updating by hand"
+          body="These workflow files differ from the original project's, and GitHub doesn't let the automatic update change them: \`$FILES\`
+
+          Everything else is up to date. To update them, either:
+          - add a secret named \`UPSTREAM_SYNC_TOKEN\` (Settings → Secrets and variables → Actions): a fine-grained personal access token for this repository with **Contents** and **Workflows** set to read and write. The next update then replaces them with the original's, and keeps them current from then on; or
+          - copy each file from https://github.com/$UPSTREAM/tree/main/.github/workflows over yours.
+
+          Close this issue when done."
+          n=$(gh issue list --state open --json number,title -q ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
+          echo "::warning::Workflow files not updated: $FILES (see the issue)."
+      - name: Report a conflict
+        if: steps.sync.outputs.status == 'conflict'
+        env:
+          FILES: ${{ steps.sync.outputs.conflicts }}
+        run: |
+          title="Update: your changes clash with the original's"
+          body="The automatic update stopped because these files changed both here and in the original project: \`${FILES:-unknown}\`
+
+          Nothing was pushed, and your app keeps running as it is. To update:
+          1. Make each of these files match the original's again: copy it from https://github.com/$UPSTREAM over yours (keep your version somewhere if you want it back), and commit.
+          2. Open **Actions → Update from the original → Run workflow**.
+          3. Once that has updated, add your own change back on top in a new commit. Later updates work around it as long as the original doesn't change the same lines.
+
+          To stop automatic updates instead, add a repository variable \`AUTO_UPDATE\` = \`false\` (Settings → Secrets and variables → Actions → Variables)."
+          # Fail (GitHub emails you) only the first time; while the issue
+          # is open, later runs just warn.
+          n=$(gh issue list --state open --json number,title -q ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ -n "$n" ]; then
+            echo "::warning::Still not updated: $FILES changed both here and in the original (issue #$n)."
+          else
+            gh issue create --title "$title" --body "$body"
+            echo "::error::Not updated: $FILES changed both here and in the original (see the new issue)."
+            exit 1
+          fi
