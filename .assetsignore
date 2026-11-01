@@ -19,6 +19,7 @@ tailwind.config.js
 README.md
 LICENSE
 docs
+video
 .dev.vars*
 .assetsignore
 .gitignore

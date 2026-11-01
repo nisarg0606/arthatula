@@ -4,6 +4,8 @@
  * saves screenshots as WebP in docs/screenshots/ (needs cwebp:
  * brew install webp). Needs the e2e dependencies (cd e2e && npm ci).
  *   node tools/readme-screenshots.mjs
+ * VIDEO_SHOTS=<dir> saves sharper PNGs plus a few extra shots there instead
+ * (the promo video in video/ uses them).
  */
 import { spawn, execFileSync } from "node:child_process";
 import os from "node:os";
@@ -13,7 +15,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "arthatula-shots-"));
+const VIDEO = process.env.VIDEO_SHOTS;
+const outDir = VIDEO ? path.resolve(VIDEO) : fs.mkdtempSync(path.join(os.tmpdir(), "arthatula-shots-"));
 const require = createRequire(path.join(repo, "e2e", "package.json"));
 const { chromium, devices } = require("@playwright/test");
 const SP = outDir;
@@ -160,10 +163,11 @@ async function shoot(name, opts, tab, scrollSel, extra) {
   if (scrollSel) await page.locator(scrollSel).first().evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 150));
   else await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(800);
-  await page.screenshot({ path: path.join(outDir, name + ".png") });
+  if (extra && extra.click) { await page.click(extra.click); await page.waitForTimeout(800); }
+  await page.screenshot({ path: path.join(outDir, name + ".png"), fullPage: !!(extra && extra.fullPage) });
   await ctx.close();
 }
-const desktop = { viewport: { width: 1280, height: 860 }, deviceScaleFactor: 1 };
+const desktop = { viewport: { width: 1280, height: 860 }, deviceScaleFactor: VIDEO ? 2 : 1 };
 const phone = Object.assign({}, devices["iPhone 13"], { deviceScaleFactor: 2 });
 delete phone.defaultBrowserType;
 await shoot("home", desktop, "dashboard");
@@ -175,8 +179,17 @@ await shoot("cashflow", desktop, "cashflow");
 await shoot("home-dark", desktop, "dashboard", null, { theme: "dark" });
 await shoot("phone-home", phone, "dashboard");
 await shoot("phone-hidden", phone, "dashboard", null, { hide: true });
+if (VIDEO) {
+  await shoot("home-hidden", desktop, "dashboard", null, { hide: true });
+  await shoot("home-full", desktop, "dashboard", null, { fullPage: true });
+  await shoot("customize", desktop, "dashboard", null, { click: "text=Customize" });
+  await shoot("investments-dark", desktop, "investments", null, { theme: "dark" });
+  await shoot("phone-investments", phone, "investments");
+  await shoot("phone-budget", phone, "budget");
+}
 await browser.close();
 await stop(server);
+if (VIDEO) { console.log("Saved to", outDir); process.exit(0); }
 const dest = path.join(repo, "docs", "screenshots");
 fs.mkdirSync(dest, { recursive: true });
 for (const f of fs.readdirSync(outDir).filter((f) => f.endsWith(".png"))) {
