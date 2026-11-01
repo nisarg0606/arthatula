@@ -14,6 +14,7 @@ import { buildForm, monthLabel } from "./editor.js";
 import { merchantRuleControl } from "./merchant.js";
 import { renderPending, updateSpentPending } from "./pending.js";
 import { renderReview } from "./review.js";
+import { keepScroll } from "./scroll.js";
 import { apiFetch, persist, setMode } from "./storage.js";
 
 /* ================= Daily expenses ================= */
@@ -40,7 +41,10 @@ export function categorizeRemote(description, amount) {
   });
 }
 
-export function renderDaily() {
+/* Rebuilds the Daily list without moving the reader (see scroll.js). */
+export function renderDaily() { keepScroll(renderDailyNow); }
+
+function renderDailyNow() {
   if (!els.expenseList) return;
   /* The list is rebuilt below: drop the pickers of the old rows, then
      refresh the static pickers' labels (the quick-add date may have

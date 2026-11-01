@@ -503,3 +503,75 @@ test("new screens: Settings — rules, categories, and the migration check", asy
   await page.locator("#v2Manage button", { hasText: "Check now" }).click();
   await expect(page.locator("#v2Manage .v2-ok")).toContainText("matches the classic app");
 });
+
+/* ================= no jump on review ================= */
+
+test("marking a bank payment reviewed keeps your place and doesn't reload the page", async ({ page, request }, info) => {
+  const token = await signIn(page, request);
+  const sync = await pairSync(page, request, token, "review-" + info.project.name);
+  const auth = { Authorization: "Bearer " + token };
+  /* Enough expenses that the Daily tab scrolls. */
+  for (let i = 0; i < 14; i++) {
+    expect((await request.post("/api/expenses", { headers: auth, data: { date: today(), description: "E2E filler " + i + " " + info.project.name, amount: 3 + i, category: "Groceries" } })).ok()).toBeTruthy();
+  }
+  const names = ["ZELLE FROM E2E ONE", "ZELLE FROM E2E TWO"].map((n) => n + " " + info.project.name);
+  expect((await request.post("/api/bank", { headers: sync, data: {
+    accounts: [{ id: "e2e-chk-" + info.project.name, institution: "E2E Bank", name: "Checking", subtype: "checking", currentBalance: 100 }],
+    transactions: names.map((n, i) => ({ id: "e2e-zelle-" + i + "-" + info.project.name, accountId: "e2e-chk-" + info.project.name, date: today(), name: n, amount: -(20 + i) }))
+  } })).ok()).toBeTruthy();
+
+  await page.reload();
+  await openTab(page, "daily");
+  const first = page.locator(".review-item", { hasText: names[0] });
+  await expect(first).toBeVisible();
+  /* Scroll so the item sits mid-screen, well away from the top. */
+  await first.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200));
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(100);
+
+  const budgetLoads = [];
+  page.on("request", (r) => { if (r.method() === "GET" && /\/api\/(budget|bank|pending)\b/.test(r.url())) budgetLoads.push(r.url()); });
+  const saved = page.waitForResponse((r) => r.url().includes("/api/bank") && r.request().method() === "PATCH");
+  await first.getByRole("button", { name: "Ignore", exact: true }).click();
+  await expect(first).toHaveCount(0); /* gone at once, before the save returns */
+  expect((await saved).ok()).toBeTruthy();
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(after - before), "scroll moved from " + before + " to " + after).toBeLessThanOrEqual(2);
+  expect(budgetLoads, "no reload of the budget, bank or pending data").toEqual([]);
+  await expect(page.locator(".review-item", { hasText: names[1] })).toBeVisible();
+
+  /* It stays reviewed after a reload. */
+  await page.reload();
+  await openTab(page, "daily");
+  await expect(page.locator(".review-item", { hasText: names[0] })).toHaveCount(0);
+});
+
+test("new screens: Mark reviewed keeps your place in Transactions", async ({ page, request }, info) => {
+  const token = await signIn(page, request);
+  const sync = await pairSync(page, request, token, "v2review-" + info.project.name);
+  const auth = { Authorization: "Bearer " + token };
+  for (let i = 0; i < 14; i++) {
+    expect((await request.post("/api/expenses", { headers: auth, data: { date: today(), description: "E2E row " + i + " " + info.project.name, amount: 2 + i, category: "Groceries" } })).ok()).toBeTruthy();
+  }
+  const name = "E2E TRANSFER OUT " + info.project.name;
+  expect((await request.post("/api/bank", { headers: sync, data: {
+    accounts: [{ id: "e2e-chk2-" + info.project.name, institution: "E2E Bank", name: "Checking 2", subtype: "checking", currentBalance: 100 }],
+    transactions: [{ id: "e2e-out-" + info.project.name, accountId: "e2e-chk2-" + info.project.name, date: "2026-01-02", name, amount: 75 }]
+  } })).ok()).toBeTruthy();
+
+  await openTab(page, "transactions");
+  const row = page.locator("#v2Transactions .v2-tx", { hasText: name });
+  await expect(row).toBeVisible();
+  await row.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200));
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(100);
+  await row.click();
+  await page.locator("dialog.v2-dialog button", { hasText: "Mark reviewed" }).click();
+  await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(0);
+  await expect(page.locator("#v2Transactions .v2-tx", { hasText: name })).not.toHaveClass(/review/);
+  await page.waitForTimeout(600); /* the background save and in-place refresh */
+  const after = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(after - before), "scroll moved from " + before + " to " + after).toBeLessThanOrEqual(2);
+  await expect(page.locator("#v2Transactions .v2-loading")).toHaveCount(0);
+});

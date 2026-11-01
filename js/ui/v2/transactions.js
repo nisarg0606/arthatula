@@ -1,6 +1,7 @@
 /* Transactions screen: one feed of every money movement, with search,
    filters, a to-review queue, and an edit dialog (category, merchant,
    amount, my share, notes, tags, hide, split). */
+import { keepScroll } from "../scroll.js";
 import {
   v2, api, h, clear, money, parseMoney, dayLabel, todayIso, loadBasics, categoryById, accountById, categoryName,
   categorySelect, accountSelect, field, openDialog, section, button, emptyState, errorState, loading
@@ -25,11 +26,14 @@ function query() {
   return "transactions?" + p.toString();
 }
 
+/* Re-reads the list and swaps it in place: the "Loading…" placeholder
+   only shows when there is nothing on screen yet, and the scroll
+   position stays put (see ../scroll.js). */
 function load() {
-  loading(listEl);
+  if (!listEl.firstChild) loading(listEl);
   return api("GET", query()).then(function (r) {
     state.list = r.transactions; state.total = r.total;
-    drawList();
+    keepScroll(drawList);
   }).catch(function (e) { errorState(listEl, e); });
 }
 
@@ -179,7 +183,17 @@ function editTx(t) {
       return req.then(function () { close(); load(); });
     }
   }];
-  if (!isNew && tx.needsReview) actions.push({ label: "Mark reviewed", onClick: function (close) { return api("PATCH", "transactions", { id: tx.id, patch: { needsReview: false } }).then(function () { close(); load(); }); } });
+  if (!isNew && tx.needsReview) actions.push({ label: "Mark reviewed", onClick: function (close) {
+    /* Instant: the row updates (or leaves the To review filter) now; the
+       save runs in the background and the row comes back if it fails. */
+    close();
+    const row = state.list.find(function (x) { return x.id === tx.id; });
+    if (row) row.needsReview = false;
+    if (state.review) { state.list = state.list.filter(function (x) { return x.id !== tx.id; }); state.total -= 1; }
+    keepScroll(drawList);
+    return api("PATCH", "transactions", { id: tx.id, patch: { needsReview: false } })
+      .then(load, function (e) { window.alert("Couldn't mark it reviewed: " + e.message); load(); });
+  } });
   if (!isNew && (tx.source === "manual" || tx.source === "v1exp")) {
     actions.push({ label: "Delete", danger: true, onClick: function (close) {
       if (!window.confirm("Delete this transaction?" + (tx.source === "v1exp" ? " It is also removed from the classic daily log." : ""))) return;

@@ -1,6 +1,7 @@
 /* Budget screen: any month, planned vs actual per category grouped like
    Monarch (income, then each spending group), editable planned amounts,
    rollover per category, copy and repeat. */
+import { keepScroll } from "../scroll.js";
 import { v2, api, h, clear, money, parseMoney, monthLabel, thisMonth, loadBasics, categorySelect, section, button, errorState, loading } from "./kit.js";
 import { addMonths } from "../../core/v2/money.js";
 
@@ -42,7 +43,10 @@ function row(r) {
       income ? null : h("label", { class: "v2-roll" }, roll, h("span", { text: "Roll over" }))));
 }
 
-function draw(view) {
+/* Redraws keep the reader's place (see ../scroll.js). */
+function draw(view) { return keepScroll(function () { return drawNow(view); }); }
+
+function drawNow(view) {
   clear(root);
   const left = view.plannedIncomeCents - view.plannedSpendingCents;
   const nav = h("div", { class: "v2-month-nav" },
@@ -95,7 +99,7 @@ function draw(view) {
 }
 
 function load() {
-  loading(root);
+  if (!root.firstChild) loading(root); /* first visit only: later loads swap in place */
   return api("GET", "budgets?month=" + month).then(draw).catch(function (e) { errorState(root, e); });
 }
 

@@ -1,6 +1,7 @@
 /* Recurring screen: the next 30 days of bills and income, your saved
    recurring items, suggestions found in your transactions (confirm or
    dismiss), and each card's due date. */
+import { keepScroll } from "../scroll.js";
 import { v2, api, h, clear, money, parseMoney, shortDay, dayLabel, todayIso, loadBasics, categorySelect, field, openDialog, section, button, emptyState, errorState, loading, categoryName } from "./kit.js";
 
 let root = null;
@@ -31,7 +32,10 @@ function editItem(item) {
     h("div", { class: "v2-form-row" }, field("How often", cad), field("Next date", next)), field("Category", cat)), actions);
 }
 
-function draw(v) {
+/* Redraws keep the reader's place (see ../scroll.js). */
+function draw(v) { return keepScroll(function () { return drawNow(v); }); }
+
+function drawNow(v) {
   clear(root);
   const up = h("div", { class: "v2-list" });
   if (!v.upcoming.length) up.appendChild(emptyState("Nothing due in the next 30 days."));
