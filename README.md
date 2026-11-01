@@ -302,6 +302,10 @@ the record for its rows: editing one on the new screens writes the
 change back to the classic log. **Settings → New model check** compares
 classic actuals with the new model month by month; every plan month must
 match to the cent (rows added on the new screens are listed apart).
+Spending from before the baseline date counts on the new screens as
+history (cash flow, categories, trends) but stays out of the classic
+balance and actuals, which start from the baseline snapshot, and out of
+this check.
 
 **Just you.** This is a personal tracker with one owner. Every new
 table still carries an `owner_id`, and every query goes through one

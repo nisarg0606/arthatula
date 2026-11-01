@@ -42,6 +42,7 @@ const FIELD_LABEL = {
   creditCardPayment: "Card payment", otherLoan: "Other loan", oneOffs: "One-off", otherExpenses: "Other expenses"
 };
 const MIRRORED = ["v1exp", "v1bank", "v1actual"];
+const MIRROR_VERSION = "2"; /* 2: rows before the baseline count in reports */
 
 async function fingerprint(db) {
   const r = await db.prepare(
@@ -55,7 +56,9 @@ async function fingerprint(db) {
     "(SELECT COUNT(*) || ':' || IFNULL(MAX(updated_at), '') || ':' || IFNULL(SUM(length(kind)), 0) FROM bank_tx_review) || '|' || " +
     "IFNULL((SELECT value FROM budget_settings WHERE key = 'baseline_date'), '') AS fp"
   ).first();
-  return (r && r.fp) || "";
+  /* Bump MIRROR_VERSION when what the mirror writes changes, so every
+     database re-mirrors once. */
+  return MIRROR_VERSION + "|" + ((r && r.fp) || "");
 }
 
 /* Run the mirror if the v1 tables changed since the last run (or when
@@ -157,7 +160,7 @@ export async function mirrorV1(db, opts) {
       share: e.myShare === null || e.myShare === undefined ? null : -Math.round(e.myShare * 100),
       categoryId: cat(e.category),
       accountId: acctExt ? acctByExt[acctExt] || null : (e.card ? cardByName[String(e.card).toLowerCase()] || null : null),
-      notes: e.note || "", pending: 0, hidden: 0, exclude: e.date < baseline ? 1 : 0, review: 0, v1: e.id
+      notes: e.note || "", pending: 0, hidden: 0, exclude: 0, review: 0, v1: e.id
     });
   }
   const reviewedIncome = {};
@@ -165,14 +168,13 @@ export async function mirrorV1(db, opts) {
     if (t.pending || linked[t.plaid_transaction_id]) continue;
     const kind = reviews[t.plaid_transaction_id] || null;
     const amount = -t.amount_cents;
-    const exclude = t.date < baseline && kind !== "income" ? 1 : 0;
-    if (kind === "income" && !exclude) reviewedIncome[monthOf(t.date)] = (reviewedIncome[monthOf(t.date)] || 0) + amount;
+    if (kind === "income") reviewedIncome[monthOf(t.date)] = (reviewedIncome[monthOf(t.date)] || 0) + amount;
     desired.push({
       ext: "bank:" + t.plaid_transaction_id, source: "v1bank", date: t.date, merchant: t.name, description: t.name,
       amount: amount, share: null,
       categoryId: kind === "income" ? cat("Other income") : kind === "repayment" ? cat("Repayment") : cat("Transfer"),
       accountId: acctByExt["plaid:" + t.account_id] || null, notes: "",
-      pending: 0, hidden: kind === "ignore" ? 1 : 0, exclude: exclude, review: kind ? 0 : 1, v1: null
+      pending: 0, hidden: kind === "ignore" ? 1 : 0, exclude: 0, review: kind ? 0 : 1, v1: null
     });
   }
   const loggedMonths = {};
@@ -290,7 +292,9 @@ export async function compareTotals(db) {
        (or auto-review) filed on the new screens (category_locked): its
        category was decided there, not copied from the classic app. */
     const copied = (t) => MIRRORED.indexOf(t.source) !== -1 && !(t.source === "v1bank" && t.categoryLocked);
-    const v2 = summarize(inMonth.filter(copied), idx);
+    /* Classic actuals count the daily log from the baseline date; earlier
+       expenses are history (they count in reports) and stay out of the gate. */
+    const v2 = summarize(inMonth.filter((t) => copied(t) && !(t.source === "v1exp" && t.date < state.baselineDate)), idx);
     const added = summarize(inMonth.filter((t) => !copied(t)), idx);
     return {
       month: m, v1IncomeCents: v1Income, v2IncomeCents: v2.incomeCents, v1SpendingCents: v1Spending, v2SpendingCents: v2.spendingCents,

@@ -11,7 +11,7 @@
      (card payments, moving money between accounts) never count as
      income or spending;
    - hidden transactions count nowhere; excludeReports ones are listed
-     but left out of totals (e.g. spending before the baseline date). */
+     but left out of totals (you turn this on per transaction). */
 
 export const ACCOUNT_TYPES = ["depository", "credit", "loan", "investment", "property", "cash", "other"];
 export const LIABILITY_TYPES = ["credit", "loan"];
