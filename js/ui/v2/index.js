@@ -13,6 +13,7 @@ import { render as renderSplitwise, setNavigator as setSplitwiseNavigator } from
 import { render as renderManage } from "./manage.js";
 import { api } from "./kit.js";
 import { check as checkDemo } from "./demo.js";
+import { autoSync } from "./bankimport.js";
 
 const SCREENS = {
   accounts: ["v2Accounts", renderAccounts],
@@ -31,7 +32,8 @@ let signedIn = false;
    screens have no local-only fallback. */
 export function setSignedIn(on) {
   signedIn = on;
-  if (on) { autoReview(); checkDemo(); }
+  /* SimpleFIN first, so auto-review sees what it brought in. */
+  if (on) { autoSync().then(function (added) { if (added && document.body.getAttribute("data-tab") === "transactions") refreshTransactions(); autoReview(); }); checkDemo(); }
 }
 
 /* Once per app open: let Gemini look at new bank rows before you do

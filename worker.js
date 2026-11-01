@@ -14,6 +14,8 @@
 import { withSecurityHeaders } from "./functions/_middleware.js";
 import { ensureV2, scope, OWNER_ID } from "./functions/api/_v2db.js";
 import { ensureMarket } from "./functions/api/_market.js";
+import { getSimplefinUrl } from "./functions/api/settings.js";
+import { syncSimplefin } from "./functions/api/v2/simplefin.js";
 import * as actuals from "./functions/api/actuals.js";
 import * as ask from "./functions/api/ask.js";
 import * as auth from "./functions/api/auth.js";
@@ -35,6 +37,7 @@ import * as v2budgets from "./functions/api/v2/budgets.js";
 import * as v2categories from "./functions/api/v2/categories.js";
 import * as v2demo from "./functions/api/v2/demo.js";
 import * as v2export from "./functions/api/v2/export.js";
+import * as v2import from "./functions/api/v2/import.js";
 import * as v2goals from "./functions/api/v2/goals.js";
 import * as v2investments from "./functions/api/v2/investments.js";
 import * as v2market from "./functions/api/v2/market.js";
@@ -44,6 +47,7 @@ import * as v2networth from "./functions/api/v2/networth.js";
 import * as v2recurring from "./functions/api/v2/recurring.js";
 import * as v2reports from "./functions/api/v2/reports.js";
 import * as v2rules from "./functions/api/v2/rules.js";
+import * as v2simplefin from "./functions/api/v2/simplefin.js";
 import * as v2splitwise from "./functions/api/v2/splitwise.js";
 import * as v2sync from "./functions/api/v2/sync.js";
 import * as v2transactions from "./functions/api/v2/transactions.js";
@@ -73,6 +77,7 @@ export const ROUTES = [
   ["/api/v2/demo", v2demo, "api/v2/demo.js"],
   ["/api/v2/export", v2export, "api/v2/export.js"],
   ["/api/v2/goals", v2goals, "api/v2/goals.js"],
+  ["/api/v2/import", v2import, "api/v2/import.js"],
   ["/api/v2/investments", v2investments, "api/v2/investments.js"],
   ["/api/v2/market", v2market, "api/v2/market.js"],
   ["/api/v2/layout", v2layout, "api/v2/layout.js"],
@@ -81,6 +86,7 @@ export const ROUTES = [
   ["/api/v2/recurring", v2recurring, "api/v2/recurring.js"],
   ["/api/v2/reports", v2reports, "api/v2/reports.js"],
   ["/api/v2/rules", v2rules, "api/v2/rules.js"],
+  ["/api/v2/simplefin", v2simplefin, "api/v2/simplefin.js"],
   ["/api/v2/splitwise", v2splitwise, "api/v2/splitwise.js"],
   ["/api/v2/sync", v2sync, "api/v2/sync.js"],
   ["/api/v2/transactions", v2transactions, "api/v2/transactions.js"]
@@ -129,10 +135,15 @@ export default {
     const response = path === "/api" || path.startsWith("/api/") ? await handleApi(request, env, ctx) : await env.ASSETS.fetch(request);
     return withSecurityHeaders(response, request.url);
   },
-  /* The nightly market recap (wrangler.toml [triggers]); Pages has no
-     cron, so there the first visit after the close writes it instead. */
+  /* The nightly market recap and SimpleFIN pull (wrangler.toml
+     [triggers]); Pages has no cron, so there the first visit after the
+     close writes the recap and opening the app pulls SimpleFIN. */
   async scheduled(event, env, ctx) {
     if (!env.DB) return;
-    ctx.waitUntil(ensureV2(env.DB).then(() => ensureMarket(scope(env.DB, OWNER_ID), env)));
+    const s = scope(env.DB, OWNER_ID);
+    ctx.waitUntil(ensureV2(env.DB).then(() => Promise.all([
+      ensureMarket(s, env),
+      getSimplefinUrl(env.DB).then((url) => url && syncSimplefin(s, env.DB)).catch(() => { /* status shows the error */ })
+    ])));
   }
 };
