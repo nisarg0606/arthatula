@@ -163,12 +163,20 @@ export async function mirrorV1(db, opts) {
       ["DELETE FROM accounts WHERE owner_id = ?1 AND id = ?2", r.id]
     ];
   }));
-  const acctRows = await s.all("SELECT id, external_id, name, type, balance_cents, balance_at FROM accounts WHERE owner_id = ?1");
+  const acctRows = await s.all("SELECT id, external_id, name, institution, type, balance_cents, balance_at FROM accounts WHERE owner_id = ?1");
   const acctByExt = {}, cardByName = {};
   acctRows.forEach((r) => {
     if (r.external_id) acctByExt[r.external_id] = r.id;
-    /* Prefer the synced account when a name appears twice. */
-    if (r.type === "credit" && (!cardByName[String(r.name).toLowerCase()] || r.external_id && r.external_id.indexOf("plaid:") === 0)) cardByName[String(r.name).toLowerCase()] = r.id;
+    if (r.type !== "credit") return;
+    /* Register the account under its name AND its issuer key, so a
+       daily-log expense that just says "Chase" finds the synced
+       account Plaid calls "CREDIT CARD" (its institution gives the
+       issuer away). Prefer the synced account when a key appears
+       twice. */
+    const isPlaid = r.external_id && r.external_id.indexOf("plaid:") === 0;
+    for (const k of [String(r.name).toLowerCase(), issuerKey(r.name), issuerKey(r.institution)]) {
+      if (k && (!cardByName[k] || isPlaid)) cardByName[k] = r.id;
+    }
   });
   await s.batch(acctRows.filter((r) => r.balance_cents !== null && r.balance_at).map((r) => [
     "INSERT INTO balance_snapshots (owner_id, account_id, date, balance_cents) VALUES (?1, ?2, ?3, ?4) " +
@@ -193,7 +201,7 @@ export async function mirrorV1(db, opts) {
       amount: -Math.round(e.amount * 100),
       share: e.myShare === null || e.myShare === undefined ? null : -Math.round(e.myShare * 100),
       categoryId: cat(e.category),
-      accountId: acctExt ? acctByExt[acctExt] || null : (e.card ? cardByName[String(e.card).toLowerCase()] || null : null),
+      accountId: acctExt ? acctByExt[acctExt] || null : (e.card ? cardByName[String(e.card).toLowerCase()] || cardByName[issuerKey(e.card)] || null : null),
       notes: e.note || "", pending: 0, hidden: 0, exclude: 0, review: 0, v1: e.id
     });
   }
