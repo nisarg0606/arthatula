@@ -33,7 +33,7 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
     stmts.push([
       "INSERT INTO accounts (id, owner_id, external_id, name, institution, type, subtype, mask, balance_cents, available_cents, balance_at, source) " +
       "VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'plaid') " +
-      "ON CONFLICT(owner_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET institution = excluded.institution, type = excluded.type, " +
+      "ON CONFLICT(owner_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = excluded.name, institution = excluded.institution, type = excluded.type, " +
       "subtype = excluded.subtype, mask = excluded.mask, balance_cents = excluded.balance_cents, available_cents = excluded.available_cents, " +
       "balance_at = excluded.balance_at, updated_at = datetime('now')",
       newId("acc_"), ext, str(a.name, 200) || "Account", str(a.institution, 200), type, str(a.subtype, 60), str(a.mask, 20),
