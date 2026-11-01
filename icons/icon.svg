@@ -1,6 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#0a0a0a"/>
-  <rect x="112" y="276" width="72" height="124" rx="20" fill="#134e4a"/>
-  <rect x="220" y="196" width="72" height="204" rx="20" fill="#0d9488"/>
-  <rect x="328" y="112" width="72" height="288" rx="20" fill="#2dd4bf"/>
+  <rect width="512" height="512" fill="#680618"/>
+  <defs>
+    <path id="petal" d="M256 112 C 290 164, 292 214, 256 250 C 220 214, 222 164, 256 112 Z"/>
+  </defs>
+  <g fill="#f3e6cf" stroke="#d9a75a" stroke-width="7" stroke-linejoin="round">
+    <use href="#petal" transform="rotate(-56 256 254)"/>
+    <use href="#petal" transform="rotate(56 256 254)"/>
+    <use href="#petal" transform="rotate(-29 256 254)"/>
+    <use href="#petal" transform="rotate(29 256 254)"/>
+    <use href="#petal"/>
+  </g>
+  <path d="M94 308 Q 256 268 418 308" fill="none" stroke="#d9a75a" stroke-width="15" stroke-linecap="round"/>
+  <circle cx="256" cy="292" r="13" fill="#d9a75a"/>
+  <rect x="243" y="292" width="26" height="118" rx="12" fill="#d9a75a"/>
+  <path d="M186 444 Q 256 425 326 444 L 337 460 L 175 460 Z" fill="#d9a75a"/>
+  <g stroke="#d9a75a" stroke-width="7" stroke-linecap="round">
+    <line x1="103" y1="301" x2="65" y2="386"/>
+    <line x1="103" y1="301" x2="171" y2="386"/>
+    <line x1="409" y1="301" x2="341" y2="386"/>
+    <line x1="409" y1="301" x2="447" y2="386"/>
+  </g>
+  <g fill="#f3e6cf" stroke="#d9a75a" stroke-width="5">
+    <path d="M60 386 Q 118 432 176 386 Q 118 404 60 386 Z"/>
+    <path d="M336 386 Q 394 432 452 386 Q 394 404 336 386 Z"/>
+  </g>
 </svg>
