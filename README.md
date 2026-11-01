@@ -1,13 +1,111 @@
-# Arthatula — monthly budget planner
+<p align="center">
+  <img src="icons/icon-192.png" width="88" height="88" alt="Arthatula logo">
+</p>
 
-A private budget app for your phone and computer: log what you spend,
-see where it went, plan the months ahead and keep a budget, with your
-bank accounts synced in if you want. Vanilla HTML, CSS and JavaScript —
-no framework and no build step — running on Cloudflare's free plan,
-with your data in your own Cloudflare database.
+<h1 align="center">Arthatula</h1>
+
+<p align="center">
+  <b>Your money, on your own server.</b><br>
+  A private budget, net-worth and investments app with an AI helper, that you deploy to
+  your own free Cloudflare account in about five minutes.
+</p>
+
+<p align="center">
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula"><img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/nisarg0606/arthatula/actions/workflows/deploy.yml"><img src="https://github.com/nisarg0606/arthatula/actions/workflows/deploy.yml/badge.svg" alt="Tests"></a>
+  <img src="https://img.shields.io/badge/build_step-none-14b8a6" alt="No build step">
+  <img src="https://img.shields.io/badge/vanilla-HTML%20%C2%B7%20CSS%20%C2%B7%20JS-0f766e" alt="Vanilla HTML, CSS and JS">
+  <img src="https://img.shields.io/badge/runs_on-Cloudflare_free_plan-f38020" alt="Runs on Cloudflare's free plan">
+  <img src="https://img.shields.io/badge/AI_agents-MCP_server-8b5cf6" alt="MCP server">
+</p>
+
+<p align="center">
+  <a href="docs/GUIDE.md"><b>Guide</b></a> ·
+  <a href="#get-your-own-copy-about-5-minutes-free"><b>Get your copy</b></a> ·
+  <a href="#features"><b>Features</b></a> ·
+  <a href="#security-v7"><b>Security</b></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/home.webp" alt="Arthatula's dashboard: net worth, spending against budget, alerts and upcoming bills" width="900">
+</p>
+
+<p align="center"><sub>All screenshots use made-up sample data.</sub></p>
+
+## Why Arthatula
+
+- **Private by design.** Your data lives in a database in *your* Cloudflare
+  account, behind your own access code. No company in the middle, no ads,
+  no selling your data.
+- **Free to run.** It fits in Cloudflare's free plan. No subscription.
+- **Everything in one place.** Budgets, every transaction, net worth,
+  investments, recurring bills, goals, cash flow and Splitwise balances.
+- **An AI that helps instead of nagging.** It sorts your spending, checks
+  new bank payments against your history, answers "can I afford it?",
+  and writes a short market recap every evening. Use Gemini (free tier),
+  Grok or any OpenAI-compatible model, or none at all.
+- **Your AI agent can drive it.** It's an MCP server, so Claude, Cursor
+  and other agents can read your budget and log expenses for you.
+- **Feels like an app on your phone.** Add it to your Home Screen and it
+  runs full screen, in light or dark mode.
+- **Small and readable.** Vanilla HTML, CSS and JavaScript, no framework
+  and no build step, with unit and browser tests on every change.
+
+## Features
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/investments.webp" alt="Investments: value over time compared with the S&amp;P 500"></td>
+    <td width="50%"><img src="docs/screenshots/budget.webp" alt="Budget: planned vs spent per category with 3-month average suggestions"></td>
+  </tr>
+  <tr>
+    <td><b>Investments.</b> Your brokerage and retirement accounts' value over time, today / week / month / year change, and an S&amp;P 500 line to see if you're beating the market. A <b>Market today</b> recap lands every evening.</td>
+    <td><b>Budget.</b> Plan any month per category, roll leftovers over, and tap the <b>avg</b> chip to plan what you really spent over the last three months.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/cashflow.webp" alt="Cash flow: income vs spending by month and spending by category"></td>
+    <td><img src="docs/screenshots/transactions.webp" alt="Transactions: one searchable feed with categories and accounts"></td>
+  </tr>
+  <tr>
+    <td><b>Cash flow.</b> Income vs spending month by month, your savings rate, where the money went, and a 12-month forecast.</td>
+    <td><b>Transactions.</b> One feed for every account: search, filter, split, tag, set your share, and clear the review queue the AI pre-checks for you.</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="30%"><img src="docs/screenshots/phone-home.webp" alt="The dashboard on a phone"></td>
+    <td width="30%"><img src="docs/screenshots/phone-hidden.webp" alt="The same dashboard with every amount hidden"></td>
+    <td>
+      <b>Made for your phone.</b> A thumb-friendly tab bar with a big <b>＋</b> to log
+      spending in seconds.<br><br>
+      <b>Show it off without showing your numbers.</b> Tap the eye and every
+      amount becomes <code>$•••</code>, while merchants, categories and chart
+      shapes stay.<br><br>
+      <b>Make Home yours.</b> <b>Customize</b> picks which cards show and their
+      order, and it follows you to every device.<br><br>
+      <b>Heads up.</b> Categories over budget and unusually big expenses are
+      flagged before they surprise you.
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/home-dark.webp" alt="The dashboard in dark mode" width="900">
+</p>
+
+**Also inside:** recurring bills and subscriptions (found for you in your
+transactions), savings goals, Splitwise balances, rules that file
+merchants automatically, category emoji, credit-card statement cycles,
+optional bank sync through Plaid, JSON/CSV export, and a classic
+13-month planner with planned vs actual.
 
 **New here? Read the [guide](docs/GUIDE.md)** — setup, using it on your
-phone, AI (Gemini, Grok, others) and connecting your AI agent (MCP).
+phone, AI (Gemini, Grok, others), the market recap, and connecting your
+AI agent (MCP).
 
 ## Get your own copy (about 5 minutes, free)
 
@@ -28,6 +126,8 @@ phone, AI (Gemini, Grok, others) and connecting your AI agent (MCP).
 Your data lives only in your own Cloudflare account; nobody else's copy
 can see it. To turn on the AI features, open Settings in the app and
 paste a Gemini key (free at <https://aistudio.google.com/apikey>).
+
+## The classic 13-month planner
 
 For each month you enter take-home pay, other income, and your expenses
 (rent, utilities, phone/internet, groceries, eating out, gas/transport,
@@ -347,10 +447,47 @@ The app now has a second, Monarch-style model beside the classic
 my share), **Cash flow** (income vs spending by month, spending by
 category, a rolling 12-month forecast), **Budget** (any month, per
 category, rollover), **Recurring** (bills and income, suggestions found
-in your transactions, card due dates) and **Goals**. The Dashboard
-opens with an Overview, and Settings gains categories, rules, export
-and a migration check. The classic tabs (Month editor, Daily, Cards,
-Bank) keep working unchanged.
+in your transactions, card due dates), **Investments** and **Goals**. The
+Dashboard opens with an Overview, and Settings gains categories, rules,
+market data, export and a migration check. The classic tabs (Month
+editor, Daily, Cards, Bank) keep working unchanged; on wide screens they
+sit under **More** at the end of the tab bar.
+
+**Dashboard extras.** The Overview's **Heads up** list flags categories
+over budget and big expenses from the last 7 days (at least 3× your
+typical expense over 90 days, and never under $100). **Customize** shows,
+hides and reorders the Dashboard's cards; the layout is saved per owner
+(`GET/PUT /api/v2/layout`, `functions/api/v2/layout.js`). The **eye**
+button in the header hides every amount: the three money formatters
+(`js/core/format.js`, `js/ui/charts.js`, `js/ui/v2/kit.js`) print `$•••`
+while `<html>` has the `hide-amounts` class, chart axes and tooltips are
+masked, and typed amounts and Ask answers are blurred. It's remembered per
+device and applied before first paint (`theme-init.js`).
+
+**Budget suggestions and category emoji.** Each budget row carries the
+category's average actual over the previous 3 months (`avgCents`), shown
+as a chip that plans that amount when tapped; categories spent on in
+those months appear even before this month has activity. Categories have
+an optional emoji (`icon`), shown wherever the name is.
+
+**Investments.** `GET /api/v2/investments` builds the total value of the
+investment accounts per day from the balance snapshots the sync records
+(`investmentSeries` / `changeOver` in `js/core/v2/money.js`), with
+day / week / 30-day / 1-year change per account and in total, and SPY
+closes from the saved market recaps for an S&P 500 comparison line.
+
+**Market today.** After each US close, `functions/api/_market.js` fetches
+quotes for SPY, QQQ and DIA (Finnhub's free plan quotes funds, not the
+indexes) and the day's general headlines, and the AI provider writes a
+3–4 sentence recap from only those (a plain one-liner without an AI key).
+One recap per trading day is kept in `v2_settings` as
+`market:YYYY-MM-DD`. Pages has no cron, so `GET /api/v2/market` writes it
+on the first visit after 4:10 pm New York; Worker deployments also run it
+from a nightly cron (`wrangler.toml [triggers]`, `scheduled` in
+`worker.js`). The trading day comes from the quote's own timestamp, so
+holidays need no calendar; a failure is retried after 15 minutes, not on
+every visit. Key: **Settings → Market data**, or the `FINNHUB_API_KEY`
+secret (it wins over the saved one).
 
 **Auto-review and Mark all reviewed.** Each time the app opens,
 `POST /api/v2/autoreview` (`functions/api/_v2autoreview.js`) checks
@@ -418,7 +555,8 @@ is treated as the same card.
 **API.** All under `/api/v2/`, device sessions only (except `sync`):
 `accounts`, `transactions`, `categories`, `rules`, `budgets`,
 `reports?kind=summary|cashflow|forecast`, `recurring`, `goals`,
-`networth`, `export?format=json|csv`, `migration`. Money crosses this API
+`networth`, `investments`, `market`, `layout`, `export?format=json|csv`,
+`migration`. Money crosses this API
 as signed integer cents (negative = money out). Each file's header
 documents its routes.
 
@@ -525,6 +663,9 @@ D1 also keeps its own point-in-time history ("Time Travel") for recent days.
 - Just the frontend (local-only mode):
   `python3 -m http.server 8000` and open <http://localhost:8000>
 - Full stack incl. D1: `npx wrangler pages dev .` (uses a local D1).
+- README screenshots: `node tools/readme-screenshots.mjs` starts a throwaway
+  local copy with made-up sample data and rewrites `docs/screenshots/`
+  (needs `cd e2e && npm ci` and `cwebp`).
 
 ## Tests
 
@@ -541,6 +682,8 @@ node tests/v2-api.test.mjs      # every /api/v2 route: guards, write-back, split
 node tests/v2-autoreview.test.mjs # auto-review: name matching, strict rule, Gemini checks (fake fetch), Not right, Mark all
 node tests/sync.test.mjs        # "Sync now" request queue: auth scope, dedupe, claim/complete, expiry
 node tests/mcp.test.mjs         # MCP server: mcp-session scope, JSON-RPC handshake, every tool, revoke
+node tests/market.test.mjs      # market recap: trading days, holidays, AI vs plain recap, retries; investments maths and routes
+node tests/layout.test.mjs      # Dashboard layout: validation, save/load, reset
 for f in js/*.js js/*/*.js; do node --check "$f"; done   # frontend syntax check
 ```
 
