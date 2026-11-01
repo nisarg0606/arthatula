@@ -315,7 +315,7 @@ export function expenseRow(e, open) {
       edit.appendChild(noteInput);
       var meta = document.createElement("span");
       meta.className = "meta";
-      meta.textContent = "via " + (e.categorizationSource || "rules");
+      meta.textContent = "via " + (e.categorizationSource === "gemini" ? "AI" : e.categorizationSource || "rules"); /* "gemini" = any AI provider */
       edit.appendChild(meta);
       var editBtn = document.createElement("button");
       editBtn.type = "button"; editBtn.textContent = "Edit";

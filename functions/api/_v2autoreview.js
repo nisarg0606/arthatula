@@ -23,7 +23,7 @@
  * rejected: it goes back on To review and is never auto-reviewed again;
  * marking it reviewed yourself marks it confirmed.
  */
-import { getGeminiConfig } from "./categorize.js";
+import { aiRequest, getAiConfig, responseText } from "./_ai.js";
 
 export const BATCH = 30;
 const NOISE = new Set(["pos", "debit", "credit", "purchase", "card", "ach", "web", "id", "ppd", "online", "payment", "pmt", "recurring", "checkcard", "visa", "mastercard", "the", "inc", "llc", "co", "sq", "tst", "sp"]);
@@ -105,7 +105,7 @@ export function buildReviewPrompt(items, catName) {
 export function parseReviewAnswer(payload, items) {
   let arr = null;
   try {
-    const text = payload.candidates[0].content.parts.map((p) => p.text || "").join("").trim();
+    const text = responseText(payload);
     const m = text.match(/\[[\s\S]*\]/);
     arr = JSON.parse(m ? m[0] : text);
   } catch (e) { return null; }
@@ -130,20 +130,10 @@ export function parseReviewAnswer(payload, items) {
 }
 
 async function askGemini(env, items, catName, fetchImpl) {
-  const { key, model } = await getGeminiConfig(env || {});
-  if (!key) return null;
+  const cfg = await getAiConfig(env || {});
+  if (!cfg.key) return null;
   try {
-    const res = await (fetchImpl || fetch)(
-      "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: buildReviewPrompt(items, catName) }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0 }
-        })
-      }
-    );
+    const res = await (fetchImpl || fetch)(...aiRequest(cfg, buildReviewPrompt(items, catName), { asJson: true }));
     if (!res.ok) return null;
     return parseReviewAnswer(await res.json(), items);
   } catch (e) { return null; }
