@@ -3,6 +3,7 @@
    records), how it changed, an optional S&P 500 line to compare, and
    each account. The recap card is shared with Home. */
 import { keepScroll } from "../scroll.js";
+import { amountsHidden } from "../../core/format.js";
 import { api, h, clear, money, shortDay, dayLabel, section, button, emptyState, errorState, loading, drawChart, chartColors } from "./kit.js";
 
 let root = null, range = "3m", data = null, goTo = null;
@@ -70,9 +71,11 @@ function benchmarkLine(points, bench) {
 }
 
 /* Quantity without trailing zeros: whole shares stay "10", crypto
-   dust keeps the decimals it needs. */
+   dust keeps the decimals it needs. Hidden with the eye button: shares
+   times the price would give the amount away. */
 function fmtQty(q) {
   if (q === null || q === undefined) return "";
+  if (amountsHidden()) return "•••";
   const v = Math.abs(q) >= 100 ? Math.round(q * 100) / 100 : q;
   return String(Math.round(v * 1e8) / 1e8);
 }
@@ -106,7 +109,7 @@ function holdingsSection(d) {
       if (a) sub.push(a.name + (a.mask ? " ··" + a.mask : ""));
       if (hd.asOf) sub.push("priced " + shortDay(hd.asOf));
       return h("div", { class: "v2-line" },
-        h("span", { class: "v2-line-name" }, h("span", null, h("strong", { text: title }), hd.name && hd.kind !== "cash" ? h("span", { class: "hint", text: " " + hd.name }) : null), h("span", { class: "hint", text: sub.join(" · ") })),
+        h("span", { class: "v2-line-name" }, h("span", null, h("strong", { text: title }), hd.name && hd.kind !== "cash" ? h("span", { class: "hint", text: " " + hd.name }) : null), h("span", { class: "v2-tx-sub", text: sub.join(" · ") })),
         g ? h("span", { class: "v2-chg hint " + cls(g), text: changeText(g) }) : null,
         h("span", { class: "v2-amt", text: hd.valueCents === null || hd.valueCents === undefined ? "—" : money(hd.valueCents, { whole: true }) }));
     })),
