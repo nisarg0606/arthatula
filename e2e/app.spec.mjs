@@ -697,3 +697,24 @@ test("Settings: an MCP token shows once with a ready config, works on /api/mcp o
   await expect(row).toHaveCount(0);
   expect((await request.post("/api/mcp", { headers: auth, data: { jsonrpc: "2.0", id: 1, method: "ping" } })).status()).toBe(401);
 });
+
+test("Customize dashboard: a hidden card stays hidden after a reload; Reset brings it back", async ({ page }) => {
+  const dialog = page.locator("dialog.v2-dialog");
+  const order = () => page.locator('[data-section="dashboard"] > :is(#v2Overview, .month-card, .ask-card, .dash-card)')
+    .evaluateAll((els) => els.map((e) => e.id || e.className.split(" ")[1]));
+  await page.getByRole("button", { name: "Customize dashboard" }).first().click();
+  await dialog.getByRole("checkbox", { name: "Ask about your budget" }).uncheck();
+  await dialog.getByRole("button", { name: "Move Trends & plan settings up" }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".ask-card")).toBeHidden();
+  await page.reload();
+  await expect(page.locator(".v2-overview")).toBeVisible();
+  await expect(page.locator(".ask-card")).toBeHidden();
+  expect(await order()).toEqual(["v2Overview", "month-card", "dash-card", "ask-card"]);
+  await page.getByRole("button", { name: "Customize dashboard" }).first().click();
+  await dialog.getByRole("button", { name: "Reset to default" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".ask-card")).toBeVisible();
+  expect(await order()).toEqual(["v2Overview", "month-card", "ask-card", "dash-card"]);
+});

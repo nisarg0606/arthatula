@@ -96,6 +96,9 @@ Tips:
 - Tap a category on Home to see exactly what it counted.
 - **Heads up** on Home flags categories over budget and unusually big
   expenses from the last week.
+- **Customize** (top of Home) picks which cards Home shows and their order.
+  It's saved to your account, so every device gets the same layout.
+  **Reset to default** brings everything back.
 - In Budget, the **avg $…** chip is what you spent on average over the last
   three months. Tap it to plan that much.
 - Give a category an emoji in **Settings → Categories** (tap the category).
