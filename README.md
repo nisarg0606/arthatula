@@ -20,6 +20,8 @@
   <img src="https://img.shields.io/badge/vanilla-HTML%20%C2%B7%20CSS%20%C2%B7%20JS-0f766e" alt="Vanilla HTML, CSS and JS">
   <img src="https://img.shields.io/badge/runs_on-Cloudflare_free_plan-f38020" alt="Runs on Cloudflare's free plan">
   <img src="https://img.shields.io/badge/AI_agents-MCP_server-8b5cf6" alt="MCP server">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <a href="https://liberapay.com/nisarg001/donate"><img src="https://img.shields.io/badge/Liberapay-buy_me_a_coffee-f6c915?logo=liberapay&logoColor=black" alt="Buy me a coffee on Liberapay"></a>
 </p>
 
 <p align="center">
@@ -708,3 +710,16 @@ desktop Chromium, against a throwaway local database):
 ```
 cd e2e && npm ci && npx playwright install webkit chromium && npx playwright test
 ```
+
+## Support the project
+
+Arthatula is free and stays free. If it saves you money or time, you can
+[buy me a coffee on Liberapay](https://liberapay.com/nisarg001/donate) ☕,
+star the repo, or tell a friend.
+
+<a href="https://liberapay.com/nisarg001/donate"><img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg"></a>
+
+## License
+
+[MIT](LICENSE): use it, change it, share it, including in your own
+projects. Keep the copyright notice.
