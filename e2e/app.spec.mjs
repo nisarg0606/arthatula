@@ -33,8 +33,15 @@ async function pairSync(page, request, token, name) {
   expect((await request.post("/api/auth", { headers: auth, data: { action: "pair-approve", fingerprint: fp } })).ok()).toBeTruthy();
   return { Authorization: "Bearer " + raw };
 }
+/* Phones show four tabs + More; the other sections open from the More sheet. */
 async function openTab(page, name) {
-  await page.locator('.tab-btn[data-tab="' + name + '"]').click();
+  const tab = page.locator('.tab-btn[data-tab="' + name + '"]');
+  if (await tab.isVisible()) await tab.click();
+  else {
+    await page.locator("#moreTab").click();
+    await page.locator('.more-tile[data-go="' + name + '"]').click();
+    await expect(page.locator("#moreSheet")).toBeHidden();
+  }
   await expect(page.locator('[data-section="' + name + '"]')).toBeVisible();
 }
 
