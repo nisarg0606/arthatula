@@ -554,18 +554,24 @@ test("new screens: Mark reviewed keeps your place in Transactions", async ({ pag
   for (let i = 0; i < 14; i++) {
     expect((await request.post("/api/expenses", { headers: auth, data: { date: today(), description: "E2E row " + i + " " + info.project.name, amount: 2 + i, category: "Groceries" } })).ok()).toBeTruthy();
   }
-  const name = "E2E TRANSFER OUT " + info.project.name;
+  /* Dated today so it sits above the 14 rows (not at the very bottom of
+     the page, where a shorter row would let the browser pull the page up),
+     and unique per attempt so a retry has a fresh row to review. */
+  const key = info.project.name + "-" + info.retry;
+  const name = "E2E TRANSFER OUT " + key;
   expect((await request.post("/api/bank", { headers: sync, data: {
     accounts: [{ id: "e2e-chk2-" + info.project.name, institution: "E2E Bank", name: "Checking 2", subtype: "checking", currentBalance: 100 }],
-    transactions: [{ id: "e2e-out-" + info.project.name, accountId: "e2e-chk2-" + info.project.name, date: "2026-01-02", name, amount: 75 }]
+    transactions: [{ id: "e2e-out-" + key, accountId: "e2e-chk2-" + info.project.name, date: today(), name, amount: 75 }]
   } })).ok()).toBeTruthy();
 
   await openTab(page, "transactions");
   const row = page.locator("#v2Transactions .v2-tx", { hasText: name });
   await expect(row).toBeVisible();
-  await row.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200));
+  await row.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 120));
   const before = await page.evaluate(() => window.scrollY);
-  expect(before).toBeGreaterThan(100);
+  expect(before).toBeGreaterThan(50);
+  /* the page can scroll further, so a shorter row can't drag it */
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY)).toBeGreaterThan(100);
   await row.click();
   await page.locator("dialog.v2-dialog button", { hasText: "Mark reviewed" }).click();
   await expect(page.locator("dialog.v2-dialog[open]")).toHaveCount(0);
