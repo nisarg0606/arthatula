@@ -34,13 +34,14 @@ export function init() {
    "cardForm", "cardFormTitle", "cardName", "cardStart", "cardStartBtn", "cardStartDisplay", "cardStartCal", "cardEnd", "cardEndBtn", "cardEndDisplay", "cardEndCal", "cardDue", "cardDueBtn", "cardDueDisplay", "cardDueCal", "cardCancelEditBtn", "cardList",
    "bankSyncedAt", "bankIgnoreRules", "bankAccounts", "bankAccountFilter", "bankTxList",
    "baselineDateDisplay",
-   "geminiKeyInput", "geminiModelInput", "geminiSaveBtn", "geminiClearBtn", "geminiSettingsStatus",
+   "geminiKeyInput", "geminiModelInput", "geminiSaveBtn", "geminiClearBtn", "geminiSettingsStatus", "aiProviderSelect", "aiBaseUrlField", "aiBaseUrlInput", "aiKeyHelp",
    "splitwiseKeyInput", "splitwiseSaveBtn", "splitwiseClearBtn", "splitwiseSettingsStatus",
    "authGate", "gateSetupForm", "gateSetupSecret", "gateSetupCode", "gateSetupConfirm", "gateSetupError",
    "gateLoginForm", "gateLoginCode", "gateLoginError",
    "securitySection", "secChangeForm", "secCurrentCode", "secNewCode", "secNewConfirm", "secChangeStatus",
    "pairCard", "pairLabel", "pairWhen", "pairFingerprint", "pairApproveBtn", "pairDenyBtn",
    "pairOpenBtn", "pairOpenStatus",
+   "mcpCreateBtn", "mcpStatus", "mcpReveal", "mcpEndpoint", "mcpToken", "mcpConfig",
    "sessionList", "signOutBtn",
    "themeToggle", "addExpenseTopBtn"]
     .forEach(function (id) { els[id] = document.getElementById(id); });

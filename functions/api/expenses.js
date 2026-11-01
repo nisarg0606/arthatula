@@ -45,6 +45,11 @@
  * Sync tokens (the Plaid script) may GET and POST here; editing and
  * deleting stay device-only.
  *
+ * The writes run shared cores — createExpense / updateExpense /
+ * deleteExpense, each -> { status, data } — so the MCP server
+ * (mcp.js) gets exactly the same validation, categorization, dedupe,
+ * bank auto-link and rollup as these routes.
+ *
  * After every create/update/delete, the affected month's actuals are
  * re-synced from the daily log (see syncDailyRollup in budget.js) so the
  * planned-vs-actual comparison always reflects the log, exactly once.
@@ -59,6 +64,8 @@ function json(data, status) {
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
 }
+/* A core's result: the route sends it as JSON, the MCP server reads it. */
+function out(data, status) { return { status: status || 200, data }; }
 function noDb() {
   return json({ error: "No database bound. Bind a D1 database as DB (see README)." }, 503);
 }
@@ -157,68 +164,134 @@ export async function onRequestGet(context) {
   }
 }
 
+/* Core of POST: body is the parsed JSON; isSync marks a sync-token
+   import (it may settle a counted pending charge by name). */
+export async function createExpense(db, env, body, isSync) {
+  await ensureTables(db);
+  const date = cleanDate(body.date);
+  const amount = cleanAmount(body.amount);
+  const description = typeof body.description === "string" ? body.description.trim().slice(0, 300) : "";
+  if (!date) return out({ error: "date must be YYYY-MM-DD" }, 400);
+  if (amount === null) return out({ error: "amount must be a number" }, 400);
+  if (!description) return out({ error: "description is required" }, 400);
+  const share = cleanMyShare(body.myShare, amount);
+  if (!share.ok) return out({ error: "myShare must be a number between 0 and the amount" }, 400);
+
+  let category, source;
+  if (typeof body.category === "string" && isValidCategory(body.category)) {
+    category = body.category; source = "manual";
+  } else {
+    const result = await categorize(env, description, amount);
+    category = result.category; source = result.source;
+  }
+  /* A posted charge for an expense already counted from its pending
+     charge: update that expense, never add a second one. */
+  const counted = await counterpartToSettle(db, body, isSync, date, amount, description);
+  if (counted) {
+    const postedTx = cleanTxId(body.bankTxId);
+    const share = counted.myShare === null || counted.myShare === undefined ? null : Math.min(counted.myShare, amount);
+    const takeId = postedTx && !(await expenseForTx(db, postedTx)) ? postedTx : counted.bankTxId;
+    await db.prepare(
+      "UPDATE daily_expenses SET amount = ?, my_share = ?, bank_tx_id = ?, pending_settled = 1, updated_at = datetime('now') WHERE id = ?"
+    ).bind(amount, share, takeId || null, counted.id).run();
+    const state = await syncDailyRollup(db, counted.date.slice(0, 7));
+    return out({ expense: await getExpense(db, counted.id), duplicate: true, settled: true, state });
+  }
+  const pendingTxId = cleanTxId(body.pendingTxId);
+  if (pendingTxId) {
+    const row = await db.prepare("SELECT * FROM daily_expenses WHERE pending_tx_id = ?").bind(pendingTxId).first();
+    if (row) return out({ expense: rowToExpense(row), duplicate: true, state: await readState(db) });
+  }
+  let bankTxId = cleanTxId(body.bankTxId);
+  if (!bankTxId) {
+    const match = await db.prepare(
+      "SELECT plaid_transaction_id AS id FROM bank_transactions WHERE date = ? AND name = ? AND amount_cents = ?"
+    ).bind(date, description, Math.round(amount * 100)).first();
+    if (match) bankTxId = match.id;
+  }
+  if (bankTxId) {
+    const linked = await expenseForTx(db, bankTxId);
+    if (linked) return out({ expense: linked, duplicate: true, state: await readState(db) });
+  }
+  const info = await db.prepare(
+    "INSERT INTO daily_expenses (date, description, amount, category, categorization_source, card_name, my_share, bank_tx_id, pending_tx_id, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(date, description, amount, category, source, cleanCard(body.card), share.value, bankTxId, pendingTxId, cleanNote(body.note) || null).run();
+  const expense = await getExpense(db, info.meta.last_row_id);
+  const state = await syncDailyRollup(db, date.slice(0, 7));
+  return out({ expense, state }, 201);
+}
+
 export async function onRequestPost(context) {
   if (!context.env.DB) return noDb();
   try {
     const auth = await requireAuth(context.env.DB, context.request, { allowSync: true });
     if (auth.response) return auth.response;
-    const db = context.env.DB;
-    await ensureTables(db);
     const body = await context.request.json();
-    const date = cleanDate(body.date);
-    const amount = cleanAmount(body.amount);
-    const description = typeof body.description === "string" ? body.description.trim().slice(0, 300) : "";
-    if (!date) return json({ error: "date must be YYYY-MM-DD" }, 400);
-    if (amount === null) return json({ error: "amount must be a number" }, 400);
-    if (!description) return json({ error: "description is required" }, 400);
-    const share = cleanMyShare(body.myShare, amount);
-    if (!share.ok) return json({ error: "myShare must be a number between 0 and the amount" }, 400);
-
-    let category, source;
-    if (typeof body.category === "string" && isValidCategory(body.category)) {
-      category = body.category; source = "manual";
-    } else {
-      const result = await categorize(context.env, description, amount);
-      category = result.category; source = result.source;
-    }
-    /* A posted charge for an expense already counted from its pending
-       charge: update that expense, never add a second one. */
-    const counted = await counterpartToSettle(db, body, auth.session && auth.session.kind === "sync", date, amount, description);
-    if (counted) {
-      const postedTx = cleanTxId(body.bankTxId);
-      const share = counted.myShare === null || counted.myShare === undefined ? null : Math.min(counted.myShare, amount);
-      const takeId = postedTx && !(await expenseForTx(db, postedTx)) ? postedTx : counted.bankTxId;
-      await db.prepare(
-        "UPDATE daily_expenses SET amount = ?, my_share = ?, bank_tx_id = ?, pending_settled = 1, updated_at = datetime('now') WHERE id = ?"
-      ).bind(amount, share, takeId || null, counted.id).run();
-      const state = await syncDailyRollup(db, counted.date.slice(0, 7));
-      return json({ expense: await getExpense(db, counted.id), duplicate: true, settled: true, state });
-    }
-    const pendingTxId = cleanTxId(body.pendingTxId);
-    if (pendingTxId) {
-      const row = await db.prepare("SELECT * FROM daily_expenses WHERE pending_tx_id = ?").bind(pendingTxId).first();
-      if (row) return json({ expense: rowToExpense(row), duplicate: true, state: await readState(db) });
-    }
-    let bankTxId = cleanTxId(body.bankTxId);
-    if (!bankTxId) {
-      const match = await db.prepare(
-        "SELECT plaid_transaction_id AS id FROM bank_transactions WHERE date = ? AND name = ? AND amount_cents = ?"
-      ).bind(date, description, Math.round(amount * 100)).first();
-      if (match) bankTxId = match.id;
-    }
-    if (bankTxId) {
-      const linked = await expenseForTx(db, bankTxId);
-      if (linked) return json({ expense: linked, duplicate: true, state: await readState(db) });
-    }
-    const info = await db.prepare(
-      "INSERT INTO daily_expenses (date, description, amount, category, categorization_source, card_name, my_share, bank_tx_id, pending_tx_id, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(date, description, amount, category, source, cleanCard(body.card), share.value, bankTxId, pendingTxId, cleanNote(body.note) || null).run();
-    const expense = await getExpense(db, info.meta.last_row_id);
-    const state = await syncDailyRollup(db, date.slice(0, 7));
-    return json({ expense, state }, 201);
+    const r = await createExpense(context.env.DB, context.env, body, auth.session.kind === "sync");
+    return json(r.data, r.status);
   } catch (err) {
     return json({ error: String((err && err.message) || err) }, 400);
   }
+}
+
+/* Core of PUT: body is { id, patch }. */
+export async function updateExpense(db, body) {
+  await ensureTables(db);
+  const id = parseInt(body && body.id, 10);
+  if (!Number.isFinite(id) || !body.patch || typeof body.patch !== "object") {
+    return out({ error: "PUT expects { id, patch }" }, 400);
+  }
+  const existing = await getExpense(db, id);
+  if (!existing) return out({ error: "expense not found" }, 404);
+  const patch = body.patch;
+  const next = { ...existing };
+  if (patch.date !== undefined) {
+    const d = cleanDate(patch.date);
+    if (!d) return out({ error: "date must be YYYY-MM-DD" }, 400);
+    next.date = d;
+  }
+  if (patch.description !== undefined) next.description = String(patch.description).trim().slice(0, 300);
+  if (patch.amount !== undefined) {
+    const a = cleanAmount(patch.amount);
+    if (a === null) return out({ error: "amount must be a number" }, 400);
+    next.amount = a;
+  }
+  if (patch.category !== undefined) {
+    if (!isValidCategory(patch.category)) return out({ error: "unknown category" }, 400);
+    next.category = patch.category;
+    next.categorizationSource = "manual"; /* a category patch is a manual override */
+  }
+  if (patch.card !== undefined) next.card = cleanCard(patch.card);
+  if (patch.note !== undefined) next.note = cleanNote(patch.note);
+  if (patch.bankTxId !== undefined) {
+    next.bankTxId = cleanTxId(patch.bankTxId);
+    if (next.bankTxId) {
+      const other = await expenseForTx(db, next.bankTxId);
+      if (other && other.id !== id) {
+        return out({ error: "That bank transaction is already linked to another expense.", conflict: other }, 409);
+      }
+    }
+  }
+  /* "Keep" on a counted charge that never posted: treat it as final. */
+  if (patch.pendingSettled === true) next.pendingSettled = true;
+  if (patch.myShare !== undefined) {
+    const share = cleanMyShare(patch.myShare, next.amount);
+    if (!share.ok) return out({ error: "myShare must be a number between 0 and the amount" }, 400);
+    next.myShare = share.value;
+  } else if (next.myShare !== null && next.myShare !== undefined && next.myShare > next.amount) {
+    /* An amount-only edit dropped the total below the stored share:
+       clamp the share to the new amount (share == amount is the full
+       amount anyway) rather than leaving an impossible state. */
+    next.myShare = next.amount;
+  }
+  await db.prepare(
+    "UPDATE daily_expenses SET date = ?, description = ?, amount = ?, category = ?, categorization_source = ?, card_name = ?, my_share = ?, bank_tx_id = ?, pending_settled = ?, note = ?, updated_at = datetime('now') WHERE id = ?"
+  ).bind(next.date, next.description, next.amount, next.category, next.categorizationSource, next.card, next.myShare === undefined ? null : next.myShare, next.bankTxId || null, next.pendingSettled ? 1 : 0, next.note || null, id).run();
+  const expense = await getExpense(db, id);
+  /* The month may have changed — re-sync both. */
+  await syncDailyRollup(db, existing.date.slice(0, 7));
+  const state = await syncDailyRollup(db, next.date.slice(0, 7));
+  return out({ expense, state });
 }
 
 export async function onRequestPut(context) {
@@ -226,69 +299,25 @@ export async function onRequestPut(context) {
   try {
     const auth = await requireAuth(context.env.DB, context.request);
     if (auth.response) return auth.response;
-    const db = context.env.DB;
-    await ensureTables(db);
-    const body = await context.request.json();
-    const id = parseInt(body && body.id, 10);
-    if (!Number.isFinite(id) || !body.patch || typeof body.patch !== "object") {
-      return json({ error: "PUT expects { id, patch }" }, 400);
-    }
-    const existing = await getExpense(db, id);
-    if (!existing) return json({ error: "expense not found" }, 404);
-    const patch = body.patch;
-    const next = { ...existing };
-    if (patch.date !== undefined) {
-      const d = cleanDate(patch.date);
-      if (!d) return json({ error: "date must be YYYY-MM-DD" }, 400);
-      next.date = d;
-    }
-    if (patch.description !== undefined) next.description = String(patch.description).trim().slice(0, 300);
-    if (patch.amount !== undefined) {
-      const a = cleanAmount(patch.amount);
-      if (a === null) return json({ error: "amount must be a number" }, 400);
-      next.amount = a;
-    }
-    if (patch.category !== undefined) {
-      if (!isValidCategory(patch.category)) return json({ error: "unknown category" }, 400);
-      next.category = patch.category;
-      next.categorizationSource = "manual"; /* a category patch is a manual override */
-    }
-    if (patch.card !== undefined) next.card = cleanCard(patch.card);
-    if (patch.note !== undefined) next.note = cleanNote(patch.note);
-    if (patch.bankTxId !== undefined) {
-      next.bankTxId = cleanTxId(patch.bankTxId);
-      if (next.bankTxId) {
-        const other = await expenseForTx(db, next.bankTxId);
-        if (other && other.id !== id) {
-          return json({ error: "That bank transaction is already linked to another expense.", conflict: other }, 409);
-        }
-      }
-    }
-    /* "Keep" on a counted charge that never posted: treat it as final. */
-    if (patch.pendingSettled === true) next.pendingSettled = true;
-    if (patch.myShare !== undefined) {
-      const share = cleanMyShare(patch.myShare, next.amount);
-      if (!share.ok) return json({ error: "myShare must be a number between 0 and the amount" }, 400);
-      next.myShare = share.value;
-    } else if (next.myShare !== null && next.myShare !== undefined && next.myShare > next.amount) {
-      /* An amount-only edit dropped the total below the stored share:
-         clamp the share to the new amount (share == amount is the full
-         amount anyway) rather than leaving an impossible state. */
-      next.myShare = next.amount;
-    }
-    await db.prepare(
-      "UPDATE daily_expenses SET date = ?, description = ?, amount = ?, category = ?, categorization_source = ?, card_name = ?, my_share = ?, bank_tx_id = ?, pending_settled = ?, note = ?, updated_at = datetime('now') WHERE id = ?"
-    ).bind(next.date, next.description, next.amount, next.category, next.categorizationSource, next.card, next.myShare === undefined ? null : next.myShare, next.bankTxId || null, next.pendingSettled ? 1 : 0, next.note || null, id).run();
-    const expense = await getExpense(db, id);
-    /* The month may have changed — re-sync both. */
-    await syncDailyRollup(db, existing.date.slice(0, 7));
-    const state = await syncDailyRollup(db, next.date.slice(0, 7));
-    return json({ expense, state });
+    const r = await updateExpense(context.env.DB, await context.request.json());
+    return json(r.data, r.status);
   } catch (err) {
     return json({ error: String((err && err.message) || err) }, 400);
   }
 }
 export const onRequestPatch = onRequestPut;
+
+/* Core of DELETE. */
+export async function deleteExpense(db, id) {
+  await ensureTables(db);
+  const existing = await getExpense(db, id);
+  if (!existing) return out({ error: "expense not found" }, 404);
+  await db.prepare("DELETE FROM daily_expenses WHERE id = ?").bind(id).run();
+  /* Re-sync the month; if that was its last expense the rollup clears
+     the month's rolled-up actuals (see syncDailyRollup). */
+  const state = await syncDailyRollup(db, existing.date.slice(0, 7));
+  return out({ deleted: id, state });
+}
 
 export async function onRequestDelete(context) {
   if (!context.env.DB) return noDb();
@@ -306,13 +335,8 @@ export async function onRequestDelete(context) {
       } catch (e) { /* no body */ }
     }
     if (!Number.isFinite(id)) return json({ error: "DELETE expects ?id=<id> or { id }" }, 400);
-    const existing = await getExpense(db, id);
-    if (!existing) return json({ error: "expense not found" }, 404);
-    await db.prepare("DELETE FROM daily_expenses WHERE id = ?").bind(id).run();
-    /* Re-sync the month; if that was its last expense the rollup clears
-       the month's rolled-up actuals (see syncDailyRollup). */
-    const state = await syncDailyRollup(db, existing.date.slice(0, 7));
-    return json({ deleted: id, state });
+    const r = await deleteExpense(db, id);
+    return json(r.data, r.status);
   } catch (err) {
     return json({ error: String((err && err.message) || err) }, 400);
   }

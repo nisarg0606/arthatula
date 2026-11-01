@@ -50,7 +50,7 @@ function load() {
 /* The chip on a row auto-review took off To review. */
 function autoLabel(a) {
   if (a.decision === "duplicate") return "✓ Already in daily log";
-  return a.by === "gemini" ? "✓ Checked by Gemini" : "✓ Matched past payments";
+  return a.by === "gemini" ? "✓ Checked by AI" : "✓ Matched past payments";
 }
 
 function amountClass(t) { return t.amountCents > 0 ? "v2-amt in" : "v2-amt"; }
@@ -97,7 +97,7 @@ function drawList() {
     listEl.appendChild(h("p", { class: "hint v2-bulk", text: "These were taken off To review because they match what you did before. They are counted. Open one and choose \u201cNot right\u201d if it isn\u2019t." }));
   }
   if (!state.list.length) {
-    listEl.appendChild(emptyState(state.review ? "Nothing to review — every transaction has a category." : state.auto ? "Nothing here: Gemini hasn't taken anything off To review." : "No transactions match."));
+    listEl.appendChild(emptyState(state.review ? "Nothing to review — every transaction has a category." : state.auto ? "Nothing here: the AI hasn't taken anything off To review." : "No transactions match."));
     return;
   }
   let day = null, group = null;
@@ -276,7 +276,7 @@ function filters() {
   auto.addEventListener("change", function () { state.auto = auto.checked; if (auto.checked) { state.review = false; review.checked = false; } state.page = 1; load(); });
   return h("div", { class: "v2-filters" }, search, acct, cat, month,
     h("label", { class: "switch-label v2-check" }, review, h("span", { text: "To review only" })),
-    h("label", { class: "switch-label v2-check" }, auto, h("span", { text: "Checked by Gemini" })));
+    h("label", { class: "switch-label v2-check" }, auto, h("span", { text: "Checked by AI" })));
 }
 
 export function render(container) {

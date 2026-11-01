@@ -19,38 +19,14 @@
 import { CATEGORIES, categorizeByRules, isValidCategory } from "./_categories.js";
 import { ensureTables, getMerchantRules, requireAuth } from "./budget.js";
 import { merchantCategory } from "../../js/core/merchant.js";
+import { aiRequest, getAiConfig, responseText } from "./_ai.js";
 
 export { CATEGORIES, categorizeByRules };
-export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
-
 function json(data, status) {
   return new Response(JSON.stringify(data), {
     status: status || 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
-}
-
-export async function getGeminiConfig(env) {
-  let key = env.GEMINI_API_KEY || null;
-  let model = env.GEMINI_MODEL || null;
-  if (env.DB && (!key || !model)) {
-    try {
-      await ensureTables(env.DB);
-      if (!key) {
-        const row = await env.DB.prepare(
-          "SELECT value FROM budget_settings WHERE key = 'gemini_api_key'"
-        ).first();
-        if (row && row.value) key = row.value;
-      }
-      if (!model) {
-        const row = await env.DB.prepare(
-          "SELECT value FROM budget_settings WHERE key = 'gemini_model'"
-        ).first();
-        if (row && row.value) model = row.value;
-      }
-    } catch (e) { /* settings unavailable — env/defaults still apply */ }
-  }
-  return { key, model: model || DEFAULT_GEMINI_MODEL };
 }
 
 export function buildPrompt(description, amount) {
@@ -65,10 +41,10 @@ export function buildPrompt(description, amount) {
   ].filter(Boolean).join("\n");
 }
 
-export function parseGeminiResponse(payload) {
+/* { category, confidence? } from the AI's reply (any provider), or null. */
+export function parseCategoryReply(payload) {
   try {
-    const text = payload.candidates[0].content.parts
-      .map((p) => p.text || "").join("").trim();
+    const text = responseText(payload);
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
     const parsed = JSON.parse(match[0]);
@@ -90,24 +66,13 @@ export async function categorize(env, description, amount, fetchImpl) {
     } catch (e) { /* fall through to Gemini / keywords */ }
   }
   const rulesResult = { category: categorizeByRules(description), source: "rules" };
-  const { key, model } = await getGeminiConfig(env || {});
-  if (!key) return rulesResult;
+  const cfg = await getAiConfig(env || {});
+  if (!cfg.key) return rulesResult;
   const doFetch = fetchImpl || fetch;
   try {
-    const res = await doFetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/" +
-        encodeURIComponent(model) + ":generateContent",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(description, amount) }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0 }
-        })
-      }
-    );
+    const res = await doFetch(...aiRequest(cfg, buildPrompt(description, amount), { asJson: true }));
     if (!res.ok) return rulesResult;
-    const parsed = parseGeminiResponse(await res.json());
+    const parsed = parseCategoryReply(await res.json());
     if (!parsed) return rulesResult;
     const out = { category: parsed.category, source: "gemini" };
     if (parsed.confidence !== undefined) out.confidence = parsed.confidence;

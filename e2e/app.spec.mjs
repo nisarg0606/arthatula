@@ -248,7 +248,7 @@ test("Ask: a question goes to the server and the reply shows in the conversation
   await openTab(page, "dashboard");
   await page.locator(".ask-suggest button").first().click();
   await expect(page.locator(".ask-msg.user")).toHaveText("Can I afford $1,300 in December?");
-  await expect(page.locator(".ask-msg.note")).toContainText("Add your Gemini key in Settings");
+  await expect(page.locator(".ask-msg.note")).toContainText("key in Settings to use Ask");
   await page.fill("#askInput", "Where did my money go?");
   await page.locator("#askBtn").click();
   await expect(page.locator(".ask-msg.user")).toHaveCount(2);
@@ -673,4 +673,27 @@ test("Gemini review: a payment like ones you filed before is checked and counted
   await page.waitForTimeout(500); /* the background save */
   const left = (await (await request.get("/api/v2/transactions?review=1", { headers: auth })).json()).total;
   expect(left).toBe(0);
+});
+
+test("Settings: an MCP token shows once with a ready config, works on /api/mcp only, and is revocable", async ({ page, request }) => {
+  page.on("dialog", (d) => d.accept()); /* the revoke confirm */
+  await openTab(page, "settings");
+  await page.locator("#mcpCreateBtn").click();
+  await expect(page.locator("#mcpReveal")).toBeVisible();
+  await expect(page.locator("#mcpEndpoint")).toHaveValue(/\/api\/mcp$/);
+  const token = await page.locator("#mcpToken").inputValue();
+  expect(token.length).toBeGreaterThanOrEqual(32);
+  const config = JSON.parse(await page.locator("#mcpConfig").inputValue());
+  expect(config.mcpServers.arthatula.headers.Authorization).toBe("Bearer " + token);
+  const row = page.locator(".session-row", { has: page.locator(".kind-badge.mcp") });
+  await expect(row).toHaveCount(1);
+
+  const auth = { Authorization: "Bearer " + token };
+  const list = await request.post("/api/mcp", { headers: auth, data: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+  expect((await list.json()).result.tools.length).toBeGreaterThan(10);
+  expect((await request.get("/api/expenses", { headers: auth })).status()).toBe(403);
+
+  await row.locator("button.danger").click();
+  await expect(row).toHaveCount(0);
+  expect((await request.post("/api/mcp", { headers: auth, data: { jsonrpc: "2.0", id: 1, method: "ping" } })).status()).toBe(401);
 });

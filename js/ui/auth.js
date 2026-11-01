@@ -141,11 +141,16 @@ export function renderSessionList(sessions) {
     row.className = "session-row";
     var label = document.createElement("span");
     label.className = "s-label";
-    label.textContent = s.label || (s.kind === "sync" ? "Sync token" : "Device");
+    label.textContent = s.label || (s.kind === "sync" ? "Sync token" : s.kind === "mcp" ? "AI assistant (MCP)" : "Device");
     if (s.kind === "sync") {
       var sb = document.createElement("span");
       sb.className = "kind-badge sync"; sb.textContent = "Sync";
       label.appendChild(sb);
+    }
+    if (s.kind === "mcp") {
+      var mb = document.createElement("span");
+      mb.className = "kind-badge mcp"; mb.textContent = "MCP";
+      label.appendChild(mb);
     }
     if (s.current) {
       var cb = document.createElement("span");
@@ -157,7 +162,12 @@ export function renderSessionList(sessions) {
       var btn = document.createElement("button");
       btn.type = "button"; btn.className = "danger"; btn.textContent = "Revoke";
       btn.addEventListener("click", function () {
-        if (!confirm("Sign this device out? It will need the access code to sign in again.")) return;
+        var msg = s.kind === "mcp"
+          ? "Revoke this AI assistant token? The assistant loses access immediately and needs a new token to reconnect."
+          : s.kind === "sync"
+            ? "Revoke the sync token? The automatic expense sync stops until you pair it again."
+            : "Sign this device out? It will need the access code to sign in again.";
+        if (!confirm(msg)) return;
         authAction({ action: "revoke", id: s.id }).then(function () {
           app.sessionsLoadedAt = 0; loadSessions();
         }).catch(function (e) { alert(e.message || "Could not revoke that session."); });
@@ -235,6 +245,25 @@ export function init() {
       authAction({ action: "pair-deny" }).then(function () {
         renderPairing(null);
       }).catch(function (e) { alert(e.message || "Could not deny that pairing request."); });
+    });
+  }
+  /* MCP token: the server returns the raw token exactly once, so the
+     reveal panel fills the endpoint, token and a ready-to-paste client
+     config. The token then lives only in the owner's MCP client and in
+     the sessions list below (as a hash) for revoking. */
+  if (els.mcpCreateBtn) {
+    els.mcpCreateBtn.addEventListener("click", function () {
+      authAction({ action: "mcp-create", label: "AI assistant (MCP)" }).then(function (data) {
+        var url = location.origin + "/api/mcp";
+        els.mcpEndpoint.value = url;
+        els.mcpToken.value = data.token;
+        els.mcpConfig.value = JSON.stringify({
+          mcpServers: { arthatula: { type: "http", url: url, headers: { Authorization: "Bearer " + data.token } } }
+        }, null, 2);
+        els.mcpReveal.hidden = false;
+        els.mcpStatus.textContent = "Token created — copy it now, it won't be shown again. Revoke it any time from the list below.";
+        app.sessionsLoadedAt = 0; loadSessions();
+      }).catch(function (e) { alert(e.message || "Could not create an MCP token."); });
     });
   }
   if (els.secChangeForm) {

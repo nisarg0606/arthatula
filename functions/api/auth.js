@@ -22,6 +22,10 @@
  *                                                               -> { ok, fingerprint }
  *   POST /api/auth { action: "pair-approve", fingerprint }      (device)
  *   POST /api/auth { action: "pair-deny" }                      (device)
+ *   POST /api/auth { action: "mcp-create", label? }             (device) -> { token, expiresAt, session }
+ *        Mints a least-privilege 'mcp' session token for an AI
+ *        assistant; it can call /api/mcp only and is revocable from
+ *        the sessions list like any other session.
  *
  * Setup is locked behind the SETUP_SECRET environment secret (set it on
  * the Pages project before first use; it can be deleted once the code
@@ -133,7 +137,7 @@ export async function onRequestPost(context) {
       if (await getAccessCodeHash(db)) return json({ error: "An access code is already set — sign in instead." }, 409);
       const expected = context.env.SETUP_SECRET;
       if (typeof expected !== "string" || !expected) {
-        return json({ error: "Setup is locked. Add a SETUP_SECRET environment secret to the Pages project, redeploy, then enter it here." }, 403);
+        return json({ error: "Setup is locked. Add a SETUP_SECRET secret to your Cloudflare app (Settings → Variables and Secrets), redeploy, then enter it here." }, 403);
       }
       if (!validNewCode(body.code)) return json({ error: SHORT_CODE_ERROR }, 400);
       const slot = await reserveAttempt(db, context.request);
@@ -214,6 +218,17 @@ export async function onRequestPost(context) {
     if (action === "pair-deny") {
       await clearPendingPairing(db);
       return json({ ok: true });
+    }
+    if (action === "mcp-create") {
+      /* The raw token is returned ONCE, here; only its SHA-256 is
+         stored. An mcp session can call /api/mcp and nothing else (see
+         requireAuth), shows in the sessions list, and dies with a code
+         change like every other session. */
+      const created = await createSession(db, { kind: "mcp", label: cleanLabel(body.label) || "AI assistant (MCP)" });
+      return json({
+        token: created.token, expiresAt: created.session.expiresAt, session: created.session,
+        sessions: await listSessions(db, currentHash)
+      });
     }
     if (action === "sessions") {
       return json({ sessions: await listSessions(db, currentHash) });

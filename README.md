@@ -1,13 +1,30 @@
 # Arthatula — monthly budget planner
 
-A small 13-month budget planner, starting the month you set it up, built with vanilla
-HTML, CSS and JavaScript — no build step and no framework. Styling is
-Tailwind CSS via its Play CDN (with an inline theme config) plus a small
-custom stylesheet, and graphs are Chart.js via CDN; if a CDN fails to
-load, the charts degrade to plain-text summaries and everything else
-keeps working. The UI is dashboard-first and tabbed (Dashboard / Month
-editor / Daily expenses / Settings), with light and dark themes
-(defaulting to your device preference, remembered per device).
+A private budget app for your phone and computer: log what you spend,
+see where it went, plan the months ahead and keep a budget, with your
+bank accounts synced in if you want. Vanilla HTML, CSS and JavaScript —
+no framework and no build step — running on Cloudflare's free plan,
+with your data in your own Cloudflare database.
+
+## Get your own copy (about 5 minutes, free)
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula-v2)
+
+1. Click the button and sign in to Cloudflare (or create a free
+   account). Connect GitHub when it asks: it copies this project into
+   your account so you get updates on your own terms.
+2. When it asks for **SETUP_SECRET**, type any long phrase you make up
+   and keep it for step 3. Leave everything else as it is and deploy.
+   Cloudflare creates your app and its database.
+3. Open the address it gives you (`https://arthatula.<you>.workers.dev`),
+   enter the setup secret, and choose your **access code**: the password
+   you'll use on each of your devices.
+4. On iPhone: Share → **Add to Home Screen**, so it opens full screen
+   like an app.
+
+Your data lives only in your own Cloudflare account; nobody else's copy
+can see it. To turn on the AI features, open Settings in the app and
+paste a Gemini key (free at <https://aistudio.google.com/apikey>).
 
 For each month you enter take-home pay, other income, and your expenses
 (rent, utilities, phone/internet, groceries, eating out, gas/transport,
@@ -136,6 +153,7 @@ functions/api/settings.js Pages Function: GET / PUT /api/settings (masked Gemini
 functions/api/sync-requests.js + sync-requests/  Pages Functions: the "Sync now" request queue (file / latest / claim / complete)
 tools/sync-poller.mjs   VM poller: claims queued sync requests and runs the Plaid sync engine (no agent)
 functions/api/auth.js     Pages Function: /api/auth (setup, sign-in, sessions, pairing)
+functions/api/mcp.js      Pages Function: /api/mcp — MCP server for AI assistants (see "AI assistant (MCP)")
 functions/_middleware.js  security headers (CSP, framing, no-store on the API) for every response
 theme-init.js         head script (kept out of index.html for the CSP)
 tailwind.config.js, tailwind.css  Tailwind config and the prebuilt CSS the page loads (CI checks it is current)
@@ -205,6 +223,66 @@ manual sync requests (`GET /api/sync-requests/claim`,
 `POST /api/sync-requests/:id/complete`), and sign itself out. Everything
 else — the budget, settings, sessions, pairing, filing sync requests,
 deleting or editing expenses — answers 403.
+
+### AI assistant (MCP)
+
+The app is also an MCP server (Model Context Protocol, stateless
+Streamable HTTP) at `/api/mcp`, so an AI assistant — Claude, ChatGPT,
+Cursor, Grok (xAI remote MCP), or any other MCP client — can work with
+the budget through tools instead of the raw API:
+
+- **Read (classic, dollars):** `get_budget`, `list_expenses`,
+  `list_cards`, `get_bank_snapshot`, `list_pending_charges`,
+  `get_sync_status`, `categorize_expense`
+- **Read (money model, signed cents):** `list_accounts` (balances + net
+  worth), `list_transactions` (date range, account, category, text,
+  to-review filters), `get_budget_status` (budget vs. actual for a month)
+- **Write:** `add_expense`, `update_expense`, `delete_expense`,
+  `request_sync` — expense writes run the same cores as `/api/expenses`,
+  so auto-categorization, dedupe, bank auto-link and the monthly rollup
+  behave exactly as in the app (and the new screens see them too).
+
+Connect one in Settings → Security → **AI assistant (MCP)** → *Create
+MCP token*. The token is shown once, together with the endpoint
+(`https://<your-app>/api/mcp`) and a ready-to-paste config. For Claude
+Code (`.mcp.json`) or Cursor (`.cursor/mcp.json`), merge it into the MCP
+settings file:
+
+```json
+{ "mcpServers": { "arthatula": {
+  "type": "http",
+  "url": "https://<your-app>/api/mcp",
+  "headers": { "Authorization": "Bearer <token>" }
+} } }
+```
+
+(Claude Code can also add it in one line:
+`claude mcp add --transport http arthatula https://<your-app>/api/mcp --header "Authorization: Bearer <token>"`.)
+Claude Desktop's config file only starts local servers, so bridge to the
+remote one with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+(needs Node.js) in `claude_desktop_config.json`:
+
+```json
+{ "mcpServers": { "arthatula": {
+  "command": "npx",
+  "args": ["-y", "mcp-remote", "https://<your-app>/api/mcp", "--header", "Authorization:${ARTHATULA_AUTH}"],
+  "env": { "ARTHATULA_AUTH": "Bearer <token>" }
+} } }
+```
+Any other MCP client: choose the **Streamable HTTP** transport, point it
+at `https://<your-app>/api/mcp`, and send the header
+`Authorization: Bearer <token>`. The server is stateless, so `GET` (SSE)
+and `DELETE` answer 405; everything is a JSON-RPC `POST`.
+
+The token is an `mcp` session — a third least-privilege kind next to
+device and sync sessions. `requireAuth` refuses it on every route
+except `/api/mcp`, so it can never open the app, call the raw API
+(including `/api/v2/*`), change settings or the access code, or manage
+devices. Only a signed-in device can create one. It appears in the
+sessions list (badge **MCP**): revoke it there any time, and changing
+the access code signs it out like every other session. Its 90-day
+window slides as it is used, like a device session. Sync tokens are
+refused on `/api/mcp`.
 
 ### What the app expects from the sync (contract)
 
@@ -343,14 +421,21 @@ documents its routes.
 
 ## This deployment: arthatula + the shared database
 
-This repo deploys to the Cloudflare Pages project **arthatula**, bound
-(see `wrangler.toml`) to the **same D1 database** as the original
-`monthly-budget` app, so both sites show the same data and accept the
-same access code. The deploy workflow creates the Pages project on its
-first run. It needs one repository secret, `CLOUDFLARE_API_TOKEN`, with
-Cloudflare Pages: Edit and D1: Edit on the account. A deploy runs when a
-pull request is merged into `main`, or from Actions → "Test and deploy"
-→ Run workflow.
+The original deployment runs on Cloudflare **Pages** (copies made with
+the Deploy button run as a **Worker** from the same code: `worker.js`
+routes `/api/*` to the same handlers in `functions/`). It is bound to the
+**same D1 database** as the original `monthly-budget` app, so both sites
+show the same data and accept the same access code.
+
+`.github/workflows/deploy.yml` deploys it when a pull request is merged
+into `main` (or from Actions → "Test and deploy" → Run workflow). It
+writes the Pages config at deploy time from these repository settings
+(Settings → Secrets and variables → Actions):
+
+- secret `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit and D1: Edit)
+- variables `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID`, `PAGES_PROJECT`
+
+A fork without them skips the deploy job.
 
 The nightly encrypted database backup stays in the original repo (both
 apps share one database, so one backup covers both).
@@ -452,6 +537,7 @@ node tests/v2-model.test.mjs    # v2 schema, owner scoping, the mirror and its t
 node tests/v2-api.test.mjs      # every /api/v2 route: guards, write-back, splits, budgets, reports, export
 node tests/v2-autoreview.test.mjs # auto-review: name matching, strict rule, Gemini checks (fake fetch), Not right, Mark all
 node tests/sync.test.mjs        # "Sync now" request queue: auth scope, dedupe, claim/complete, expiry
+node tests/mcp.test.mjs         # MCP server: mcp-session scope, JSON-RPC handshake, every tool, revoke
 for f in js/*.js js/*/*.js; do node --check "$f"; done   # frontend syntax check
 ```
 

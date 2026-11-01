@@ -1,0 +1,23 @@
+# Files the Worker must not serve as static assets (wrangler.toml
+# [assets] directory = "."): source, tests, tooling and config.
+.git
+.github
+.wrangler
+node_modules
+e2e
+functions
+tests
+tools
+worker.js
+wrangler.toml
+package.json
+package-lock.json
+schema.sql
+netlify.toml
+vercel.json
+tailwind.config.js
+README.md
+docs
+.dev.vars*
+.assetsignore
+.gitignore

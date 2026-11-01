@@ -16,7 +16,7 @@ import { handleV2, HttpError, cleanCents, cleanMonth, bodyOf } from "../_v2http.
 import { loadBudgets, loadTransactions, loadCategories, categoryIndex } from "../_v2store.js";
 import { budgetMonth, monthRange, addMonths } from "../../../js/core/v2/money.js";
 
-async function monthView(s, month) {
+export async function monthView(s, month) {
   const { categories } = await loadCategories(s);
   const budgets = await loadBudgets(s);
   const from = addMonths(month, -24) + "-01";
