@@ -42,9 +42,10 @@ const FIELD_LABEL = {
   creditCardPayment: "Card payment", otherLoan: "Other loan", oneOffs: "One-off", otherExpenses: "Other expenses"
 };
 const MIRRORED = ["v1exp", "v1bank", "v1actual"];
-const MIRROR_VERSION = "4"; /* 2: rows before the baseline count in reports
+const MIRROR_VERSION = "5"; /* 2: rows before the baseline count in reports
                                 3: unbooked months' bank inflows count as income
-                               4: Cybrid outflows count as Sent to India */
+                               4: Cybrid outflows count as Sent to India
+                               5: classic cards pair with synced accounts by issuer */
 
 async function fingerprint(db) {
   const r = await db.prepare(
@@ -99,17 +100,42 @@ export async function mirrorV1(db, opts) {
       a.current_cents, a.available_cents, String(a.updated_at || "").slice(0, 10) || null
     ]);
   }
-  /* A classic card whose name matches a synced credit account (pushed by
-     the sync through /api/v2/sync) is the same card: its statement dates
-     go onto the synced account instead of making a second account. */
+  /* A classic card whose issuer matches a synced credit account
+     (pushed by the sync through /api/v2/sync) is the same card: its
+     statement dates go onto the synced account instead of making a
+     second account. Pairing is by ISSUER, not exact name — the
+     classic list uses short names ("Chase", "Amex") while Plaid
+     calls the same cards "CREDIT CARD" and "Blue Cash Everyday®",
+     so an exact-name match paired nothing and every card showed
+     twice. The issuer is read from the synced account's name or its
+     institution, with the usual aliases folded together. */
+  const issuerKey = (text) => {
+    const t = " " + String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ") + " ";
+    if (/ amex | american express /.test(t)) return "americanexpress";
+    if (/ wells fargo /.test(t)) return "wellsfargo";
+    if (/ capital one /.test(t)) return "capitalone";
+    if (/ bank of america /.test(t)) return "bankofamerica";
+    if (/ chase | jpmorgan /.test(t)) return "chase";
+    if (/ discover /.test(t)) return "discover";
+    if (/ robinhood /.test(t)) return "robinhood";
+    if (/ citi | citibank /.test(t)) return "citi";
+    return t.trim().replace(/\s+/g, "");
+  };
   const syncedCredit = {};
-  (await s.all("SELECT id, name FROM accounts WHERE owner_id = ?1 AND source = 'plaid' AND type = 'credit'"))
-    .forEach((r) => { syncedCredit[String(r.name).toLowerCase()] = r.id; });
+  (await s.all("SELECT id, name, institution FROM accounts WHERE owner_id = ?1 AND source = 'plaid' AND type = 'credit'"))
+    .forEach((r) => {
+      for (const text of [r.name, r.institution]) {
+        const k = issuerKey(text);
+        if (k && !syncedCredit[k]) syncedCredit[k] = r.id;
+      }
+    });
   const mergedCards = [];
+  const twinByCardExt = {};
   for (const c of cards) {
-    const twin = syncedCredit[String(c.name).toLowerCase()];
+    const twin = syncedCredit[issuerKey(c.name)];
     if (twin) {
       mergedCards.push(c.id);
+      twinByCardExt["card:" + c.id] = twin;
       acctStmts.push(["UPDATE accounts SET statement_start = ?3, statement_end = ?4, due_date = ?5, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2",
         twin, c.statement_start, c.statement_end, c.due_date || null]);
       continue;
@@ -126,11 +152,17 @@ export async function mirrorV1(db, opts) {
   const cardIds = cards.filter((c) => mergedCards.indexOf(c.id) === -1).map((c) => "card:" + c.id);
   const staleCards = (await s.all("SELECT id, external_id FROM accounts WHERE owner_id = ?1 AND source = 'v1card'"))
     .filter((r) => cardIds.indexOf(r.external_id) === -1);
-  await s.batch(staleCards.flatMap((r) => [
-    ["UPDATE transactions SET account_id = NULL WHERE owner_id = ?1 AND account_id = ?2", r.id],
-    ["UPDATE goals SET account_id = NULL WHERE owner_id = ?1 AND account_id = ?2", r.id],
-    ["DELETE FROM accounts WHERE owner_id = ?1 AND id = ?2", r.id]
-  ]));
+  await s.batch(staleCards.flatMap((r) => {
+    /* A duplicate whose card now pairs with a synced twin hands its
+       transactions and goals to the twin before it is deleted; a
+       card that is simply gone leaves them unassigned, as before. */
+    const twin = twinByCardExt[r.external_id] || null;
+    return [
+      ["UPDATE transactions SET account_id = ?3 WHERE owner_id = ?1 AND account_id = ?2", r.id, twin],
+      ["UPDATE goals SET account_id = ?3 WHERE owner_id = ?1 AND account_id = ?2", r.id, twin],
+      ["DELETE FROM accounts WHERE owner_id = ?1 AND id = ?2", r.id]
+    ];
+  }));
   const acctRows = await s.all("SELECT id, external_id, name, type, balance_cents, balance_at FROM accounts WHERE owner_id = ?1");
   const acctByExt = {}, cardByName = {};
   acctRows.forEach((r) => {
