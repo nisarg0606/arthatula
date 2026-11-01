@@ -7,6 +7,7 @@
  */
 import { spawn, execFileSync } from "node:child_process";
 import os from "node:os";
+import { expectedSession } from "../functions/api/_market.js";
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
@@ -114,8 +115,20 @@ for (let back = 185; back >= 0; back--) {
   }
 }
 sql.push(`UPDATE accounts SET balance_cents = ${b} WHERE id = ${q(acct["Brokerage"])}; UPDATE accounts SET balance_cents = ${r} WHERE id = ${q(acct["Retirement (401k)"])};`);
+/* Holdings (normally pushed by the bank sync): made-up positions. */
+const asOf = daysAgo(1);
+for (const [a, id, ticker, name, qty, cost, price, kind] of [
+  ["Brokerage", "s-vti", "VTI", "Vanguard Total Stock Market ETF", 42.5, 1068000, 31240, "etf"],
+  ["Brokerage", "s-aapl", "AAPL", "Apple Inc", 18, 382000, 24410, "equity"],
+  ["Brokerage", "s-msft", "MSFT", "Microsoft Corp", 9.25, 401500, 46830, "equity"],
+  ["Brokerage", "s-nvda", "NVDA", "NVIDIA Corp", 22, 215000, 14270, "equity"],
+  ["Brokerage", "s-cash", "", "Cash", 1846, null, 100, "cash"],
+  ["Retirement (401k)", "s-tdf", "VFIFX", "Target Retirement 2050 Fund", 1120.4, 5210000, 5732, "mutual fund"]]) {
+  sql.push(`INSERT OR REPLACE INTO holdings (owner_id, account_id, security_id, ticker, name, quantity, cost_basis_cents, price_cents, value_cents, kind, as_of) VALUES ('me', ${q(acct[a])}, '${id}', '${ticker}', ${q(name)}, ${qty}, ${cost === null ? "NULL" : cost}, ${price}, ${Math.round(qty * price)}, '${kind}', '${asOf}');`);
+}
 sql.push(`INSERT OR REPLACE INTO budget_settings (key, value) VALUES ('finnhub_api_key', 'sample'), ('gemini_api_key', 'demo-key-0001');`);
-sql.push(`INSERT OR REPLACE INTO v2_settings (owner_id, key, value) VALUES ('me', 'market:checked', '9999-12-31');`);
+/* Mark the latest session as fetched so the fake key is never used. */
+sql.push(`INSERT OR REPLACE INTO v2_settings (owner_id, key, value) VALUES ('me', 'market:checked', '${expectedSession(Date.now())}');`);
 fs.writeFileSync(path.join(SP, "seed.sql"), sql.join("\n"));
 execFileSync("node", [WRANGLER, "d1", "execute", "arthatula", "--local", "--persist-to", STATE, "--file", path.join(SP, "seed.sql")], { cwd: repo, stdio: "ignore" });
 server = await startServer();
@@ -155,6 +168,7 @@ const phone = Object.assign({}, devices["iPhone 13"], { deviceScaleFactor: 2 });
 delete phone.defaultBrowserType;
 await shoot("home", desktop, "dashboard");
 await shoot("investments", desktop, "investments", "#v2Investments .v2-tiles");
+await shoot("holdings", desktop, "investments", '#v2Investments h2:has-text("Holdings")');
 await shoot("budget", desktop, "budget");
 await shoot("transactions", desktop, "transactions");
 await shoot("cashflow", desktop, "cashflow");

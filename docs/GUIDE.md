@@ -142,9 +142,17 @@ investment accounts, so it fills in by itself once an account is there:
 
 The dashed **S&P 500** line compares your growth with the market from the
 same starting value; it uses the Market today recaps, so it appears once
-a few have been saved. Individual holdings (which stocks you own) aren't
-shown yet. Don't use unofficial "Robinhood API" tools: they need your
-password and break Robinhood's terms.
+a few have been saved.
+
+**Holdings** lists each stock, fund and cash position with its shares,
+latest price, value and gain or loss against what you paid. They come
+from the bank sync when it sends Plaid's investment holdings (needs
+Plaid's Investments product on your Plaid account); a manual account
+shows its balance only. Prices are the latest close your brokerage
+reports, so they update once a day.
+
+Don't use unofficial "Robinhood API" tools: they need your password and
+break Robinhood's terms.
 
 ## 5. Turn on the AI (Gemini, Grok or others)
 

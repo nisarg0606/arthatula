@@ -73,6 +73,12 @@
     <td><b>Cash flow.</b> Income vs spending month by month, your savings rate, where the money went, and a 12-month forecast.</td>
     <td><b>Transactions.</b> One feed for every account: search, filter, split, tag, set your share, and clear the review queue the AI pre-checks for you.</td>
   </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/holdings.webp" alt="Holdings: every position with shares, price, value and gain against cost basis"></td>
+  </tr>
+  <tr>
+    <td colspan="2"><b>Holdings.</b> Every stock, fund and cash position from your brokerage and retirement accounts (through the bank sync): shares, latest price, value, and gain or loss against what you paid, plus the total.</td>
+  </tr>
 </table>
 
 <table>
@@ -474,7 +480,15 @@ an optional emoji (`icon`), shown wherever the name is.
 investment accounts per day from the balance snapshots the sync records
 (`investmentSeries` / `changeOver` in `js/core/v2/money.js`), with
 day / week / 30-day / 1-year change per account and in total, and SPY
-closes from the saved market recaps for an S&P 500 comparison line.
+closes from the saved market recaps for an S&P 500 comparison line. It
+also returns **holdings** (table `holdings`): the positions the sync
+pushes in `POST /api/v2/sync` as an optional `holdings` list
+(`{ accountId, securityId, ticker?, name?, quantity, costBasisCents?,
+priceCents?, valueCents?, kind?, asOf? }`, Plaid's investment holdings).
+When the key is present it is the complete set for the pushed accounts,
+so sold positions disappear; an older sync that leaves it out doesn't
+touch stored holdings. The Holdings card shows shares, price, value and
+gain against cost basis; with the eye on, share counts are hidden too.
 
 **Market today.** After each US close, `functions/api/_market.js` fetches
 quotes for SPY, QQQ and DIA (Finnhub's free plan quotes funds, not the
@@ -684,6 +698,7 @@ node tests/sync.test.mjs        # "Sync now" request queue: auth scope, dedupe, 
 node tests/mcp.test.mjs         # MCP server: mcp-session scope, JSON-RPC handshake, every tool, revoke
 node tests/market.test.mjs      # market recap: trading days, holidays, AI vs plain recap, retries; investments maths and routes
 node tests/layout.test.mjs      # Dashboard layout: validation, save/load, reset
+node tests/holdings.test.mjs    # holdings from the sync: store, replace, keep when absent, clear
 for f in js/*.js js/*/*.js; do node --check "$f"; done   # frontend syntax check
 ```
 
