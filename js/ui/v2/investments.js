@@ -7,6 +7,8 @@ import { amountsHidden } from "../../core/format.js";
 import { api, h, clear, money, shortDay, dayLabel, section, button, emptyState, errorState, loading, drawChart, chartColors } from "./kit.js";
 
 let root = null, range = "3m", data = null, goTo = null;
+let sortKey = "value", sortDir = -1; /* holdings sort: -1 = high first */
+const SORTS = [["value", "Value"], ["gain", "Gain $"], ["gainpct", "Gain %"], ["name", "Name"]];
 export function setNavigator(fn) { goTo = fn; }
 
 const RANGES = [["1m", "1M", 30], ["3m", "3M", 91], ["1y", "1Y", 365], ["all", "All", null]];
@@ -86,6 +88,31 @@ function gainOf(hd) {
   return { cents: cents, pct: hd.costBasisCents ? Math.round(cents / hd.costBasisCents * 10000) / 100 : null };
 }
 
+/* Sort keys for positions; rows without the number being sorted on
+   (cash, or a position with no cost basis) always sink to the end. */
+function sortValue(hd, key) {
+  const g = gainOf(hd);
+  if (key === "gain") return g ? g.cents : null;
+  if (key === "gainpct") return g ? g.pct : null;
+  if (key === "name") return null;
+  return hd.valueCents === undefined ? null : hd.valueCents;
+}
+function sortedHoldings(list) {
+  const out = list.slice();
+  out.sort(function (x, y) {
+    if (sortKey === "name") {
+      const a = (x.ticker || x.name || "").toLowerCase(), b = (y.ticker || y.name || "").toLowerCase();
+      return a < b ? -sortDir : a > b ? sortDir : 0;
+    }
+    const a = sortValue(x, sortKey), b = sortValue(y, sortKey);
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return (a - b) * (sortDir < 0 ? -1 : 1); /* sortDir -1 = high first */
+  });
+  return out;
+}
+
 function holdingsSection(d) {
   const byId = {};
   d.accounts.forEach(function (a) { byId[a.id] = a; });
@@ -95,11 +122,23 @@ function holdingsSection(d) {
     if (gainOf(hd)) { costedValue += hd.valueCents; cost += hd.costBasisCents; }
   });
   const totalGain = cost ? { cents: costedValue - cost, pct: Math.round((costedValue - cost) / cost * 10000) / 100 } : null;
+  const sortBar = h("div", { class: "v2-range", attrs: { role: "group", "aria-label": "Sort holdings" } },
+    h("span", { class: "hint", text: "Sort" }),
+    SORTS.map(function (sk) {
+      const active = sortKey === sk[0];
+      const label = sk[1] + (active ? (sortDir < 0 ? " ↓" : " ↑") : "");
+      return button(label, function () {
+        if (active) sortDir = -sortDir;
+        else { sortKey = sk[0]; sortDir = sk[0] === "name" ? 1 : -1; }
+        draw();
+      }, "v2-mini" + (active ? " on" : ""), { "aria-pressed": String(active) });
+    }));
   const body = h("div", null,
     h("div", { class: "v2-tiles" },
       h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Holdings value" }), h("span", { class: "v2-tile-value", text: money(value, { whole: true }) })),
       h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Gain / loss" }), h("span", { class: "v2-tile-value v2-chg " + cls(totalGain), text: totalGain ? changeText(totalGain) : "—" }), h("span", { class: "v2-tile-sub", text: "vs cost basis" }))),
-    h("div", { class: "v2-list" }, d.holdings.map(function (hd) {
+    sortBar,
+    h("div", { class: "v2-list" }, sortedHoldings(d.holdings).map(function (hd) {
       const a = byId[hd.accountId];
       const g = gainOf(hd);
       const title = hd.kind === "cash" ? "Cash" : (hd.ticker || hd.name || "Security");
