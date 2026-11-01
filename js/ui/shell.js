@@ -19,12 +19,95 @@ export function showTab(name) {
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
   document.body.setAttribute("data-tab", name); /* CSS hides the + button on Daily */
+  document.querySelectorAll(".more-tile").forEach(function (t) {
+    var on = t.getAttribute("data-go") === name;
+    t.classList.toggle("active", on);
+    if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+  });
+  var more = document.getElementById("moreTab");
+  if (more) more.classList.toggle("active", PHONE_TABS.indexOf(name) === -1);
   if (name === "dashboard") renderSummary(); /* charts need a visible canvas */
   if (name === "cards") renderCards();
   if (name === "bank") { renderBank(); loadBank(); } /* fresh snapshot on every visit */
   if (name === "daily") { renderPending(); loadPending(); } /* fresh snapshot on every visit */
   if (name === "settings") renderSecurity(true);
   onShowV2(name); /* the new screens render on every visit */
+}
+
+/* ================= Phone tab bar: four tabs + More =================
+   The bar shows PHONE_TABS (CSS hides the rest under 640px); More opens
+   a sheet with every section, built from the nav's own buttons so the
+   two never drift apart. The sheet follows the finger when dragged
+   down and closes on a long enough drag or a quick flick. */
+
+export const PHONE_TABS = ["dashboard", "transactions", "daily", "budget"];
+
+function buildMoreSheet(sheet, body) {
+  var groups = [["Money", ".nav-float .tab-btn:not(.classic)"], ["Classic", ".nav-float .tab-btn.classic"]];
+  groups.forEach(function (g) {
+    var head = document.createElement("h3");
+    head.className = "sheet-group"; head.textContent = g[0];
+    var grid = document.createElement("div");
+    grid.className = "more-grid";
+    document.querySelectorAll(g[1]).forEach(function (b) {
+      var name = b.getAttribute("data-tab");
+      var tile = document.createElement("button");
+      tile.type = "button"; tile.className = "more-tile"; tile.setAttribute("data-go", name);
+      var ico = document.createElement("span");
+      ico.className = "more-ico";
+      ico.appendChild(b.querySelector("svg").cloneNode(true));
+      var label = document.createElement("span");
+      label.textContent = b.querySelector(".lbl-long").textContent;
+      tile.appendChild(ico); tile.appendChild(label);
+      tile.addEventListener("click", function () {
+        showTab(name);
+        window.scrollTo(0, 0);
+        closeSheet(sheet);
+      });
+      grid.appendChild(tile);
+    });
+    body.appendChild(head); body.appendChild(grid);
+  });
+}
+
+function closeSheet(sheet) {
+  if (!sheet.open || sheet.classList.contains("closing")) return;
+  if (reduceMotion) { sheet.close(); return; }
+  sheet.classList.add("closing");
+  sheet.style.transform = "";
+  setTimeout(function () { sheet.classList.remove("closing"); sheet.close(); }, 280);
+}
+
+/* Drag down to dismiss: 1:1 while dragging (resisting upward pulls),
+   then close past a third of the sheet or on a downward flick; else
+   settle back from where it was let go. */
+function dragToDismiss(sheet, handle) {
+  var startY = 0, dy = 0, lastY = 0, lastT = 0, v = 0, dragging = false;
+  handle.addEventListener("pointerdown", function (e) {
+    if (e.target.closest("button")) return;
+    dragging = true; startY = lastY = e.clientY; lastT = e.timeStamp; dy = 0; v = 0;
+    handle.setPointerCapture(e.pointerId);
+    sheet.classList.add("dragging");
+  });
+  handle.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var raw = e.clientY - startY;
+    dy = raw >= 0 ? raw : -Math.sqrt(-raw) * 2; /* rubber-band upward */
+    var dt = e.timeStamp - lastT;
+    if (dt > 0) v = (e.clientY - lastY) / dt * 1000; /* px/s */
+    lastY = e.clientY; lastT = e.timeStamp;
+    sheet.style.transform = "translateY(" + dy + "px)";
+  });
+  function end(e) {
+    if (!dragging) return;
+    dragging = false;
+    if (e.timeStamp - lastT > 100) v = 0; /* held still before letting go: no flick */
+    sheet.classList.remove("dragging");
+    if (dy > sheet.offsetHeight / 3 || v > 600) closeSheet(sheet);
+    else sheet.style.transform = "";
+  }
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("pointercancel", end);
 }
 
 /* Depth effects. Stat tiles tilt toward the pointer (up to 8°) with a
@@ -45,6 +128,16 @@ export function init() {
       window.scrollTo(0, 0); /* a new tab starts at its top, like an app */
     });
   });
+  var sheet = document.getElementById("moreSheet"), moreTab = document.getElementById("moreTab");
+  if (sheet && moreTab && sheet.showModal) {
+    buildMoreSheet(sheet, document.getElementById("moreBody"));
+    moreTab.addEventListener("click", function () { sheet.showModal(); });
+    document.getElementById("moreDone").addEventListener("click", function () { closeSheet(sheet); });
+    /* A tap on the dimmed backdrop lands on the dialog itself. */
+    sheet.addEventListener("click", function (e) { if (e.target === sheet) closeSheet(sheet); });
+    sheet.addEventListener("cancel", function (e) { e.preventDefault(); closeSheet(sheet); });
+    dragToDismiss(sheet, sheet.querySelector(".sheet-head"));
+  }
   if (summaryGridEl && !reduceMotion) {
     summaryGridEl.addEventListener("pointermove", function (ev) {
       var tile = ev.target.closest && ev.target.closest(".stat");
