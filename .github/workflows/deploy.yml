@@ -1,7 +1,11 @@
 name: Test and deploy
 
-# Every pull request and every push to main runs the unit tests and the
-# browser tests. Only a commit that came through a MERGED pull request is
+# Pull requests run everything: the unit tests and the browser tests.
+# A push to main (a merged pull request) re-runs only the fast unit
+# tests and then deploys — the browser tests already passed on the
+# pull request against that same merge, and repeating them on main
+# mostly gave a flaky browser test a second chance to block a good
+# deploy. Only a commit that came through a MERGED pull request is
 # deployed: a direct push to main is tested but not shipped (a warning
 # says why). "Run workflow" (workflow_dispatch) deploys main on demand.
 
@@ -38,6 +42,9 @@ jobs:
   # 5 min and once hung). The image tag must match @playwright/test in
   # e2e/package.json exactly.
   browser:
+    # Pull requests only. On main the deploy job accepts this job
+    # being skipped (see its condition) — the PR run is the test.
+    if: github.event_name == 'pull_request'
     name: browser (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -66,7 +73,10 @@ jobs:
 
   deploy:
     needs: [unit, browser]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # always() + explicit results: on main the browser job is skipped
+    # by design and that must not skip the deploy; a FAILED unit (or,
+    # on a pull request, browser) job still blocks it.
+    if: ${{ always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.unit.result == 'success' && (needs.browser.result == 'success' || needs.browser.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
