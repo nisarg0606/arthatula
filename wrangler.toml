@@ -1,19 +1,27 @@
-# Arthatula — ONE Cloudflare Pages project.
-# The static frontend (this folder), the Pages Functions API (/functions)
-# and the D1 database binding below are all part of this single
-# project/deployment. There is no separate backend server to maintain.
+# Arthatula as ONE Cloudflare Worker: the static app (this folder) plus
+# the API (worker.js routes /api/* to the handlers in functions/), with
+# one D1 database. This is what the "Deploy to Cloudflare" button sets
+# up; see README → "Get your own copy".
 #
-# BEFORE DEPLOYING: replace the database_id with the id of the D1 database
-# you create (see README.md, "Deploy on Cloudflare Pages + D1"). When you
-# deploy through the Cloudflare dashboard instead of wrangler, you don't
-# even need this file — just set the same D1 binding (variable name: DB)
-# in the project settings.
+# No database_id on purpose: the first deploy creates a D1 database in
+# the deploying account and binds it as DB. The API creates its tables
+# on first use, so there is no schema step.
+#
+# The original deployment still runs on Cloudflare Pages from the same
+# code (functions/ is Pages' routing); the deploy workflow writes a
+# Pages config for that at deploy time.
 
 name = "arthatula"
-compatibility_date = "2024-11-01"
-pages_build_output_dir = "."
+main = "worker.js"
+compatibility_date = "2025-10-01"
+
+[assets]
+directory = "."
+binding = "ASSETS"
+# Every request goes through worker.js, so static files get the same
+# security headers as the API.
+run_worker_first = true
 
 [[d1_databases]]
-binding = "DB" # the API reads env.DB — this name must stay "DB"
+binding = "DB" # the API reads env.DB: this name must stay "DB"
 database_name = "arthatula"
-database_id = "38802126-fcbc-4573-8e5b-f4e348cc3e32"

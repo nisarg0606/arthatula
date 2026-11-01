@@ -133,7 +133,7 @@ export async function onRequestPost(context) {
       if (await getAccessCodeHash(db)) return json({ error: "An access code is already set — sign in instead." }, 409);
       const expected = context.env.SETUP_SECRET;
       if (typeof expected !== "string" || !expected) {
-        return json({ error: "Setup is locked. Add a SETUP_SECRET environment secret to the Pages project, redeploy, then enter it here." }, 403);
+        return json({ error: "Setup is locked. Add a SETUP_SECRET secret to your Cloudflare app (Settings → Variables and Secrets), redeploy, then enter it here." }, 403);
       }
       if (!validNewCode(body.code)) return json({ error: SHORT_CODE_ERROR }, 400);
       const slot = await reserveAttempt(db, context.request);

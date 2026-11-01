@@ -8,12 +8,28 @@ name: Test and deploy
 # deploy. Only a commit that came through a MERGED pull request is
 # deployed: a direct push to main is tested but not shipped (a warning
 # says why). "Run workflow" (workflow_dispatch) deploys main on demand.
+#
+# The deploy job ships to the repository owner's Cloudflare Pages project,
+# set by three repository variables (Settings → Secrets and variables →
+# Actions → Variables): CLOUDFLARE_ACCOUNT_ID, D1_DATABASE_ID and
+# PAGES_PROJECT, plus the CLOUDFLARE_API_TOKEN secret. A fork without
+# them skips the deploy; copies made with the "Deploy to Cloudflare"
+# button are deployed by Cloudflare itself (Workers Builds), not here.
 
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
+
+# One run per pull request: a new push cancels the run it replaces
+# instead of queuing behind it. Runs on main are never cancelled (each
+# may deploy). Text-only changes (Markdown, docs/) don't run at all.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -51,7 +67,7 @@ jobs:
     if: github.event_name == 'pull_request'
     name: browser (${{ matrix.project }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -72,7 +88,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-traces-${{ matrix.project }}
-          path: e2e/test-results
+          path: /tmp/arthatula-e2e-results
           retention-days: 7
 
   deploy:
@@ -80,7 +96,7 @@ jobs:
     # always() + explicit results: on main the browser job is skipped
     # by design and that must not skip the deploy; a FAILED unit (or,
     # on a pull request, browser) job still blocks it.
-    if: ${{ always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.unit.result == 'success' && (needs.browser.result == 'success' || needs.browser.result == 'skipped') }}
+    if: ${{ always() && vars.PAGES_PROJECT != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.unit.result == 'success' && (needs.browser.result == 'success' || needs.browser.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -105,17 +121,36 @@ jobs:
         if: steps.gate.outputs.ok == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 6dc5b43c380d094e9d5bd6c1413e35d3
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ vars.PAGES_PROJECT }}
         run: |
-          if npx -y wrangler@3.114.17 pages project list | grep -qw arthatula; then
-            echo "Pages project arthatula already exists."
+          if npx -y wrangler@3.114.17 pages project list | grep -qw "$PAGES_PROJECT"; then
+            echo "Pages project $PAGES_PROJECT already exists."
           else
-            npx -y wrangler@3.114.17 pages project create arthatula --production-branch main
+            npx -y wrangler@3.114.17 pages project create "$PAGES_PROJECT" --production-branch main
           fi
+      # wrangler.toml in the repo is the Worker config (the Deploy to
+      # Cloudflare button). Pages needs its own: write it for this deploy.
+      - name: Write the Pages config
+        if: steps.gate.outputs.ok == 'true'
+        env:
+          PAGES_PROJECT: ${{ vars.PAGES_PROJECT }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+        run: |
+          cat > wrangler.toml <<EOF
+          name = "$PAGES_PROJECT"
+          compatibility_date = "2024-11-01"
+          pages_build_output_dir = "."
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "arthatula"
+          database_id = "$D1_DATABASE_ID"
+          EOF
       - name: Deploy to Cloudflare Pages
         if: steps.gate.outputs.ok == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 6dc5b43c380d094e9d5bd6c1413e35d3
-          command: pages deploy . --project-name arthatula --branch main
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy . --project-name ${{ vars.PAGES_PROJECT }} --branch main

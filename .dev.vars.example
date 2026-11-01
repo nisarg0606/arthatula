@@ -1,0 +1,6 @@
+# Secrets the "Deploy to Cloudflare" button asks for (dotenv format).
+#
+# SETUP_SECRET: any long random phrase you make up. The app asks for it
+# once, the first time you open it, before you choose your access code,
+# so nobody who finds your app's address before you can claim it.
+SETUP_SECRET=
