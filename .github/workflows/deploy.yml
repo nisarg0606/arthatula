@@ -18,6 +18,7 @@ permissions:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,25 +31,36 @@ jobs:
             node --test "$f"
           done
 
+  # The two browsers run side by side, each on its own runner with its own
+  # throwaway database. They run inside Playwright's official image, which
+  # already has both browsers and every system package they need, so there
+  # is no per-run browser download or apt install (that step took 38 s to
+  # 5 min and once hung). The image tag must match @playwright/test in
+  # e2e/package.json exactly.
   browser:
+    name: browser (${{ matrix.project }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [iphone-safari, desktop-chrome]
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.0-noble
+      options: --user 1001
     defaults:
       run:
         working-directory: e2e
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - run: npm ci
-      - run: npx playwright install --with-deps webkit chromium
-      - name: Browser tests (iPhone Safari engine + desktop Chrome)
-        run: npx playwright test
+      - name: Browser tests (${{ matrix.project }})
+        run: npx playwright test --project=${{ matrix.project }}
       - name: Keep traces of failed tests
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.project }}
           path: e2e/test-results
           retention-days: 7
 
@@ -56,6 +68,7 @@ jobs:
     needs: [unit, browser]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Only ship changes merged through a pull request
