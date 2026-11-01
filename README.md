@@ -6,6 +6,9 @@ bank accounts synced in if you want. Vanilla HTML, CSS and JavaScript —
 no framework and no build step — running on Cloudflare's free plan,
 with your data in your own Cloudflare database.
 
+**New here? Read the [guide](docs/GUIDE.md)** — setup, using it on your
+phone, AI (Gemini, Grok, others) and connecting your AI agent (MCP).
+
 ## Get your own copy (about 5 minutes, free)
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula-v2)
