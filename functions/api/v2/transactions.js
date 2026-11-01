@@ -18,7 +18,7 @@
  *        Rows from the classic daily log (source "v1exp") are written
  *        back to it, so both apps agree; a category the classic app
  *        doesn't have stays on the new app only.
- *   DELETE ?id=… -> { deleted }  (your own rows and classic daily-log rows)
+ *   DELETE ?id=… -> { deleted }  (your own rows, sample rows and classic daily-log rows)
  */
 import { handleV2, HttpError, cleanStr, cleanCents, cleanDate, bodyOf } from "../_v2http.js";
 import { newId } from "../_v2db.js";
@@ -218,7 +218,7 @@ export const onRequestDelete = (context) => handleV2(context, async ({ s, db, ur
   if (tx.source === "v1exp" && tx.v1ExpenseId) {
     await classic(context, v1Delete, "DELETE", "http://internal/api/expenses?id=" + tx.v1ExpenseId);
     await mirrorV1(db, { force: true });
-  } else if (tx.source === "manual") {
+  } else if (tx.source === "manual" || tx.source === "demo") {
     await s.batch([
       ["DELETE FROM transaction_splits WHERE owner_id = ?1 AND transaction_id = ?2", tx.id],
       ["DELETE FROM transactions WHERE owner_id = ?1 AND id = ?2", tx.id]

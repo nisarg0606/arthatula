@@ -56,6 +56,12 @@ Sign in once on each device with your access code.
 
 ## 3. Your first ten minutes
 
+**Try it with sample data first.** On a brand-new copy, Home offers
+**Explore with sample data**: a few months of made-up accounts, spending,
+budgets and investments to click around in (the classic tabs stay empty).
+A banner on every screen has **Clear sample data**, which removes only the
+sample rows — anything you added yourself stays.
+
 1. **Tell it where you're starting.** Home → scroll to **Plan settings**
    at the bottom → enter today's balance in **Starting balance**. The app
    counts everything from today on top of it.

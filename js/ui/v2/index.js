@@ -12,6 +12,7 @@ import { render as renderHome, setNavigator, customize } from "./home.js";
 import { render as renderSplitwise, setNavigator as setSplitwiseNavigator } from "./splitwise.js";
 import { render as renderManage } from "./manage.js";
 import { api } from "./kit.js";
+import { check as checkDemo } from "./demo.js";
 
 const SCREENS = {
   accounts: ["v2Accounts", renderAccounts],
@@ -30,7 +31,7 @@ let signedIn = false;
    screens have no local-only fallback. */
 export function setSignedIn(on) {
   signedIn = on;
-  if (on) autoReview();
+  if (on) { autoReview(); checkDemo(); }
 }
 
 /* Once per app open: let Gemini look at new bank rows before you do

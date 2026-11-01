@@ -985,6 +985,12 @@ textarea{min-height:88px}
 
 /* ---- Dashboard sections and the phone tab bar's center Add button ---- */
 .month-card .review-banner{margin:0 0 12px}
+.demo-banner{margin:0 0 16px;padding:8px 14px;border-radius:12px;border:1px dashed var(--accent-bright);background:var(--raised);font-size:14px;font-weight:600}
+.demo-banner .demo-clear{padding:0;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;cursor:pointer}
+.dark .demo-banner .demo-clear{color:var(--accent-bright)}
+.demo-classic{display:none;font-weight:400}
+body[data-tab="editor"] .demo-classic,body[data-tab="daily"] .demo-classic,body[data-tab="cards"] .demo-classic,body[data-tab="bank"] .demo-classic{display:inline}
+body:not([data-tab="dashboard"]) .demo-welcome{display:none}
 .plan-settings-title{margin:28px 0 12px;padding-top:20px;border-top:1px solid var(--line)}
 .add-tab{display:none}
 @media (max-width:640px){
