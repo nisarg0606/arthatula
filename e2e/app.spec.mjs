@@ -59,6 +59,27 @@ test.beforeEach(async ({ page, request }) => {
   await expect(page.locator("#authGate")).toBeHidden();
 });
 
+/* First in the file: the sample data needs a database with nothing of
+   your own in it, which only holds before the other tests add theirs. */
+test("sample data: explore from the first-run card, then clear it", async ({ page, request }) => {
+  const auth = { Authorization: "Bearer " + await page.evaluate(() => localStorage.getItem("arthatula-session")) };
+  let st = await (await request.get("/api/v2/demo", { headers: auth })).json();
+  if (st.demo) st = await (await request.delete("/api/v2/demo", { headers: auth })).json(); /* a retry's leftovers */
+  test.skip(!st.empty || st.dismissed, "the shared database already has data of its own");
+  await page.reload();
+  await page.locator(".demo-welcome").getByRole("button", { name: "Explore with sample data" }).click();
+  await expect(page.locator(".demo-banner")).toContainText("You're viewing sample data");
+  await expect(page.locator(".demo-welcome")).toHaveCount(0);
+  await expect(page.locator("#v2Overview .v2-tile-value").first()).toContainText(/\$[1-9]/);
+  await openTab(page, "investments");
+  await expect(page.locator("#v2Investments canvas")).toBeVisible();
+  await expect(page.locator(".demo-banner")).toBeVisible();
+  await page.locator(".demo-banner").getByRole("button", { name: "Clear sample data" }).click();
+  await expect(page.locator(".demo-welcome")).toBeVisible();
+  await expect(page.locator(".demo-banner")).toHaveCount(0);
+  await expect(page.locator("#v2Overview .v2-tile-value").first()).toHaveText("$0");
+});
+
 test("no tab scrolls sideways", async ({ page }) => {
   for (const tab of ["dashboard", "accounts", "transactions", "cashflow", "budget", "recurring", "goals", "editor", "daily", "cards", "bank", "settings"]) {
     await openTab(page, tab);

@@ -21,7 +21,7 @@ function cls(c) { return !c || !c.cents ? "" : c.cents > 0 ? "pos" : "neg"; }
 export function marketCard(m, opts) {
   const o = opts || {};
   const body = h("div", { class: "v2-market" });
-  if (m.status === "nokey") {
+  if (m.status === "nokey" && !m.latest) {
     body.appendChild(h("p", { class: "hint", text: "Add a free Finnhub key in Settings → Market data to get a short recap of the US market every evening after the close." }));
     body.appendChild(button("Open Settings", function () { goTo && goTo("settings"); }, "v2-mini"));
   } else if (!m.latest) {
