@@ -1,6 +1,6 @@
 /* Cash flow screen: income vs spending by month over a range, spending
    by category for the range, and the rolling 12-month forecast. */
-import { v2, api, h, clear, money, monthLabel, thisMonth, loadBasics, section, button, errorState, loading, drawChart, chartColors } from "./kit.js";
+import { v2, api, h, clear, money, monthLabel, thisMonth, loadBasics, section, button, errorState, loading, drawChart, chartColors, categoryName } from "./kit.js";
 import { addMonths } from "../../core/v2/money.js";
 
 let root = null;
@@ -35,7 +35,7 @@ function drawFlow(cf, box) {
   }, cf.months.map(function (m) { return monthLabel(m.month) + ": in " + money(m.incomeCents) + ", out " + money(m.spendingCents); }).join("\n"));
   const rows = Object.keys(cf.total.byCategory).map(function (id) {
     const cat = v2.categories.find(function (x) { return x.id === id; });
-    return { id: id, name: cat ? cat.name : "Uncategorized", kind: cat ? cat.kind : "expense", cents: cf.total.byCategory[id] };
+    return { id: id, name: categoryName(id), kind: cat ? cat.kind : "expense", cents: cf.total.byCategory[id] };
   }).filter(function (r) { return r.kind === "expense" && r.cents !== 0; }).sort(function (a, b) { return b.cents - a.cents; });
   const total = cf.total.spendingCents || 1;
   box.appendChild(h("h3", { class: "v2-sub-head", text: "Spending by category" }));

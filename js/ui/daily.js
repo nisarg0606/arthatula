@@ -1,5 +1,5 @@
 /* Daily expenses tab: the feed, quick add, and expense create/update/delete. */
-import { DAILY_CATEGORIES, categorizeByRulesJs } from "../core/categories.js";
+import { DAILY_CATEGORIES, CATEGORY_ICONS, categorizeByRulesJs, withIcon } from "../core/categories.js";
 import { CAL_MONTHS_SHORT, formatDateLabel } from "../core/dates.js";
 import { fmt } from "../core/format.js";
 import { sanitizeState, toNumber } from "../core/plan.js";
@@ -55,7 +55,7 @@ function renderDailyNow() {
   refreshDatePickers();
   if (els.expCategory && els.expCategory.options.length <= 1) {
     DAILY_CATEGORIES.forEach(function (c) {
-      var o = document.createElement("option"); o.value = c; o.textContent = c;
+      var o = document.createElement("option"); o.value = c; o.textContent = withIcon(c);
       els.expCategory.appendChild(o);
     });
   }
@@ -177,7 +177,7 @@ export function expenseRow(e, open) {
     badge.className = "tx-badge";
     badge.style.setProperty("--c", categoryColor(e.category));
     badge.setAttribute("aria-hidden", "true");
-    badge.textContent = String(e.category || "?").charAt(0);
+    badge.textContent = CATEGORY_ICONS[e.category] || String(e.category || "?").charAt(0);
     var text = document.createElement("span");
     text.className = "tx-text";
     var desc = document.createElement("span");
@@ -244,7 +244,7 @@ export function expenseRow(e, open) {
       var sel = document.createElement("select");
       sel.setAttribute("aria-label", "Category");
       DAILY_CATEGORIES.forEach(function (c) {
-        var o = document.createElement("option"); o.value = c; o.textContent = c;
+        var o = document.createElement("option"); o.value = c; o.textContent = withIcon(c);
         if (c === e.category) o.selected = true;
         sel.appendChild(o);
       });

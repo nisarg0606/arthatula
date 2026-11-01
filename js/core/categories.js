@@ -8,6 +8,16 @@ export const DAILY_CATEGORIES = [
   "Gym", "Loan/Debt Payment", "One-off", "Misc/Other"
 ];
 
+/* Display-only emoji (same as the money model's defaults in
+   functions/api/_v2db.js); stored categories stay the plain names. */
+export const CATEGORY_ICONS = {
+  "Groceries": "🛒", "Eating Out": "🍜", "Rent": "🏠", "Utilities": "💡",
+  "Phone & Internet": "📱", "Fuel/Transport": "🚗", "Insurance": "🛡️",
+  "Subscriptions": "📺", "Shopping/Personal": "🛍️", "Gym": "🏋️",
+  "Loan/Debt Payment": "🏦", "One-off": "📌", "Misc/Other": "🏷️"
+};
+export function withIcon(c) { return CATEGORY_ICONS[c] ? CATEGORY_ICONS[c] + " " + c : c; }
+
 export const CATEGORY_TO_FIELD = {
   "Groceries": "groceries", "Eating Out": "eatingOut", "Rent": "rent",
   "Utilities": "utilities", "Phone & Internet": "phoneInternet",
