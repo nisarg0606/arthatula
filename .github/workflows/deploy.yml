@@ -19,8 +19,17 @@ name: Test and deploy
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
+
+# One run per pull request: a new push cancels the run it replaces
+# instead of queuing behind it. Runs on main are never cancelled (each
+# may deploy). Text-only changes (Markdown, docs/) don't run at all.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -58,7 +67,7 @@ jobs:
     if: github.event_name == 'pull_request'
     name: browser (${{ matrix.project }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -79,7 +88,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-traces-${{ matrix.project }}
-          path: e2e/test-results
+          path: /tmp/arthatula-e2e-results
           retention-days: 7
 
   deploy:
