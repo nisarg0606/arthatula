@@ -19,7 +19,7 @@ import { addDays, addMonths, monthOf } from "../../../js/core/v2/money.js";
 
 const DEMO = "demo_*";
 
-async function status(s) {
+export async function status(s) {
   const r = await s.first(
     "SELECT (SELECT COUNT(*) FROM accounts WHERE owner_id = ?1 AND id NOT GLOB ?2) + " +
     "(SELECT COUNT(*) FROM transactions WHERE owner_id = ?1 AND id NOT GLOB ?2) + " +

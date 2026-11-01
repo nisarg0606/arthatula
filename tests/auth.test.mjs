@@ -339,6 +339,49 @@ function dataRoutes() {
   assert.equal((await post(env, { action: "login", code: CODE })).status, 200, "and still works after the upgrade");
 }
 
+/* ---------- 5c. Forgotten code: reset with the SETUP_SECRET ----------- */
+{
+  const env = newEnv();
+  const RESET = (b) => post(env, { action: "reset-code", ...b });
+  /* Before setup there's nothing to reset. */
+  assert.equal((await RESET({ setupSecret: TEST_SETUP_SECRET, newCode: "brand new code 1" })).status, 409);
+  const phone = (await (await post(env, { action: "setup", code: CODE, label: "Phone" })).json()).token;
+  const laptop = (await (await post(env, { action: "login", code: CODE, label: "Laptop" })).json()).token;
+  const mcp = (await (await authPost(makeCtx(env, { action: "mcp-create" }, "POST", AUTH, authHeaders(phone)))).json()).token;
+
+  assert.equal((await RESET({ setupSecret: TEST_SETUP_SECRET, newCode: "short" })).status, 400, "short new code");
+  assert.equal((await RESET({ setupSecret: "not the secret", newCode: "brand new code 1" })).status, 401, "wrong secret");
+  const res = await authPost(makeCtx({ DB: env.DB }, { action: "reset-code", setupSecret: "", newCode: "brand new code 1" }, "POST", AUTH));
+  assert.equal(res.status, 403, "no SETUP_SECRET configured -> 403");
+  assert.match((await res.json()).error, /SETUP_SECRET/);
+  assert.equal((await post(env, { action: "login", code: CODE })).status, 200, "failed resets leave the old code working");
+
+  const ok = await RESET({ setupSecret: TEST_SETUP_SECRET, newCode: "brand new code 1", label: "Phone · Safari" });
+  assert.equal(ok.status, 200);
+  const fresh = (await ok.json()).token;
+  assert.equal((await post(env, { action: "login", code: CODE })).status, 401, "old code is gone");
+  assert.equal((await post(env, { action: "login", code: "brand new code 1" })).status, 200, "new code works");
+  for (const t of [phone, laptop, mcp]) {
+    assert.equal((await getStatus(env, authHeaders(t))).status, 200);
+    assert.equal((await (await getStatus(env, authHeaders(t))).json()).authed, false, "every old session is signed out");
+  }
+  assert.equal((await (await getStatus(env, authHeaders(fresh))).json()).authed, true, "the resetting device is signed in");
+}
+{
+  /* Rate-limited like sign-in: 5 wrong secrets from one IP lock it,
+     and even the right secret is refused while locked. */
+  const env = newEnv();
+  await post(env, { action: "setup", code: CODE });
+  const ip = { "CF-Connecting-IP": "203.0.113.50" };
+  const codes = [];
+  for (let i = 0; i < 5; i++) codes.push((await post(env, { action: "reset-code", setupSecret: "guess " + i, newCode: "brand new code 1" }, ip)).status);
+  assert.deepEqual(codes, [401, 401, 401, 401, 429], "the 5th wrong secret trips the lock");
+  const locked = await post(env, { action: "reset-code", setupSecret: TEST_SETUP_SECRET, newCode: "brand new code 1" }, ip);
+  assert.equal(locked.status, 429);
+  assert.ok(Number(locked.headers.get("Retry-After")) > 0);
+  assert.equal((await post(env, { action: "login", code: CODE }, { "CF-Connecting-IP": "198.51.100.7" })).status, 200, "code unchanged");
+}
+
 /* ---------- 6. Sliding expiry + hard expiry --------------------------- */
 {
   const env = newEnv();

@@ -45,8 +45,10 @@ function row(r) {
       h("span", { class: "hint", text: "of" }),
       input,
       income ? null : h("span", { class: "v2-budget-left" + (r.remainingCents < 0 ? " neg" : ""), text: r.remainingCents < 0 ? money(-r.remainingCents, { whole: true }) + " over" : money(r.remainingCents, { whole: true }) + " left" }),
-      income ? null : h("label", { class: "v2-roll" }, roll, h("span", { text: "Roll over" }))));
+      income ? null : h("label", { class: "v2-roll", attrs: { title: ROLL_TIP } }, roll, h("span", { text: "Roll over" }))));
 }
+
+const ROLL_TIP = "Carry what's left (or what you overspent) into next month's budget for this category.";
 
 /* Redraws keep the reader's place (see ../scroll.js). */
 function draw(view) { return keepScroll(function () { return drawNow(view); }); }
@@ -100,6 +102,7 @@ function drawNow(view) {
         .then(function (r) { window.alert(r.months.length ? "Filled " + r.months.length + " month(s)." : "Every month up to then already has a budget."); })
         .catch(function (e) { window.alert(e.message); });
     }, "v2-mini")));
+  body.appendChild(h("details", { class: "explain" }, h("summary", { text: "What's \"Roll over\"?" }), h("p", { text: ROLL_TIP + " Handy for things you pay now and then, like gifts or car repairs." })));
   root.appendChild(section("Budget", [], body));
 }
 

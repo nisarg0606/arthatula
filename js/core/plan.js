@@ -12,7 +12,7 @@ import { sanitizeMyShare } from "./spending.js";
  *    live-data model as a shared tracker: data follows you across devices).
  *  - Fallback: browser localStorage, used only when the API is unreachable
  *    (local development, or static hosting on Netlify/Vercel without D1).
- * The header badge shows which mode is active: "Database" or "Local only".
+ * The header badge shows which mode is active: "Saved" or "This browser only".
  *
  * Default state is blank: every amount starts at zero. Use Export/Import
  * JSON to move your own numbers between devices or back them up.

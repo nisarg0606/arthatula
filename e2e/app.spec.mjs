@@ -45,6 +45,13 @@ async function openTab(page, name) {
   await expect(page.locator('[data-section="' + name + '"]')).toBeVisible();
 }
 
+/* Settings → Advanced is collapsed until opened (remembered per browser). */
+async function openAdvanced(page) {
+  const adv = page.locator("#settingsAdvanced");
+  if (!(await adv.evaluate((d) => d.open))) await adv.locator("> summary").click();
+  await expect(adv.locator("> section")).toBeVisible();
+}
+
 /* Stop the page clock so only the test moves it. A running installed
    clock fires timers on its own too, and when that overlaps a
    fastForward it can set the clock back to before the jump, leaving the
@@ -565,13 +572,70 @@ test("new screens: a recurring bill shows as coming up, and a goal shows its pro
 
 test("new screens: Settings — rules, categories, and the migration check", async ({ page }, info) => {
   await openTab(page, "settings");
+  await openAdvanced(page);
   await page.locator("#v2AddRule").click();
   await (await dialogField(page, "When the merchant contains")).fill("e2e-coffee-" + info.project.name);
   await (await dialogField(page, "Add tag")).fill("coffee");
   await saveDialog(page);
-  await expect(page.locator("#v2Manage .v2-line", { hasText: "e2e-coffee-" + info.project.name })).toContainText("#coffee");
-  await page.locator("#v2Manage button", { hasText: "Check now" }).click();
-  await expect(page.locator("#v2Manage .v2-ok")).toContainText("matches the classic app");
+  await expect(page.locator("#v2ManageAdvanced .v2-line", { hasText: "e2e-coffee-" + info.project.name })).toContainText("#coffee");
+  await page.locator("#v2ManageAdvanced button", { hasText: "Check now" }).click();
+  await expect(page.locator("#v2ManageAdvanced .v2-ok")).toContainText("matches the classic app");
+});
+
+test("Settings: Basics show at once; Advanced opens on tap and stays open after a reload", async ({ page }) => {
+  await openTab(page, "settings");
+  for (const sel of ["#geminiKeyInput", "#secChangeForm", "#sessionList", "#v2Manage .v2-cats"]) await expect(page.locator(sel)).toBeVisible();
+  await expect(page.locator("#v2Manage")).toContainText("Market data");
+  await expect(page.locator("#v2Manage")).toContainText("Download JSON");
+  /* The free-key helper. */
+  await page.locator(".gemini-help summary").click();
+  await expect(page.locator(".gemini-help a")).toHaveAttribute("href", "https://aistudio.google.com/apikey");
+  /* Power-user settings wait behind Advanced. */
+  await expect(page.locator("#settingsAdvanced")).not.toHaveAttribute("open", /.*/);
+  for (const sel of ["#mcpCreateBtn", "#pairOpenBtn", "#splitwiseKeyInput", "#merchantRulesList"]) await expect(page.locator(sel)).toBeHidden();
+  await openAdvanced(page);
+  for (const sel of ["#mcpCreateBtn", "#pairOpenBtn", "#splitwiseKeyInput", "#v2AddRule"]) await expect(page.locator(sel)).toBeVisible();
+  await expect(page.locator("#v2ManageAdvanced")).toContainText("Data check");
+  await page.reload();
+  await openTab(page, "settings");
+  await expect(page.locator("#mcpCreateBtn")).toBeVisible();
+  await page.locator("#settingsAdvanced > summary").click();
+  await expect(page.locator("#mcpCreateBtn")).toBeHidden();
+});
+
+test("first-run checklist: steps go to the right place, tick themselves, and hide for good", async ({ page, request }) => {
+  const auth = { Authorization: "Bearer " + await page.evaluate(() => localStorage.getItem("arthatula-session")) };
+  if ((await (await request.get("/api/v2/demo", { headers: auth })).json()).demo) await request.delete("/api/v2/demo", { headers: auth });
+  await request.post("/api/v2/demo", { headers: auth, data: { action: "dismiss" } });
+  const c = await (await request.post("/api/v2/checklist", { headers: auth, data: { dismissed: false } })).json();
+  test.skip(!c.show, "every step is already done in the shared database");
+  await page.reload();
+  const card = page.locator("#setupBox .setup-card");
+  await expect(card).toContainText("Getting started");
+  await expect(card.locator(".setup-go")).toHaveCount(5);
+
+  await card.locator('.setup-go[data-step="budget"]').click();
+  await expect(page.locator('[data-section="budget"]')).toBeVisible();
+  await expect(page.locator("#setupBox .setup-card")).toBeHidden(); /* Home only */
+  await openTab(page, "dashboard");
+  await card.locator('.setup-go[data-step="ai"]').click();
+  await expect(page.locator('[data-section="settings"]')).toBeVisible();
+  await expect(page.locator("#geminiKeyInput")).toBeFocused();
+  await openTab(page, "dashboard");
+
+  /* Logged an expense earlier in this run: already ticked. */
+  await expect(card.locator('.setup-item:has([data-step="expense"])')).toHaveClass(/done/);
+  const home = card.locator('.setup-item:has([data-step="homescreen"])');
+  if (!(await home.evaluate((el) => el.classList.contains("done")))) {
+    await home.locator("button").click();
+    await page.locator("dialog.v2-dialog").getByRole("button", { name: "I've added it" }).click();
+    await expect(home).toHaveClass(/done/);
+  }
+  await card.getByRole("button", { name: "Hide this for good" }).click();
+  await expect(page.locator("#setupBox .setup-card")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".v2-overview")).toBeVisible();
+  await expect(page.locator("#setupBox .setup-card")).toHaveCount(0);
 });
 
 /* ================= no jump on review ================= */
@@ -725,6 +789,7 @@ test("Gemini review: a payment like ones you filed before is checked and counted
 test("Settings: an MCP token shows once with a ready config, works on /api/mcp only, and is revocable", async ({ page, request }) => {
   page.on("dialog", (d) => d.accept()); /* the revoke confirm */
   await openTab(page, "settings");
+  await openAdvanced(page);
   await page.locator("#mcpCreateBtn").click();
   await expect(page.locator("#mcpReveal")).toBeVisible();
   await expect(page.locator("#mcpEndpoint")).toHaveValue(/\/api\/mcp$/);

@@ -19,6 +19,7 @@ function tile(label, value, sub, cls, onClick) {
    "Loading…" flash and the scroll position stays put. */
 export function render(container) {
   loadLayout();
+  renderChecklist();
   if (!container.firstChild) loading(container);
   /* The market recap is its own card (#v2Market) and loads on its own:
      a slow quote never holds up the overview. Empty until there's a key. */
@@ -71,6 +72,74 @@ function draw(container, s) {
         h("div", null, h("h3", { class: "v2-sub-head", text: "Coming up · 14 days" }), due),
         h("div", null, h("h3", { class: "v2-sub-head", text: "Top spending this month" }), top))));
 }
+
+/* First-run checklist (functions/api/v2/checklist.js) above the
+   overview, re-read on every visit to Home so items tick themselves:
+   [item, title, what it means, where it takes you]. */
+const STEPS = [
+  ["balance", "Set your starting balance", "What's in your bank account today, so the plan starts from real money.", function () { focusField("startingBalance"); }],
+  ["expense", "Log your first expense", "Type what you spent; the category fills itself in.", function () { const b = document.getElementById("addExpenseTopBtn"); if (b) b.click(); }],
+  ["budget", "Set a budget", "Choose how much to spend per category this month.", function () { goTo && goTo("budget"); }],
+  ["ai", "Turn on AI (optional)", "A free Google Gemini key sorts your expenses and answers questions.", function () { goTo && goTo("settings"); focusField("geminiKeyInput"); }],
+  ["homescreen", "Add the app to your Home Screen", "It then opens full screen, like any other app.", homeScreenHelp]
+];
+let steps = null;
+
+function focusField(id) {
+  setTimeout(function () {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    el.focus();
+  }, 0);
+}
+function standalone() {
+  return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+}
+function homeScreenHelp() {
+  openDialog("Add to your Home Screen", h("ol", { class: "setup-howto" },
+    h("li", { text: "iPhone or iPad (Safari): tap the Share button, then \"Add to Home Screen\"." }),
+    h("li", { text: "Android (Chrome): tap the ⋮ menu, then \"Add to Home screen\" or \"Install app\"." }),
+    h("li", { text: "Computer (Chrome or Edge): click the install icon at the right end of the address bar." }),
+    h("li", { text: "Then open Arthatula from that icon. You stay signed in." })), [
+    { label: "I've added it", primary: true, onClick: function (close) { return api("POST", "checklist", { done: "homescreen" }).then(function (c) { close(); drawChecklist(c); }); } }
+  ]);
+}
+
+export function renderChecklist() {
+  if (!document.getElementById("setupBox")) return Promise.resolve();
+  return api("GET", "checklist").then(function (c) {
+    /* Opened from the Home Screen icon: that step is done. */
+    return !c.items.homescreen && standalone() ? api("POST", "checklist", { done: "homescreen" }) : c;
+  }).then(drawChecklist, function () { /* no checklist; Home still shows */ });
+}
+
+function drawChecklist(c) {
+  const box = clear(document.getElementById("setupBox"));
+  steps = c;
+  if (!c.show) return;
+  const done = STEPS.filter(function (s) { return c.items[s[0]]; }).length;
+  box.appendChild(h("section", { class: "card setup-card", attrs: { "aria-labelledby": "setupTitle" } },
+    h("div", { class: "v2-card-head" }, h("h2", { class: "card-title", attrs: { id: "setupTitle" }, text: "Getting started" }),
+      h("span", { class: "hint setup-count", text: done + " of " + STEPS.length + " done" })),
+    h("ol", { class: "setup-list" }, STEPS.map(function (s) {
+      const ok = c.items[s[0]];
+      return h("li", { class: "setup-item" + (ok ? " done" : "") },
+        h("button", { class: "setup-go", attrs: { type: "button", "data-step": s[0] }, on: { click: s[3] } },
+          h("span", { class: "setup-tick", attrs: { "aria-hidden": "true" }, text: ok ? "✓" : "" }),
+          h("span", { class: "setup-text" }, h("span", { class: "setup-name", text: s[1] + (ok ? " (done)" : "") }), h("span", { class: "setup-sub", text: s[2] }))));
+    })),
+    h("div", { class: "actions" }, button("Hide this for good", function () {
+      api("POST", "checklist", { dismissed: true }).then(drawChecklist).catch(function (e) { window.alert(e.message); });
+    }, "v2-mini"))));
+}
+
+/* The starting balance is edited right here on Home: tick it as soon as it's set. */
+document.addEventListener("change", function (e) {
+  if (!steps || !e.target || e.target.id !== "startingBalance" || !Number(e.target.value)) return;
+  steps.items.balance = true;
+  drawChecklist(steps);
+});
 
 /* The Dashboard's cards: [key, name, selector]. Keys match SECTIONS in
    functions/api/v2/layout.js, which saves the layout per owner so it

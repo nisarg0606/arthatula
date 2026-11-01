@@ -996,6 +996,34 @@ textarea{min-height:88px}
 .demo-classic{display:none;font-weight:400}
 body[data-tab="editor"] .demo-classic,body[data-tab="daily"] .demo-classic,body[data-tab="cards"] .demo-classic,body[data-tab="bank"] .demo-classic{display:inline}
 body:not([data-tab="dashboard"]) .demo-welcome{display:none}
+/* First-run checklist (js/ui/v2/home.js): Home only. */
+body:not([data-tab="dashboard"]) #setupBox{display:none}
+.setup-count{margin:0}
+.setup-list{list-style:none;margin:8px 0 12px;padding:0;display:grid;gap:6px}
+.setup-go{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--raised);color:inherit;font:inherit;cursor:pointer}
+.setup-go:hover{border-color:var(--accent-bright)}
+.setup-tick{flex:none;display:inline-grid;place-items:center;width:22px;height:22px;margin-top:1px;border-radius:9999px;border:2px solid var(--line-strong);font-size:13px;font-weight:700}
+.setup-item.done .setup-tick{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.setup-item.done .setup-name{text-decoration:line-through;color:var(--muted)}
+.setup-text{display:grid;gap:2px}
+.setup-name{font-weight:600}
+.setup-sub{font-size:13px;color:var(--muted)}
+.setup-howto{margin:4px 0 8px;padding-left:20px;display:grid;gap:6px;font-size:14px}
+/* Settings: Advanced is one collapsed card until opened. */
+.settings-advanced > summary{display:grid;gap:4px;cursor:pointer;list-style:none}
+.settings-advanced > summary::-webkit-details-marker{display:none}
+.settings-advanced > summary .card-title{margin:0}
+.settings-advanced > summary .card-title::after{content:" ▸";color:var(--muted)}
+.settings-advanced[open] > summary .card-title::after{content:" ▾"}
+.settings-advanced > summary .hint{margin:0}
+/* "What's this?" explainers next to jargon (MCP, bank sync, Roll over). */
+.explain{margin:0 0 8px;font-size:14px}
+.explain summary{cursor:pointer;color:var(--accent);font-weight:600;display:inline-block;min-height:28px}
+.dark .explain summary{color:var(--accent-bright)}
+.explain p{margin:4px 0 0;color:var(--muted)}
+.auth-alt{margin:12px 0 0}
+.link-btn{padding:0;border:0;background:none;box-shadow:none;color:var(--accent);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer}
+.dark .link-btn{color:var(--accent-bright)}
 .plan-settings-title{margin:28px 0 12px;padding-top:20px;border-top:1px solid var(--line)}
 .add-tab{display:none}
 @media (max-width:640px){
