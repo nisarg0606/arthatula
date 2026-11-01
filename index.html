@@ -81,8 +81,8 @@
     <div class="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
       <div class="max-w-[680px]">
         <h1 class="app-title text-3xl sm:text-5xl font-bold tracking-tight">Arthatula</h1>
-        <p class="text-zinc-300 text-base sm:text-lg mt-2 sm:mt-3">Monthly budget planner &middot; planned vs actual &middot; Oct 2026 to Oct 2027</p>
-        <p class="hidden sm:block text-zinc-400 text-sm mt-2">Anchored to actuals from <strong id="headerBaseline" class="text-zinc-200 font-semibold">Oct 1, 2026</strong>. Log expenses daily and watch the prediction meet reality.</p>
+        <p class="text-zinc-300 text-base sm:text-lg mt-2 sm:mt-3">Monthly budget planner &middot; planned vs actual</p>
+        <p class="hidden sm:block text-zinc-400 text-sm mt-2">Anchored to actuals from <strong id="headerBaseline" class="text-zinc-200 font-semibold">&mdash;</strong>. Log expenses daily and watch the prediction meet reality.</p>
         <p class="mt-4 flex flex-wrap gap-2 items-center">
           <span id="storageMode" class="storage-badge connecting" role="status">● Connecting…</span>
           <span id="geminiStatus" class="storage-badge connecting">✦ Gemini: checking…</span>
@@ -150,13 +150,13 @@
         </div>
         <div class="field">
           <span class="field-label">Actuals start on</span>
-          <p class="baseline-fixed" id="baselineDateDisplay"></p><input type="hidden" id="baselineDate" value="2026-10-26">
+          <p class="baseline-fixed" id="baselineDateDisplay"></p><input type="hidden" id="baselineDate" value="">
         </div>
       </div>
       <button type="button" class="review-banner" id="reviewBanner" hidden></button>
       <div class="summary-grid" id="summaryGrid">
-        <div class="stat highlight"><span class="stat-label">Ending balance · Oct 2027</span><span class="stat-value" id="statEnding">—</span></div>
-        <div class="stat highlight"><span class="stat-label">Net saved (13 months)</span><span class="stat-value" id="statNet">—</span></div>
+        <div class="stat highlight"><span class="stat-label">Ending balance</span><span class="stat-value" id="statEnding">—</span></div>
+        <div class="stat highlight"><span class="stat-label">Net saved</span><span class="stat-value" id="statNet">—</span></div>
         <div class="stat"><span class="stat-label">Total income</span><span class="stat-value" id="statIncome">—</span></div>
         <div class="stat"><span class="stat-label">Total expenses</span><span class="stat-value" id="statExpenses">—</span></div>
         <div class="stat"><span class="stat-label">Average net / month</span><span class="stat-value" id="statAverage">—</span></div>

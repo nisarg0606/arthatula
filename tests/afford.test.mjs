@@ -4,13 +4,14 @@
  * dummy data only, no network.
  */
 import assert from "node:assert/strict";
+import { blank } from "./_plan.mjs";
 import * as core from "../js/core/index.js";
 import { FakeD1, makeCtx, authHeaders, setupTestAuth } from "./_fake-d1.mjs";
 import { answerQuestion, followUpPurchase, onRequestPost } from "../functions/api/ask.js";
 
 /* A plan that saves 500 a month from a 1,000 start. */
 function planState() {
-  const s = core.blankState();
+  const s = blank();
   s.startingBalance = 1000;
   s.months.forEach((m) => { m.takeHomePay = 3000; m.rent = 2500; });
   return s;

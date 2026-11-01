@@ -10,7 +10,8 @@ import {
   onRequestGet as expenseGet, onRequestPost as expensePost,
   onRequestPut as expensePut, onRequestDelete as expenseDelete
 } from "../functions/api/expenses.js";
-import { onRequestGet as budgetGet, MONTH_KEYS } from "../functions/api/budget.js";
+import { onRequestGet as budgetGet, planMonthKeys } from "../functions/api/budget.js";
+const MONTH_KEYS = planMonthKeys("2026-10", "2026-10");
 import { FakeD1, makeCtx, setupTestAuth, authedCtx } from "./_fake-d1.mjs";
 
 const EXP = "http://local/api/expenses";

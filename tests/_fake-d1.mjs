@@ -19,7 +19,15 @@ class Statement {
   async all() { return { results: this.db.prepare(this.sql).all(...this.args) }; }
 }
 export class FakeD1 {
-  constructor() { this.db = new DatabaseSync(":memory:"); }
+  /* Pinned to the plan the suites were written against (Oct 2026 –
+     Oct 2027, baseline 2026-10-26); a new database would otherwise
+     start on today's date. `fresh` skips that. */
+  constructor({ fresh = false } = {}) {
+    this.db = new DatabaseSync(":memory:");
+    if (fresh) return;
+    this.db.exec("CREATE TABLE budget_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    this.db.exec("INSERT INTO budget_settings VALUES ('plan_start', '2026-10'), ('baseline_date', '2026-10-26')");
+  }
   prepare(sql) { return new Statement(this.db, sql); }
   /* D1's batch(): every statement runs in one transaction, with no
      other request able to interleave — node:sqlite is synchronous, so

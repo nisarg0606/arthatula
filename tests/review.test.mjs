@@ -5,6 +5,7 @@
  * mark stands). Run: node tests/review.test.mjs — dummy data only.
  */
 import assert from "node:assert/strict";
+import { blank } from "./_plan.mjs";
 import { FakeD1, makeCtx, authHeaders, setupTestAuth } from "./_fake-d1.mjs";
 import { onRequestPatch as bankPatch } from "../functions/api/bank.js";
 import { upsertBankData, readState } from "../functions/api/budget.js";
@@ -36,7 +37,7 @@ assert.equal(app.internalTransferIds([
 ]).o, undefined, "5 days apart is not a transfer");
 
 // 2. Only person-to-person rows on/after the baseline need review.
-const state = app.blankState(); // baseline 2026-10-26
+const state = blank(); // baseline 2026-10-26 (see _plan.mjs)
 let bank = { transactions: txs, reviews: {} };
 assert.deepEqual(app.reviewQueue(state, bank).map((t) => t.id), ["in-2", "out-2"]);
 state.dailyExpenses.push({ id: 9, date: "2026-11-05", description: "Lunch", amount: 60, category: "Eating Out", bankTxId: "out-2" });
@@ -86,7 +87,7 @@ const monthly = [
 ];
 const rule = app.ignoreRuleFor(monthly[0]);
 assert.deepEqual(rule, { accountId: "A", direction: "out", name: "online transfer payment debit" });
-assert.deepEqual(app.reviewQueue(app.blankState(), { transactions: monthly, reviews: {}, ignoreRules: [rule] }).map((t) => t.id),
+assert.deepEqual(app.reviewQueue(blank(), { transactions: monthly, reviews: {}, ignoreRules: [rule] }).map((t) => t.id),
   ["m2", "m3"], "other accounts and money in still ask");
 assert.equal(app.ignoredByRule({ accountId: "A", amount: 999, name: "Online Transfer / Payment: Debit 2002" }, [rule]), true,
   "next month's payment with a new reference number is ignored too");

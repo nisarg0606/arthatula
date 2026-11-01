@@ -3,6 +3,7 @@
  * Run: node tests/merchant.test.mjs — dummy amounts only.
  */
 import assert from "node:assert/strict";
+import { blank } from "./_plan.mjs";
 import * as core from "../js/core/index.js";
 import { onRequestPost } from "../functions/api/expenses.js";
 import { onRequestPatch } from "../functions/api/budget.js";
@@ -40,7 +41,7 @@ assert.equal(next.expense.category, "Fuel/Transport");
 assert.equal(next.expense.categorizationSource, "merchant");
 
 // Pacing: day 10 of 30 in November.
-const s = core.blankState();
+const s = blank();
 s.months[1].groceries = 300; s.months[1].eatingOut = 100; s.months[1].rent = 500;
 s.dailyExpenses = [{ date: "2026-11-03", amount: 90, category: "Groceries" },
   { date: "2026-11-05", amount: 80, category: "Eating Out" }, { date: "2026-11-01", amount: 500, category: "Rent" }];
@@ -53,7 +54,7 @@ assert.equal(core.categoryPacing(s, "2026-12", "2026-11-10"), null);
 assert.equal(core.categoryPacing(s, "2026-11", "2026-12-02").daysLeft, 1);
 
 // Owed: repayments clear the oldest shares first; only 4+ weeks old counts.
-const o = core.blankState(); o.baselineDate = "2026-09-01";
+const o = blank(); o.baselineDate = "2026-09-01";
 o.dailyExpenses = [{ date: "2026-09-10", amount: 100, myShare: 50 }, { date: "2026-09-20", amount: 60, myShare: 30 },
   { date: "2026-10-25", amount: 40, myShare: 20 }];
 const bank = { transactions: [{ id: "r", amount: -40 }], reviews: { r: "repayment" } };

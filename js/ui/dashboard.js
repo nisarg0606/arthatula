@@ -8,7 +8,7 @@ import { computeDashboard } from "../core/summary.js";
 import { renderSecurity } from "./auth.js";
 import { renderCards } from "./cards.js";
 import { renderCharts } from "./charts.js";
-import { app, els } from "./context.js";
+import { app, defaultMonth, els } from "./context.js";
 import { renderDaily, todayLocal } from "./daily.js";
 import { renderMerchantRules } from "./merchant.js";
 import { buildForm, getMonth, monthLabel, renderMonthTotals, selectMonth } from "./editor.js";
@@ -133,9 +133,11 @@ export function renderSummary() {
 }
 
 export function render() {
+  /* A loaded state may carry different months than the one we opened on. */
+  if (!MONTHS.some(function (m) { return m.key === app.selectedKey; })) app.selectedKey = defaultMonth();
   els.startingBalance.value = app.state.startingBalance ? app.state.startingBalance : "";
-  if (els.baselineDate) els.baselineDate.value = app.state.baselineDate || "2026-10-26";
-  if (els.baselineDateDisplay) els.baselineDateDisplay.textContent = formatDateLabel(app.state.baselineDate || "2026-10-26");
+  if (els.baselineDate) els.baselineDate.value = app.state.baselineDate;
+  if (els.baselineDateDisplay) els.baselineDateDisplay.textContent = formatDateLabel(app.state.baselineDate);
   if (els.headerBaseline) els.headerBaseline.textContent = formatDateLabel(app.state.baselineDate).replace(/^\w+, /, "");
   buildForm();
   renderSummary();

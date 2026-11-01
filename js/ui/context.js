@@ -4,9 +4,12 @@ import { MONTHS, blankState } from "../core/plan.js";
 /* Everything the screens change at runtime lives here, so every module sees the same values. */
 export const app = {};
 
-/* Open on the current month when it's in the plan, else the first. */
-
 export const nowKey = new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0");
+
+/* Open on the current month when it's in the plan, else the first. */
+export function defaultMonth() {
+  return MONTHS.some(function (m) { return m.key === nowKey; }) ? nowKey : MONTHS[0].key;
+}
 
 export const els = {};
 
@@ -15,7 +18,7 @@ export function init() {
   app.state = blankState();
   app.mode = "local"; /* "database" | "local" */
   app.editMode = "planned"; /* "planned" | "actual" */
-  app.selectedKey = MONTHS.some(function (m) { return m.key === nowKey; }) ? nowKey : MONTHS[0].key;
+  app.selectedKey = defaultMonth();
   app.saveTimer = null;
   ["startingBalance", "baselineDate", "headerBaseline", "statIncome", "statExpenses", "statNet", "statEnding", "statAverage", "statRate",
    "statActualNet", "statVariance", "statFreeMonth", "statSpentMonth", "statSpentPending", "statOwed", "reviewBanner", "reviewBadge", "askForm", "askInput", "askBtn", "askLog", "askClear", "reviewBox", "reviewList", "compareToggle", "actualEmptyNote",
