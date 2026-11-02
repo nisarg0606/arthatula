@@ -72,7 +72,13 @@ assert.equal((await syncCompletePost(completeCtx(env, null, "x", { status: "done
 /* Nothing requested yet: latest is null, claim is empty. */
 let res = await syncLatestGet(devCtx(undefined, "GET", LATEST));
 assert.equal(res.status, 200);
-assert.deepEqual(await res.json(), { request: null });
+assert.deepEqual(await res.json(), { request: null, paired: true });
+/* No automation paired: the Sync now button hides. */
+{
+  const lone = { DB: new FakeD1() };
+  const tok = await setupTestAuth(lone);
+  assert.equal((await (await syncLatestGet(authedCtx(lone, tok)(undefined, "GET", LATEST))).json()).paired, false);
+}
 res = await syncClaimGet(syncCtx(undefined, "GET", CLAIM));
 assert.equal(res.status, 200);
 assert.deepEqual(await res.json(), { request: null });

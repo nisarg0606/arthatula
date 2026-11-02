@@ -37,22 +37,29 @@ export function updateSpentPending() {
 }
 
 /* Pending rows, each with "Count it now" (or "Counted" once it is an
-   expense), plus counted charges that never posted, to remove or keep. */
+   expense), plus counted charges that never posted, to remove or keep.
+   Drawn into every .pending-section: classic Daily and the new
+   Transactions screen (js/ui/v2/transactions.js). */
 export function renderPending() {
-  if (!els.pendingSection) return;
+  var sections = document.querySelectorAll(".pending-section");
+  if (!sections.length) return;
   var txs = (app.pendingData && app.pendingData.transactions) || [];
   var counted = countedPending(app.state.dailyExpenses);
   var unposted = unpostedCounted(app.state.dailyExpenses, app.pendingData && app.pendingData.transactions, todayLocal());
-  els.pendingSection.hidden = !txs.length && !unposted.length;
-  if (els.pendingSection.hidden) return;
   var waiting = txs.filter(function (t) { return !counted[t.id]; });
   var total = 0;
   waiting.forEach(function (t) { total += t.amount || 0; });
-  if (els.pendingMeta) {
-    els.pendingMeta.textContent = waiting.length + (waiting.length === 1 ? " charge · " : " charges · ") + fmt(total) + " — not counted yet";
-  }
-  if (!els.pendingList) return;
-  els.pendingList.innerHTML = "";
+  sections.forEach(function (section) {
+    section.hidden = !txs.length && !unposted.length;
+    if (section.hidden) return;
+    var meta = section.querySelector(".pending-meta"), list = section.querySelector(".pending-list");
+    if (meta) meta.textContent = waiting.length + (waiting.length === 1 ? " charge · " : " charges · ") + fmt(total) + " — not counted yet";
+    if (list) drawPendingList(list, txs, counted, unposted);
+  });
+}
+
+function drawPendingList(list, txs, counted, unposted) {
+  list.innerHTML = "";
   txs.forEach(function (t) {
     var row = document.createElement("div");
     row.className = "pending-row";
@@ -84,13 +91,13 @@ export function renderPending() {
     amt.className = "pending-amount";
     amt.textContent = fmt(t.amount || 0);
     row.appendChild(amt);
-    els.pendingList.appendChild(row);
+    list.appendChild(row);
   });
   if (unposted.length) {
     var h = document.createElement("p");
     h.className = "pending-note pending-flag-head";
     h.textContent = "Counted early but never posted. Remove it if the charge was dropped, or keep it if it's right.";
-    els.pendingList.appendChild(h);
+    list.appendChild(h);
     unposted.forEach(function (e) {
       var row = document.createElement("div");
       row.className = "pending-row pending-flag";
@@ -111,7 +118,7 @@ export function renderPending() {
       var amt = document.createElement("span");
       amt.className = "pending-amount"; amt.textContent = fmt(e.amount || 0);
       row.appendChild(main); row.appendChild(remove); row.appendChild(keep); row.appendChild(amt);
-      els.pendingList.appendChild(row);
+      list.appendChild(row);
     });
   }
 }

@@ -9,6 +9,8 @@ import {
   categorySelect, accountSelect, field, openDialog, section, button, emptyState, errorState, loading
 } from "./kit.js";
 import { openCsvImport, openSimplefin } from "./bankimport.js";
+import { renderPending } from "../pending.js";
+import { paintSync } from "../sync.js";
 
 const state = { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, page: 1, list: [], total: 0 };
 let root = null, listEl = null, countEl = null;
@@ -19,7 +21,21 @@ export function showFiltered(filter) {
 }
 
 /* Re-read the list in place (after auto-review, from ./index.js). */
-export function refresh() { if (listEl && listEl.isConnected) load(); }
+export function refresh() { if (listEl && listEl.isConnected && document.body.getAttribute("data-tab") === "transactions") load(); }
+
+/* Plaid's "Sync now" and the pending charges, the same ones the classic
+   Daily tab shows (drawn by ../sync.js and ../pending.js). */
+function bankBits() {
+  return [
+    h("div", { class: "sync-row", attrs: { hidden: true } },
+      h("button", { class: "btn-primary sync-btn", text: "Sync now", attrs: { type: "button", id: "v2SyncNow", title: "Ask your Plaid sync to run now" } }),
+      h("span", { class: "sync-status", attrs: { "aria-live": "polite" } })),
+    h("section", { class: "pending-section", attrs: { hidden: true } },
+      h("div", { class: "pending-head" }, h("h3", { class: "pending-title", text: "Pending charges" }), h("span", { class: "pending-meta" })),
+      h("p", { class: "pending-note", text: "Still settling at the bank, so not counted yet. Tap Count it now on any you know won't change; when it posts, it updates to the final amount instead of being added again." }),
+      h("div", { class: "pending-list" }))
+  ];
+}
 
 function query() {
   const p = new URLSearchParams();
@@ -291,7 +307,9 @@ export function render(container) {
       button("Import from your bank (CSV)", function () { openCsvImport(load); }, "", { id: "v2ImportCsv" }),
       button("Bank sync", function () { openSimplefin(load); }, "", { id: "v2BankSync" }),
       button("+ Add transaction", function () { editTx(null); }, "btn-primary", { id: "v2AddTx" })],
-      h("div", null, filters(), countEl, listEl)));
+      h("div", null, bankBits(), filters(), countEl, listEl)));
+    paintSync();
+    renderPending();
     return load();
   }).catch(function (e) { errorState(root, e); });
 }

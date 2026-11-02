@@ -1,8 +1,9 @@
-/* Manual "Sync now" (Daily tab). */
+/* Manual "Sync now" (Daily tab and the Transactions screen). */
 import { fmt } from "../core/format.js";
 import { syncResultExpired } from "../core/sync.js";
-import { app, els } from "./context.js";
+import { app } from "./context.js";
 import { apiFetch, load } from "./storage.js";
+import { refresh as refreshTransactions } from "./v2/transactions.js";
 
 /* ================= Manual sync =================
    "Sync now" asks the paired automation to run the Plaid sync
@@ -58,28 +59,54 @@ function syncOutcomeText(req) {
   return parts.join(" · ");
 }
 
+/* Every "Sync now" row (classic Daily and the new Transactions screen)
+   shows the same request. The row hides when no sync automation is
+   paired and nothing is in flight: a request would only expire. */
+var lastReq = null, syncPaired = true;
+function eachSyncRow(fn) {
+  document.querySelectorAll(".sync-row").forEach(function (row) {
+    fn(row.querySelector(".sync-btn"), row.querySelector(".sync-status"), row);
+  });
+}
+
+export function paintSync() {
+  var req = lastReq, active = syncIsActive(req);
+  eachSyncRow(function (btn, status, row) {
+    row.hidden = !syncPaired && !active;
+    if (btn) {
+      btn.disabled = active;
+      btn.textContent = !req ? "Sync now"
+        : req.status === "pending" ? "Queued…"
+        : req.status === "running" ? "Syncing…"
+        : "Sync now";
+    }
+    if (status) {
+      status.textContent = !req ? ""
+        : req.status === "pending" ? "Queued — the sync automation will pick this up shortly."
+        : req.status === "running" ? "Syncing with Plaid…"
+        : syncResultExpired(req, Date.now()) ? "" /* last result is over a day old */
+        : syncOutcomeText(req);
+    }
+  });
+}
+
 function renderSyncRequest(req) {
-  if (!els.syncNowBtn) return false;
-  var active = syncIsActive(req);
-  els.syncNowBtn.disabled = active;
-  els.syncNowBtn.textContent = !req ? "Sync now"
-    : req.status === "pending" ? "Queued…"
-    : req.status === "running" ? "Syncing…"
-    : "Sync now";
-  if (els.syncStatus) {
-    els.syncStatus.textContent = !req ? ""
-      : req.status === "pending" ? "Queued — the sync automation will pick this up shortly."
-      : req.status === "running" ? "Syncing with Plaid…"
-      : syncResultExpired(req, Date.now()) ? "" /* last result is over a day old */
-      : syncOutcomeText(req);
-  }
-  return active;
+  lastReq = req;
+  paintSync();
+  return syncIsActive(req);
+}
+
+function showSyncStatus(text, busy) {
+  eachSyncRow(function (btn, status) {
+    if (btn) btn.disabled = busy;
+    if (status) status.textContent = text;
+  });
 }
 
 var syncCheckSeq = 0; /* only the newest status answer is shown */
 var syncInFlight = 0; /* status checks still waiting for an answer */
 export function checkSyncStatus(resume) {
-  if (app.mode !== "database" || !els.syncNowBtn) return;
+  if (app.mode !== "database") return;
   var seq = ++syncCheckSeq;
   syncInFlight++;
   apiFetch("/api/sync-requests/latest").then(function (res) {
@@ -88,6 +115,7 @@ export function checkSyncStatus(resume) {
   }).then(function (data) {
     if (seq !== syncCheckSeq) return; /* an older check answered late */
     var req = data && data.request;
+    syncPaired = data.paired !== false;
     if (renderSyncRequest(req)) {
       syncWasActive = true;
       if (resume && !syncPollTimer) startSyncPolling();
@@ -95,7 +123,7 @@ export function checkSyncStatus(resume) {
       var finished = syncWasActive;
       syncWasActive = false;
       stopSyncPolling();
-      if (finished && req && req.status === "done") load(); /* fresh expenses + snapshots */
+      if (finished && req && req.status === "done") { load(); refreshTransactions(); } /* fresh expenses + snapshots */
     }
   }).catch(function () { /* leave the button as-is; the next check retries */ })
     .then(function () { syncInFlight--; });
@@ -103,11 +131,10 @@ export function checkSyncStatus(resume) {
 
 function onSyncNow() {
   if (app.mode !== "database") {
-    if (els.syncStatus) els.syncStatus.textContent = "Sync needs database mode — you're in local-only mode.";
+    showSyncStatus("Sync needs database mode — you're in local-only mode.", false);
     return;
   }
-  if (els.syncNowBtn) els.syncNowBtn.disabled = true;
-  if (els.syncStatus) els.syncStatus.textContent = "Queuing…";
+  showSyncStatus("Queuing…", true);
   apiFetch("/api/sync-requests", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: "{}"
   }).then(function (res) {
@@ -118,14 +145,14 @@ function onSyncNow() {
     startSyncPolling();
     checkSyncStatus(false);
   }).catch(function () {
-    if (els.syncNowBtn) els.syncNowBtn.disabled = false;
-    if (els.syncStatus) els.syncStatus.textContent = "Couldn't queue a sync — try again.";
+    showSyncStatus("Couldn't queue a sync — try again.", false);
   });
 }
 
-/* Wires up this part of the app; main.js calls every init() in order. */
+/* Wires up this part of the app; main.js calls every init() in order.
+   Delegated, so rows drawn later (the Transactions screen) work too. */
 export function init() {
-  if (els.syncNowBtn) {
-    els.syncNowBtn.addEventListener("click", onSyncNow);
-  }
+  document.addEventListener("click", function (e) {
+    if (e.target.closest && e.target.closest(".sync-btn")) onSyncNow();
+  });
 }

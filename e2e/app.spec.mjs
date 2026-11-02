@@ -238,6 +238,32 @@ test("count a pending charge now; the posted charge updates it instead of adding
   await expect(item).not.toContainText("counted from pending");
 });
 
+test("the Transactions screen shows pending charges and Plaid's Sync now", async ({ page, request }, info) => {
+  const token = await signIn(page, request);
+  const sync = await pairSync(page, request, token, "v2pending-" + info.project.name);
+  const key = info.project.name + "-" + info.retry;
+  const shop = "E2E Cafe " + key;
+  expect((await request.post("/api/pending", { headers: sync, data: { transactions: [
+    { id: "e2e-v2pend-" + key, date: today(), name: shop, amount: 12, accountLabel: "", category: "Groceries" }
+  ] } })).ok()).toBeTruthy();
+
+  await page.reload();
+  await openTab(page, "transactions");
+  const screen = page.locator("#v2Transactions");
+  await expect(screen.locator("#v2SyncNow")).toBeVisible();
+  const row = screen.locator(".pending-row", { hasText: shop });
+  await row.getByRole("button", { name: "Count it now" }).click();
+  await expect(row.locator(".pending-badge.counted")).toHaveText("Counted");
+  /* The counted charge lands in the feed without a reload. */
+  await expect(screen.locator(".v2-tx", { hasText: shop })).toHaveCount(1);
+  await screen.locator("#v2SyncNow").click();
+  await expect(screen.locator("#v2SyncNow")).toHaveText("Queued…", { timeout: 15000 });
+  /* Finish it, so later tests start with no sync in flight. */
+  const claim = await (await request.get("/api/sync-requests/claim", { headers: sync })).json();
+  await request.post("/api/sync-requests/" + claim.request.id + "/complete", { headers: sync, data: { status: "done", result: { addedCount: 0 } } });
+  await expect(screen.locator(".sync-status")).toContainText("Added 0 expenses", { timeout: 15000 });
+});
+
 test("Sync now keeps watching a slow sync and shows the result when it finishes", async ({ page, request }, info) => {
   const token = await signIn(page, request);
   const sync = await pairSync(page, request, token, "syncnow-" + info.project.name);

@@ -7,11 +7,13 @@
  *        Device sessions only. request is the newest sync request
  *        { id, status, requestedAt, finishedAt, result } — result is
  *        the parsed run summary once the request has finished — or
- *        null when no sync has ever been requested. The Daily tab
+ *        null when no sync has ever been requested. paired is whether
+ *        a sync automation is paired at all (the button hides when it
+ *        isn't and nothing is in flight). The Sync now buttons
  *        polls this while a request is active and reads it once on
  *        load to resume an in-flight request's state.
  */
-import { ensureTables, getLatestSyncRequest, requireAuth } from "../budget.js";
+import { ensureTables, getLatestSyncRequest, hasSyncSession, requireAuth } from "../budget.js";
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -32,7 +34,7 @@ export async function onRequestGet(context) {
     const auth = await requireAuth(context.env.DB, context.request);
     if (auth.response) return auth.response;
     await ensureTables(context.env.DB);
-    return json({ request: await getLatestSyncRequest(context.env.DB) });
+    return json({ request: await getLatestSyncRequest(context.env.DB), paired: await hasSyncSession(context.env.DB) });
   } catch (err) {
     return json({ error: String((err && err.message) || err) }, 500);
   }

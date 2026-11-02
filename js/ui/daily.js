@@ -14,6 +14,7 @@ import { buildForm, monthLabel } from "./editor.js";
 import { merchantRuleControl } from "./merchant.js";
 import { PAGE_SIZE, clampPage, pager } from "./pager.js";
 import { renderPending, updateSpentPending } from "./pending.js";
+import { refresh as refreshTransactions } from "./v2/transactions.js";
 import { renderReview } from "./review.js";
 import { keepScroll } from "./scroll.js";
 import { apiFetch, persist, setMode } from "./storage.js";
@@ -355,6 +356,7 @@ export function expenseRow(e, open) {
 export function afterExpensesChanged(newState) {
   if (newState) app.state = sanitizeState(newState);
   persist(); buildForm(); renderSummary(); renderDaily(); renderCards(); renderPending(); updateSpentPending();
+  refreshTransactions(); /* a counted pending charge shows up on the new screen too */
 }
 
 export function createExpense(entry) {
