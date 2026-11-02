@@ -1101,6 +1101,15 @@ export async function getLatestSyncRequest(db) {
   return row ? rowToSyncRequest(row) : null;
 }
 
+/* Is a sync automation paired (an unexpired sync session)? Without
+   one a "Sync now" request would only wait and expire. */
+export async function hasSyncSession(db) {
+  const row = await db.prepare(
+    "SELECT 1 FROM sessions WHERE kind = 'sync' AND (expires_at IS NULL OR expires_at > ?) LIMIT 1"
+  ).bind(sqlTime(new Date())).first();
+  return !!row;
+}
+
 /* Atomically claim the oldest pending request for the sync
    automation: the conditional UPDATE is the claim — exactly one
    poller can turn a given row pending -> running. -> request | null */

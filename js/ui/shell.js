@@ -34,7 +34,7 @@ export function showTab(name) {
   if (name === "dashboard") renderSummary(); /* charts need a visible canvas */
   if (name === "cards") renderCards();
   if (name === "bank") { renderBank(); loadBank(); } /* fresh snapshot on every visit */
-  if (name === "daily") { renderPending(); loadPending(); } /* fresh snapshot on every visit */
+  if (name === "daily" || name === "transactions") { renderPending(); loadPending(); } /* fresh snapshot on every visit */
   if (name === "settings") renderSecurity(true);
   onShowV2(name); /* the new screens render on every visit */
 }

@@ -29,8 +29,6 @@ export function init() {
    "viewPlannedBtn", "viewActualBtn",
    "copyAllBtn", "copyPrevBtn", "exportBtn", "importFile", "resetBtn",
    "expenseForm", "expDate", "expDateBtn", "expDateDisplay", "expDateCal", "expDescription", "expAmount", "expCategory", "expCard", "expShare", "expCatHint", "expenseList",
-   "pendingSection", "pendingList", "pendingMeta",
-   "syncNowBtn", "syncStatus",
    "cardForm", "cardFormTitle", "cardName", "cardStart", "cardStartBtn", "cardStartDisplay", "cardStartCal", "cardEnd", "cardEndBtn", "cardEndDisplay", "cardEndCal", "cardDue", "cardDueBtn", "cardDueDisplay", "cardDueCal", "cardCancelEditBtn", "cardList",
    "bankSyncedAt", "bankIgnoreRules", "bankAccounts", "bankAccountFilter", "bankTxList",
    "baselineDateDisplay",

@@ -449,7 +449,8 @@ All calls carry `Authorization: Bearer <sync token>`. Amounts are dollars.
   charge with the same card and the same merchant name within 5 days.
   Anything it can't match shows up in the Daily tab for the owner.
 - `GET /api/expenses`, `GET`/`PUT /api/cards`: as before.
-- Manual sync requests (the Daily tab's **Sync now** button): the app
+- Manual sync requests (the **Sync now** button on Daily and Transactions,
+  shown once a sync automation is paired): the app
   queues a request in D1; a poller running next to the sync engine
   (`tools/sync-poller.mjs`, with `tools/budget-sync-poller.service` as
   its systemd user unit) polls `GET /api/sync-requests/claim` every
