@@ -126,9 +126,23 @@ const okText = (result) => JSON.parse(result.content[0].text);
   const list = await (await rpc(env, mcpToken, { jsonrpc: "2.0", id: 6, method: "tools/list" })).json();
   const names = list.result.tools.map((t) => t.name).sort();
   assert.deepEqual(names, [
-    "add_expense", "categorize_expense", "create_category", "delete_expense", "get_bank_snapshot",
-    "get_budget", "get_budget_status", "get_sync_status", "list_accounts", "list_cards", "list_categories",
-    "list_expenses", "list_pending_charges", "list_transactions", "request_sync", "send_feedback", "set_budget", "update_expense"
+    "add_account", "add_card", "add_expense", "add_goal",
+    "add_recurring", "add_rule", "add_transaction", "apply_rule",
+    "categorize_expense", "copy_budget", "create_category", "create_group",
+    "delete_account", "delete_card", "delete_category", "delete_expense",
+    "delete_goal", "delete_group", "delete_recurring", "delete_rule",
+    "delete_transaction", "export_data", "fill_budget", "get_bank_snapshot",
+    "get_budget", "get_budget_status", "get_checklist", "get_investments",
+    "get_layout", "get_market_recap", "get_merchant_rules", "get_net_worth",
+    "get_reports", "get_settings", "get_splitwise", "get_sync_status",
+    "import_transactions", "list_accounts", "list_cards", "list_categories",
+    "list_expenses", "list_goals", "list_pending_charges", "list_recurring",
+    "list_rules", "list_transactions", "request_sync", "resolve_recurring_suggestion",
+    "review_all_transactions", "review_bank_transaction", "run_auto_review", "send_feedback",
+    "set_actuals", "set_budget", "set_ignore_rules", "set_layout",
+    "set_merchant_rules", "update_account", "update_card", "update_category",
+    "update_checklist", "update_expense", "update_goal", "update_group",
+    "update_plan", "update_recurring", "update_rule", "update_transaction"
   ]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.type, "object", t.name + " has an object schema");
@@ -317,6 +331,175 @@ const okText = (result) => JSON.parse(result.content[0].text);
   assert.ok(!set0.isError, "set_budget 0 ok");
   const famRow0 = set0.structuredContent.rows.find((r) => r.categoryName === "Family");
   assert.ok(!famRow0 || famRow0.plannedCents === 0, "amountCents 0 removes the line");
+
+  /* ---------- 7c. Full app parity: plan, cards, bank review, v2 CRUD -- */
+  const gbNow = okText(await call(env, mcpToken, "get_budget"));
+  const mk1 = gbNow.months[1].monthKey;
+  const plan1 = await call(env, mcpToken, "update_plan", { monthKey: mk1, patch: { oneOffs: 123.45, oneOffNote: "parity test" } });
+  assert.ok(!plan1.isError, "update_plan ok");
+  assert.equal(plan1.structuredContent.month.oneOffs, 123.45);
+  assert.equal(plan1.structuredContent.month.oneOffNote, "parity test");
+  const act1 = await call(env, mcpToken, "set_actuals", { monthKey: mk1, patch: { takeHomePay: 4321 } });
+  assert.ok(!act1.isError, "set_actuals ok");
+  assert.equal(act1.structuredContent.actual.takeHomePay, 4321);
+  const mr1 = await call(env, mcpToken, "set_merchant_rules", { rules: [{ match: "Parity Mart", category: "Groceries" }] });
+  assert.ok(!mr1.isError && mr1.structuredContent.rules.some((r) => r.match === "parity mart"), "merchant rules set");
+  const mr2 = okText(await call(env, mcpToken, "get_merchant_rules"));
+  assert.ok(mr2.rules.some((r) => r.match === "parity mart"), "merchant rules read back");
+  await call(env, mcpToken, "set_merchant_rules", { rules: [] });
+
+  const card1 = await call(env, mcpToken, "add_card", { name: "Parity Visa", statementStart: "2026-11-01", statementEnd: "2026-11-30", dueDate: "2026-12-20" });
+  assert.ok(!card1.isError, "add_card ok");
+  const cardId = card1.structuredContent.card.id;
+  const card2 = await call(env, mcpToken, "update_card", { id: cardId, patch: { dueDate: "2026-12-21" } });
+  assert.equal(card2.structuredContent.card.dueDate, "2026-12-21");
+  const card3 = await call(env, mcpToken, "delete_card", { id: cardId });
+  assert.equal(card3.structuredContent.deleted, cardId);
+
+  const settings1 = okText(await call(env, mcpToken, "get_settings"));
+  assert.ok(settings1.ai && settings1.splitwise && settings1.finnhub, "settings flags shape");
+  assert.ok(!JSON.stringify(settings1).includes("apiKey"), "no key material in settings");
+
+  await upsertBankData(env.DB, {
+    accounts: [{ plaidAccountId: "acc-chk", institution: "Test Bank", name: "Checking", subtype: "checking", mask: "0001", currentBalance: 1234.5 }],
+    transactions: [{ id: "bank-tx-par", accountId: "acc-chk", date: "2026-11-03", name: "Inflow from a friend", amount: -250, pfc: "TRANSFER_IN" }]
+  });
+  const rev1 = await call(env, mcpToken, "review_bank_transaction", { txId: "bank-tx-par", kind: "income" });
+  assert.ok(!rev1.isError, "review_bank_transaction ok");
+  assert.equal(rev1.structuredContent.reviews["bank-tx-par"], "income");
+  const rev2 = await call(env, mcpToken, "review_bank_transaction", { txId: "bank-tx-par", kind: null });
+  assert.equal(rev2.structuredContent.reviews["bank-tx-par"], undefined, "review cleared");
+  const ign1 = await call(env, mcpToken, "set_ignore_rules", { rules: [{ accountId: "acc-chk", direction: "out", name: "Some Payment" }] });
+  assert.equal(ign1.structuredContent.ignoreRules.length, 1, "ignore rules set");
+  await call(env, mcpToken, "set_ignore_rules", { rules: [] });
+
+  const cats2 = okText(await call(env, mcpToken, "list_categories"));
+  const groceries = cats2.categories.find((c) => c.name === "Groceries");
+  const eatingOut = cats2.categories.find((c) => c.name === "Eating Out");
+  const grp1 = await call(env, mcpToken, "create_group", { name: "Parity Group" });
+  assert.ok(!grp1.isError, "create_group ok");
+  const grp = grp1.structuredContent.groups.find((g) => g.name === "Parity Group");
+  const grp2 = await call(env, mcpToken, "update_group", { id: grp.id, patch: { name: "Parity Group 2" } });
+  assert.ok(grp2.structuredContent.groups.some((g) => g.id === grp.id && g.name === "Parity Group 2"), "group renamed");
+  const tmpCat = await call(env, mcpToken, "create_category", { name: "Parity Temp", group: "Parity Group 2" });
+  assert.equal(tmpCat.structuredContent.category.groupId, grp.id, "category filed under the new group");
+  const catUpd = await call(env, mcpToken, "update_category", { id: tmpCat.structuredContent.category.id, patch: { icon: "T" } });
+  assert.equal(catUpd.structuredContent.categories.find((c) => c.id === tmpCat.structuredContent.category.id).icon, "T");
+  const catDel = await call(env, mcpToken, "delete_category", { id: tmpCat.structuredContent.category.id, moveTo: groceries.id });
+  assert.ok(!catDel.structuredContent.categories.some((c) => c.name === "Parity Temp"), "category deleted");
+  const grp3 = await call(env, mcpToken, "delete_group", { id: grp.id });
+  assert.ok(!grp3.structuredContent.groups.some((g) => g.id === grp.id), "group deleted");
+
+  const acc1 = await call(env, mcpToken, "add_account", { name: "Cash Stash", type: "cash", balanceCents: 5000 });
+  assert.ok(!acc1.isError, "add_account ok");
+  const accId = acc1.structuredContent.account.id;
+  const acc2 = await call(env, mcpToken, "update_account", { id: accId, patch: { balanceCents: 6000 } });
+  assert.equal(acc2.structuredContent.account.balanceCents, 6000);
+  const acc3 = await call(env, mcpToken, "delete_account", { id: accId });
+  assert.equal(acc3.structuredContent.deleted, accId);
+
+  const tx1p = await call(env, mcpToken, "add_transaction", { date: "2026-11-05", merchant: "Parity Manual", amountCents: -2500, categoryId: groceries.id });
+  assert.ok(!tx1p.isError, "add_transaction ok");
+  const pTxId = tx1p.structuredContent.transaction.id;
+  const tx2p = await call(env, mcpToken, "update_transaction", { id: pTxId, patch: { splits: [{ categoryId: groceries.id, amountCents: -1500 }, { categoryId: eatingOut.id, amountCents: -1000 }] } });
+  assert.ok(!tx2p.isError, "update_transaction splits ok");
+  assert.equal(tx2p.structuredContent.transaction.splits.length, 2);
+  const tx3p = await call(env, mcpToken, "update_transaction", { id: pTxId, patch: { splits: [], notes: "parity note" } });
+  assert.equal(tx3p.structuredContent.transaction.notes, "parity note");
+  const rall = await call(env, mcpToken, "review_all_transactions");
+  assert.equal(typeof rall.structuredContent.updated, "number");
+  const tx4p = await call(env, mcpToken, "delete_transaction", { id: pTxId });
+  assert.equal(tx4p.structuredContent.deleted, pTxId);
+
+  await call(env, mcpToken, "set_budget", { month: "2026-11", category: "Groceries", amountCents: 50000 });
+  const cp1 = await call(env, mcpToken, "copy_budget", { from: "2026-11", to: "2026-12" });
+  assert.ok(!cp1.isError, "copy_budget ok");
+  assert.equal(cp1.structuredContent.rows.find((r) => r.categoryName === "Groceries").plannedCents, 50000);
+  const fl1 = await call(env, mcpToken, "fill_budget", { from: "2026-12", through: "2027-03" });
+  assert.ok(Array.isArray(fl1.structuredContent.months), "fill_budget returns months");
+
+  const goal1 = await call(env, mcpToken, "add_goal", { name: "Parity Trip", targetCents: 100000, savedCents: 2500 });
+  assert.ok(!goal1.isError, "add_goal ok");
+  const goal = goal1.structuredContent.goals.find((g) => g.name === "Parity Trip");
+  assert.ok(goal && goal.progress, "goal has progress");
+  const goal2 = await call(env, mcpToken, "update_goal", { id: goal.id, patch: { savedCents: 3000 } });
+  assert.equal(goal2.structuredContent.goals.find((g) => g.id === goal.id).savedCents, 3000);
+  const goal3 = await call(env, mcpToken, "delete_goal", { id: goal.id });
+  assert.ok(!goal3.structuredContent.goals.some((g) => g.id === goal.id), "goal deleted");
+
+  const rec1 = await call(env, mcpToken, "add_recurring", { name: "Parity Gym", amountCents: -8800, cadence: "monthly", nextDate: "2026-12-01" });
+  assert.ok(!rec1.isError, "add_recurring ok");
+  const recItem = rec1.structuredContent.items.find((r) => r.name === "Parity Gym");
+  assert.ok(recItem, "recurring item listed");
+  const rec2 = await call(env, mcpToken, "update_recurring", { id: recItem.id, patch: { amountCents: -9000 } });
+  assert.equal(rec2.structuredContent.items.find((r) => r.id === recItem.id).amountCents, -9000);
+  const rec3 = await call(env, mcpToken, "delete_recurring", { id: recItem.id });
+  assert.ok(!rec3.structuredContent.items.some((r) => r.id === recItem.id), "recurring deleted");
+  const recBad = await call(env, mcpToken, "resolve_recurring_suggestion", { detectKey: "nope", action: "confirm" });
+  assert.equal(recBad.isError, true, "bogus suggestion rejected");
+
+  const rule1 = await call(env, mcpToken, "add_rule", { matchText: "Parity Manual", setCategoryId: groceries.id });
+  assert.ok(!rule1.isError, "add_rule ok");
+  const rule = rule1.structuredContent.rules.find((r) => r.matchText === "Parity Manual");
+  const rule2 = await call(env, mcpToken, "apply_rule", { id: rule.id });
+  assert.equal(typeof rule2.structuredContent.changed, "number");
+  const rule3 = await call(env, mcpToken, "update_rule", { id: rule.id, patch: { addTag: "parity" } });
+  assert.equal(rule3.structuredContent.rules.find((r) => r.id === rule.id).addTag, "parity");
+  const rule4 = await call(env, mcpToken, "delete_rule", { id: rule.id });
+  assert.ok(!rule4.structuredContent.rules.some((r) => r.id === rule.id), "rule deleted");
+  const rules1 = okText(await call(env, mcpToken, "list_rules"));
+  assert.ok(Array.isArray(rules1.rules), "list_rules shape");
+
+  const auto1 = await call(env, mcpToken, "run_auto_review");
+  assert.ok(auto1.isError || typeof auto1.structuredContent.reviewed === "number", "auto review answers (needs an AI key to actually review)");
+
+  const rep1 = okText(await call(env, mcpToken, "get_reports", { kind: "summary", month: "2026-11" }));
+  assert.equal(rep1.month, "2026-11");
+  assert.equal(typeof rep1.spendingCents, "number");
+  const rep2 = okText(await call(env, mcpToken, "get_reports", { kind: "cashflow", from: "2026-10", to: "2026-11" }));
+  assert.ok(rep2.months || rep2.rows || rep2.series, "cashflow shape");
+  const rep3 = okText(await call(env, mcpToken, "get_reports", { kind: "forecast", months: 3 }));
+  assert.equal(rep3.months.length, 3);
+  const nw1 = okText(await call(env, mcpToken, "get_net_worth"));
+  assert.equal(typeof nw1.current.netWorthCents, "number");
+  const inv1 = okText(await call(env, mcpToken, "get_investments"));
+  assert.ok(Array.isArray(inv1.accounts) && Array.isArray(inv1.holdings), "investments shape");
+  const mkt1 = okText(await call(env, mcpToken, "get_market_recap"));
+  assert.equal(typeof mkt1.status, "string");
+  const sw1 = okText(await call(env, mcpToken, "get_splitwise"));
+  assert.equal(sw1.connected, false, "no Splitwise key in the test env");
+  const exp1j = okText(await call(env, mcpToken, "export_data", { format: "json" }));
+  assert.equal(exp1j.version, 1);
+  assert.ok(Array.isArray(exp1j.transactions), "export json has transactions");
+  const exp2c = okText(await call(env, mcpToken, "export_data", { format: "csv" }));
+  assert.ok(exp2c.csv.startsWith("Date,Merchant,Amount"), "export csv header");
+  const lay1 = okText(await call(env, mcpToken, "get_layout"));
+  assert.ok(lay1.order.includes("overview"), "layout default");
+  const lay2 = await call(env, mcpToken, "set_layout", { order: ["month", "overview", "market", "ask", "trends"], hidden: ["ask"] });
+  assert.equal(lay2.structuredContent.order[0], "month");
+  assert.ok(lay2.structuredContent.hidden.includes("ask"), "layout saved");
+  const chk1 = okText(await call(env, mcpToken, "get_checklist"));
+  assert.ok(chk1.items && typeof chk1.items.balance === "boolean", "checklist shape");
+  const chk2 = await call(env, mcpToken, "update_checklist", { dismissed: true });
+  assert.equal(chk2.structuredContent.dismissed, true);
+
+  const imp1 = await call(env, mcpToken, "import_transactions", {
+    newAccount: { name: "Parity Old Bank", type: "depository" },
+    rows: [
+      { date: "2026-10-01", description: "Opening deposit", amountCents: 10000, balanceCents: 10000 },
+      { date: "2026-10-02", description: "Coffee", amountCents: -500, balanceCents: 9500 }
+    ]
+  });
+  assert.ok(!imp1.isError, "import_transactions ok");
+  assert.equal(imp1.structuredContent.added, 2);
+  const imp2 = await call(env, mcpToken, "import_transactions", {
+    accountId: imp1.structuredContent.accountId,
+    rows: [
+      { date: "2026-10-01", description: "Opening deposit", amountCents: 10000, balanceCents: 10000 },
+      { date: "2026-10-02", description: "Coffee", amountCents: -500, balanceCents: 9500 }
+    ]
+  });
+  assert.equal(imp2.structuredContent.added, 0, "re-import dedupes");
 
   /* ---------- 8. Revoke kills the token ------------------------------ */
   const revoke = await authPost(makeCtx(env, { action: "revoke", id: mcpSessionId }, "POST", "http://local/api/auth", authHeaders(device)));
