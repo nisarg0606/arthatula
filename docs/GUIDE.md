@@ -369,6 +369,20 @@ computer that's always on, so it's for people comfortable with a
 terminal. See the README's "Pairing the Plaid sync script" and "What the
 app expects from the sync".
 
+**Notifications.** The bell at the top shows what came in: each new
+transaction from a sync, new pending charges, a pairing request from the
+Plaid script, and a sync that failed. It checks every 30 seconds while
+the app is open (and right away when you come back to it), and the
+screens update with it, so there's no need to reload.
+
+To get the same notifications on your phone when the app is closed, use
+Telegram (free): in Telegram, message **@BotFather**, send `/newbot` and
+follow the steps; it gives you a token. In Arthatula, open **Settings →
+Advanced → Notifications on your phone**, paste the token and tap
+**Connect**. Then open your new bot in Telegram, tap **Start**, and tap
+**Connect** again. The bot says "Arthatula is connected" in that chat.
+**Send a test** checks it; **Disconnect** stops it.
+
 ## 9. Privacy and safety
 
 - Your data lives in a database in **your** Cloudflare account. Nobody

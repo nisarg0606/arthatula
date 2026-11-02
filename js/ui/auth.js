@@ -115,6 +115,18 @@ export function loadPairing() {
     .catch(function () { /* a 401 already returned us to the gate */ });
 }
 
+/* While a pairing window is open, check every 4 seconds so the
+   script's request shows up here without a reload. */
+var pairWatch = null;
+function watchPairing() {
+  clearInterval(pairWatch);
+  var until = Date.now() + 10 * 60 * 1000;
+  pairWatch = setInterval(function () {
+    if (Date.now() > until || (els.pairCard && !els.pairCard.hidden)) { clearInterval(pairWatch); return; }
+    loadPairing();
+  }, 4000);
+}
+
 export function renderPairing(pending) {
   if (!els.pairCard) return;
   els.pairCard.hidden = !pending;
@@ -256,6 +268,7 @@ export function init() {
   if (els.pairOpenBtn) {
     els.pairOpenBtn.addEventListener("click", function () {
       authAction({ action: "pair-open" }).then(function (data) {
+        watchPairing();
         if (els.pairOpenStatus) {
           els.pairOpenStatus.textContent = "Pairing code: " + data.code + " — give it to the sync script now. It works once and expires at " +
             fmtSessionTime(data.expiresAt) + ". Opening a new window replaces this code.";

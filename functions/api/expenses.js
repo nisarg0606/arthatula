@@ -57,6 +57,7 @@
 import { ensureTables, listDailyExpenses, syncDailyRollup, requireAuth, readState } from "./budget.js";
 import { isValidCategory } from "./_categories.js";
 import { categorize } from "./categorize.js";
+import { notify, usd } from "./_notify.js";
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -218,6 +219,7 @@ export async function createExpense(db, env, body, isSync) {
   ).bind(date, description, amount, category, source, cleanCard(body.card), share.value, bankTxId, pendingTxId, cleanNote(body.note) || null).run();
   const expense = await getExpense(db, info.meta.last_row_id);
   const state = await syncDailyRollup(db, date.slice(0, 7));
+  if (isSync) await notify(db, "transaction", usd(amount) + " · " + description, [expense.card, category].filter(Boolean).join(" · "));
   return out({ expense, state }, 201);
 }
 

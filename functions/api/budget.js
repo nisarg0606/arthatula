@@ -189,6 +189,7 @@ const CREATE_SYNC_REQUESTS = `CREATE TABLE IF NOT EXISTS sync_requests (
 )`;
 export const REVIEW_KINDS = ["repayment", "income", "ignore"];
 import { CATEGORY_TO_FIELD } from "./_categories.js";
+import { notify, usd } from "./_notify.js";
 import { merchantCategory, sanitizeMerchantRules } from "../../js/core/merchant.js";
 export { CATEGORY_TO_FIELD };
 
@@ -992,6 +993,8 @@ export async function replacePendingData(db, body) {
     ? src.syncedAt.slice(0, 40)
     : new Date().toISOString();
   const txIn = Array.isArray(src.transactions) ? src.transactions.slice(0, PENDING_ARRAY_CAP) : [];
+  const known = new Set(((await db.prepare("SELECT plaid_transaction_id AS id FROM pending_transactions").all()).results || []).map((r) => r.id));
+  const fresh = [];
   const stmts = [db.prepare("DELETE FROM pending_transactions")];
   let transactions = 0;
   for (const t of txIn) {
@@ -1012,9 +1015,13 @@ export async function replacePendingData(db, body) {
       cleanBankText(t.category, 100),
       stamp
     ));
+    if (!known.has(id)) fresh.push(usd(cents / 100) + " · " + cleanBankText(t.name, 500));
     transactions++;
   }
   await db.batch(stmts);
+  /* One row per new charge; a burst (the first push) becomes one row. */
+  if (fresh.length > 3) await notify(db, "pending", fresh.length + " new pending charges", fresh.slice(0, 10).join("\n"));
+  else for (const line of fresh) await notify(db, "pending", "Pending: " + line, "");
   return { transactions };
 }
 
@@ -1134,6 +1141,7 @@ export async function completeSyncRequest(db, id, status, result) {
     String(id || "")
   ).run();
   if (!(res && res.meta && res.meta.changes)) return null;
+  if (cleanStatus === "failed") await notify(db, "sync", "Sync failed", cleanResult.error || "");
   const row = await db.prepare("SELECT * FROM sync_requests WHERE id = ?").bind(String(id || "")).first();
   return row ? rowToSyncRequest(row) : null;
 }
