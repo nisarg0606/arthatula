@@ -5,7 +5,7 @@
 export const DAILY_CATEGORIES = [
   "Groceries", "Eating Out", "Rent", "Utilities", "Phone & Internet",
   "Fuel/Transport", "Insurance", "Subscriptions", "Shopping/Personal",
-  "Gym", "Loan/Debt Payment", "One-off", "Misc/Other"
+  "Gym", "Loan/Debt Payment", "One-off", "Immigration", "Misc/Other"
 ];
 
 /* Display-only emoji (same as the money model's defaults in
@@ -14,7 +14,7 @@ export const CATEGORY_ICONS = {
   "Groceries": "🛒", "Eating Out": "🍜", "Rent": "🏠", "Utilities": "💡",
   "Phone & Internet": "📱", "Fuel/Transport": "🚗", "Insurance": "🛡️",
   "Subscriptions": "📺", "Shopping/Personal": "🛍️", "Gym": "🏋️",
-  "Loan/Debt Payment": "🏦", "One-off": "📌", "Misc/Other": "🏷️"
+  "Loan/Debt Payment": "🏦", "One-off": "📌", "Immigration": "🛂", "Misc/Other": "🏷️"
 };
 export function withIcon(c) { return CATEGORY_ICONS[c] ? CATEGORY_ICONS[c] + " " + c : c; }
 
@@ -24,7 +24,7 @@ export const CATEGORY_TO_FIELD = {
   "Fuel/Transport": "gasTransport", "Insurance": "insurance",
   "Subscriptions": "subscriptions", "Shopping/Personal": "shopping",
   "Gym": "otherExpenses", "Loan/Debt Payment": "otherLoan",
-  "One-off": "oneOffs", "Misc/Other": "otherExpenses"
+  "One-off": "oneOffs", "Immigration": "oneOffs", "Misc/Other": "otherExpenses"
 };
 
 export const RULE_KEYWORDS = [
@@ -38,6 +38,7 @@ export const RULE_KEYWORDS = [
   ["Subscriptions", ["netflix", "spotify", "hulu", "youtube premium", "icloud", "amazon prime", "subscription", "chatgpt", "claude"]],
   ["Gym", ["gym", "fitness", "eos fitness", "planet fitness", "la fitness", "yoga", "crossfit"]],
   ["Loan/Debt Payment", ["credila", "loan payment", "emi", "credit card payment", "card payment", "student loan"]],
+  ["Immigration", ["uscis", "sevis", "i-901", "i-20", "immigration fee", "stem opt", "opt fee", "dhs fee"]],
   ["Shopping/Personal", ["amazon", "target", "best buy", "nike", "h&m", "zara", "clothing", "haircut", "barber", "salon", "walgreens", "cvs"]]
 ];
 

@@ -86,3 +86,11 @@ res = await settingsGet(ctxA( undefined, "GET", "http://local/api/settings"));
 assert.equal((await res.json()).gemini.hasKey, false);
 
 console.log("categorize.test.mjs: all assertions passed");
+
+// Immigration is a real category now: keyword rules route USCIS/SEVIS
+// charges to it, and the validator accepts it.
+import { categorizeByRules, isValidCategory } from "../functions/api/_categories.js";
+assert.equal(categorizeByRules("USCIS SEVIS I-901 fee"), "Immigration");
+assert.equal(categorizeByRules("DHS STEM OPT fee"), "Immigration");
+assert.equal(isValidCategory("Immigration"), true);
+console.log("ok - Immigration category: rules route to it, validator accepts it");
