@@ -8,8 +8,10 @@
  *          get_bank_snapshot, list_pending_charges, get_sync_status,
  *          categorize_expense
  *   Read (v2 money model, cents): list_accounts, list_transactions,
- *          get_budget_status
- *   Write: add_expense, update_expense, delete_expense, request_sync
+ *          get_budget_status, list_categories
+ *   Write: add_expense, update_expense, delete_expense, request_sync,
+ *          create_category, set_budget (money-model categories/budgets,
+ *          the same rows the app's Manage and Budgets screens edit)
  *   About the app itself: send_feedback (builds a GitHub issue link for
  *          the maintainer; files nothing and reads no budget data)
  *
@@ -40,7 +42,7 @@ import {
 import { createExpense, updateExpense, deleteExpense } from "./expenses.js";
 import { categorize } from "./categorize.js";
 import { CATEGORIES } from "./_categories.js";
-import { ensureV2, scope, ownerFor, OWNER_ID } from "./_v2db.js";
+import { ensureV2, scope, ownerFor, OWNER_ID, newId } from "./_v2db.js";
 import { mirrorV1 } from "./_v2mirror.js";
 import { loadAccounts, loadTransactions, loadCategories } from "./_v2store.js";
 import { netWorthNow } from "./v2/accounts.js";
@@ -228,6 +230,41 @@ const TOOLS = [
     }
   },
   {
+    name: "list_categories",
+    description: "All category groups and categories in the money model: ids, names, kinds (income/expense/transfer), icons. Use a category's id or exact name with set_budget, and its id with list_transactions.",
+    inputSchema: NO_ARGS
+  },
+  {
+    name: "create_category",
+    description: "Create a category in the money model (the same thing as adding one in the app's Manage -> Categories). It can hold budgets (set_budget), appear in reports, and be assigned to transactions in the app. If a category with that name already exists, the existing one is returned instead of a duplicate. Note: the classic daily log keeps its built-in category list, so expenses added through add_expense cannot use a money-model-only category.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Category name, up to 60 characters" },
+        group: { type: "string", description: "Group to file it under, by name (case-insensitive). Defaults to the expense 'Other' group. The category takes the group's kind." },
+        icon: { type: "string", description: "Optional emoji shown next to the category in the app" }
+      },
+      required: ["name"],
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_budget",
+    description: "Set the planned amount for one category in one month, in the money model (signed cents convention: pass amountCents as a positive integer; 0 removes the budget line). The category may be given by name or id. Once a line is set here it belongs to the new app: the classic plan stops updating it. Returns the month's budget status, same shape as get_budget_status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        month: { type: "string", description: "YYYY-MM" },
+        category: { type: "string", description: "Category name (case-insensitive)" },
+        categoryId: { type: "string", description: "Category id (from list_categories); takes precedence over category" },
+        amountCents: { type: "integer", minimum: 0, description: "Planned amount in cents; 0 removes the line" },
+        rollover: { type: "boolean", description: "Roll what's left into next month (default false)" }
+      },
+      required: ["month", "amountCents"],
+      additionalProperties: false
+    }
+  },
+  {
     name: "send_feedback",
     description: "Send feedback about the Arthatula app itself (a bug, a feature idea, or general feedback) to its maintainer as a PUBLIC GitHub issue in " + FEEDBACK_REPO + ". Not for budget questions. Never put the user's amounts, merchants, account names or other personal data in it; emails, dollar amounts, long numbers and tokens are blanked out anyway. Files nothing by itself: returns a prefilled new-issue URL plus the title and body, for you to open for the user or file with the GitHub CLI / GitHub MCP.",
     inputSchema: {
@@ -335,6 +372,61 @@ async function callTool(db, env, session, name, args) {
       const month = String(args.month || "");
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return toolError("month must be YYYY-MM");
       const s = await v2Scope(db, session);
+      const view = await monthView(s, month);
+      const names = await categoryNames(s);
+      view.rows = view.rows.map((r) => ({ ...r, categoryName: names[r.categoryId] || null }));
+      return toolOk(view);
+    }
+    case "list_categories": {
+      const s = await v2Scope(db, session);
+      return toolOk(await loadCategories(s));
+    }
+    case "create_category": {
+      const name = typeof args.name === "string" ? args.name.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+      if (!name) return toolError("name is required");
+      const s = await v2Scope(db, session);
+      const { groups, categories } = await loadCategories(s);
+      const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+      if (existing) return toolOk({ category: existing, created: false });
+      let group = null;
+      if (typeof args.group === "string" && args.group.trim()) {
+        group = groups.find((g) => g.name.toLowerCase() === args.group.trim().toLowerCase()) || null;
+        if (!group) return toolError("group not found: " + args.group.trim() + " (groups: " + groups.map((g) => g.name).join(", ") + ")");
+      }
+      if (!group) group = groups.find((g) => g.kind === "expense" && g.name.toLowerCase() === "other") || groups.find((g) => g.kind === "expense") || null;
+      if (!group) return toolError("no group to file the category under");
+      const icon = typeof args.icon === "string" ? args.icon.trim().slice(0, 8) : "";
+      const max = await s.first("SELECT IFNULL(MAX(sort), 0) AS m FROM categories WHERE owner_id = ?1 AND group_id = ?2", group.id);
+      const id = newId("cat_");
+      await s.run(
+        "INSERT INTO categories (id, owner_id, group_id, name, kind, sort, icon) VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7)",
+        id, group.id, name, group.kind, (max ? max.m : 0) + 1, icon
+      );
+      const after = await loadCategories(s);
+      return toolOk({ category: after.categories.find((c) => c.id === id), created: true });
+    }
+    case "set_budget": {
+      const month = String(args.month || "");
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return toolError("month must be YYYY-MM");
+      const amount = args.amountCents;
+      if (!Number.isInteger(amount) || amount < 0) return toolError("amountCents must be a non-negative integer (cents); 0 removes the budget line");
+      const s = await v2Scope(db, session);
+      const { categories } = await loadCategories(s);
+      let cat = null;
+      if (args.categoryId) cat = categories.find((c) => c.id === args.categoryId) || null;
+      else if (typeof args.category === "string" && args.category.trim()) cat = categories.find((c) => c.name.toLowerCase() === args.category.trim().toLowerCase()) || null;
+      else return toolError("category (name) or categoryId is required");
+      if (!cat) return toolError("unknown category — call list_categories to see what exists, or create_category to add it");
+      if (cat.kind === "transfer") return toolError("transfers aren't budgeted");
+      if (amount === 0 && !args.rollover) {
+        await s.run("DELETE FROM budgets WHERE owner_id = ?1 AND month = ?2 AND category_id = ?3", month, cat.id);
+      } else {
+        await s.run(
+          "INSERT INTO budgets (owner_id, month, category_id, amount_cents, rollover, source) VALUES (?1, ?2, ?3, ?4, ?5, 'user') " +
+          "ON CONFLICT(owner_id, month, category_id) DO UPDATE SET amount_cents = excluded.amount_cents, rollover = excluded.rollover, source = 'user'",
+          month, cat.id, amount, args.rollover ? 1 : 0
+        );
+      }
       const view = await monthView(s, month);
       const names = await categoryNames(s);
       view.rows = view.rows.map((r) => ({ ...r, categoryName: names[r.categoryId] || null }));

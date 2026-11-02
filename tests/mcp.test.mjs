@@ -126,9 +126,9 @@ const okText = (result) => JSON.parse(result.content[0].text);
   const list = await (await rpc(env, mcpToken, { jsonrpc: "2.0", id: 6, method: "tools/list" })).json();
   const names = list.result.tools.map((t) => t.name).sort();
   assert.deepEqual(names, [
-    "add_expense", "categorize_expense", "delete_expense", "get_bank_snapshot",
-    "get_budget", "get_budget_status", "get_sync_status", "list_accounts", "list_cards",
-    "list_expenses", "list_pending_charges", "list_transactions", "request_sync", "send_feedback", "update_expense"
+    "add_expense", "categorize_expense", "create_category", "delete_expense", "get_bank_snapshot",
+    "get_budget", "get_budget_status", "get_sync_status", "list_accounts", "list_cards", "list_categories",
+    "list_expenses", "list_pending_charges", "list_transactions", "request_sync", "send_feedback", "set_budget", "update_expense"
   ]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.type, "object", t.name + " has an object schema");
@@ -273,6 +273,50 @@ const okText = (result) => JSON.parse(result.content[0].text);
     assert.equal(bad.isError, true, "send_feedback rejects " + JSON.stringify(args).slice(0, 60));
     assert.match(bad.content[0].text, re);
   }
+
+  /* ---------- 7b. Categories + budgets via MCP ----------------------- */
+  const cats0 = okText(await call(env, mcpToken, "list_categories"));
+  const baseCount = cats0.categories.length;
+  assert.ok(cats0.groups.length >= 8, "seeded groups listed");
+  const fam = await call(env, mcpToken, "create_category", { name: "Family", icon: "F" });
+  assert.ok(!fam.isError, "create_category ok");
+  assert.equal(fam.structuredContent.created, true);
+  assert.equal(fam.structuredContent.category.name, "Family");
+  assert.equal(fam.structuredContent.category.kind, "expense", "filed under an expense group");
+  const famAgain = await call(env, mcpToken, "create_category", { name: "family" });
+  assert.equal(famAgain.structuredContent.created, false, "same name (any case) returns the existing category");
+  assert.equal(famAgain.structuredContent.category.id, fam.structuredContent.category.id);
+  const cats1 = okText(await call(env, mcpToken, "list_categories"));
+  assert.equal(cats1.categories.length, baseCount + 1, "exactly one category added");
+  for (const [args, re] of [
+    [{}, /name/],
+    [{ name: "X", group: "No such group" }, /group not found/]
+  ]) {
+    const bad = await call(env, mcpToken, "create_category", args);
+    assert.equal(bad.isError, true, "create_category rejects " + JSON.stringify(args));
+    assert.match(bad.content[0].text, re);
+  }
+  const set1 = await call(env, mcpToken, "set_budget", { month: "2026-11", category: "Family", amountCents: 120000 });
+  assert.ok(!set1.isError, "set_budget ok");
+  const famRow = set1.structuredContent.rows.find((r) => r.categoryName === "Family");
+  assert.ok(famRow, "budget status shows the Family row");
+  assert.equal(famRow.plannedCents, 120000);
+  const statusAfter = okText(await call(env, mcpToken, "get_budget_status", { month: "2026-11" }));
+  assert.equal(statusAfter.rows.find((r) => r.categoryName === "Family").plannedCents, 120000, "budget persists");
+  for (const [args, re] of [
+    [{ month: "Nov 2026", category: "Family", amountCents: 100 }, /YYYY-MM/],
+    [{ month: "2026-11", category: "Family", amountCents: -5 }, /amountCents/],
+    [{ month: "2026-11", category: "Atlantis", amountCents: 100 }, /unknown category/],
+    [{ month: "2026-11", amountCents: 100 }, /category/]
+  ]) {
+    const bad = await call(env, mcpToken, "set_budget", args);
+    assert.equal(bad.isError, true, "set_budget rejects " + JSON.stringify(args));
+    assert.match(bad.content[0].text, re);
+  }
+  const set0 = await call(env, mcpToken, "set_budget", { month: "2026-11", categoryId: fam.structuredContent.category.id, amountCents: 0 });
+  assert.ok(!set0.isError, "set_budget 0 ok");
+  const famRow0 = set0.structuredContent.rows.find((r) => r.categoryName === "Family");
+  assert.ok(!famRow0 || famRow0.plannedCents === 0, "amountCents 0 removes the line");
 
   /* ---------- 8. Revoke kills the token ------------------------------ */
   const revoke = await authPost(makeCtx(env, { action: "revoke", id: mcpSessionId }, "POST", "http://local/api/auth", authHeaders(device)));
