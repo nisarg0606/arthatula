@@ -7,7 +7,7 @@
 export const CATEGORIES = [
   "Groceries", "Eating Out", "Rent", "Utilities", "Phone & Internet",
   "Fuel/Transport", "Insurance", "Subscriptions", "Shopping/Personal",
-  "Gym", "Loan/Debt Payment", "One-off", "Misc/Other"
+  "Gym", "Loan/Debt Payment", "One-off", "Immigration", "Misc/Other"
 ];
 
 /* Daily-expense category -> monthly_actuals field used by the rollup.
@@ -26,6 +26,7 @@ export const CATEGORY_TO_FIELD = {
   "Gym": "otherExpenses",
   "Loan/Debt Payment": "otherLoan",
   "One-off": "oneOffs",
+  "Immigration": "oneOffs",
   "Misc/Other": "otherExpenses"
 };
 
@@ -40,6 +41,7 @@ const RULES = [
   ["Subscriptions", ["netflix", "spotify", "hulu", "youtube premium", "apple.com/bill", "icloud", "amazon prime", "prime membership", "subscription", "chatgpt", "claude", "gym membership app"]],
   ["Gym", ["gym", "fitness", "eos fitness", "planet fitness", "la fitness", "yoga", "crossfit"]],
   ["Loan/Debt Payment", ["credila", "loan payment", "emi", "credit card payment", "card payment", "chase card", "amex payment", "discover card", "student loan", "navient", "mohela"]],
+  ["Immigration", ["uscis", "sevis", "i-901", "i-20", "immigration fee", "stem opt", "opt fee", "dhs fee"]],
   ["Shopping/Personal", ["amazon", "target", "best buy", "nike", "h&m", "zara", "clothing", "haircut", "barber", "salon", "walgreens", "cvs"]]
 ];
 

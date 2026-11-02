@@ -188,7 +188,7 @@ const SCHEMA = [
   )`
 ];
 
-/* Default categories for a new owner. The 13 v1 expense categories
+/* Default categories for a new owner. The 14 v1 expense categories
    keep their exact names so an edit made on the new screens can be
    written back to the classic daily log. */
 export const DEFAULT_GROUPS = [
@@ -198,7 +198,7 @@ export const DEFAULT_GROUPS = [
   { key: "transport", name: "Transportation", kind: "expense", cats: ["Fuel/Transport"] },
   { key: "lifestyle", name: "Lifestyle", kind: "expense", cats: ["Shopping/Personal", "Gym"] },
   { key: "debt", name: "Debt", kind: "expense", cats: ["Loan/Debt Payment"] },
-  { key: "other", name: "Other", kind: "expense", cats: ["One-off", "Misc/Other", "Sent to India"] },
+  { key: "other", name: "Other", kind: "expense", cats: ["One-off", "Misc/Other", "Sent to India", "Immigration"] },
   { key: "transfers", name: "Transfers", kind: "transfer", cats: ["Transfer", "Credit card payment", "Repayment"] }
 ];
 
@@ -209,7 +209,7 @@ export const DEFAULT_ICONS = {
   "Rent": "🏠", "Utilities": "💡", "Phone & Internet": "📱", "Insurance": "🛡️", "Subscriptions": "📺",
   "Groceries": "🛒", "Eating Out": "🍜", "Fuel/Transport": "🚗",
   "Shopping/Personal": "🛍️", "Gym": "🏋️", "Loan/Debt Payment": "🏦",
-  "One-off": "📌", "Misc/Other": "🏷️", "Sent to India": "✈️",
+  "One-off": "📌", "Misc/Other": "🏷️", "Sent to India": "✈️", "Immigration": "🛂",
   "Transfer": "🔁", "Credit card payment": "💳", "Repayment": "↩️"
 };
 
