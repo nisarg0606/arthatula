@@ -40,3 +40,18 @@ go back to the silent cut.
 Remotion has its own license: free for individuals and companies of up to
 three people, a paid company license above that. See
 https://www.remotion.dev/license.
+
+## Setup walkthrough
+
+A second, ~1-minute video (16:9 only) walks through the GUIDE's "Get your
+own copy" steps. It's committed as `docs/setup-video.mp4` and linked from
+the README. Scenes are in `src/Setup.jsx`; the Cloudflare screens are drawn
+mock-ups, the app's first-run screen is a real screenshot.
+
+```bash
+npm run shots:setup    # the app's first-run screen + a phone shot into public/shots/
+npm run render:setup   # out/arthatula-setup.mp4
+cp out/arthatula-setup.mp4 ../docs/setup-video.mp4
+```
+
+Re-render it when the steps in docs/GUIDE.md section 1 change.

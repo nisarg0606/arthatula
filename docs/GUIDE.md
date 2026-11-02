@@ -23,6 +23,12 @@ yours alone.
 You need a free [Cloudflare](https://dash.cloudflare.com/sign-up) account
 and a free [GitHub](https://github.com/signup) account. No credit card.
 
+▶️ **Prefer to watch?** The [1-minute setup video](setup-video.mp4) shows
+every step below.
+
+Use the button below, not GitHub's **Fork**: only a copy made with the
+button keeps itself up to date (section 7).
+
 1. Click **Deploy to Cloudflare**:
 
    [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula)

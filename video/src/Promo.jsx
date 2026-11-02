@@ -5,13 +5,13 @@ import { fade } from "@remotion/transitions/fade";
 import { slide } from "@remotion/transitions/slide";
 import { loadFont } from "@remotion/google-fonts/Inter";
 
-const { fontFamily } = loadFont("normal", { weights: ["400", "600", "800"], subsets: ["latin"] });
-const TEAL = "#14b8a6", DEEP = "#0f766e", INK = "#0b1f1e", MUTED = "#4b5f5d";
-const shot = (n) => staticFile("shots/" + n + ".png");
-const DESK = 860 / 1280, PHONE = 1328 / 780; // screenshot height / width
+export const { fontFamily } = loadFont("normal", { weights: ["400", "600", "800"], subsets: ["latin"] });
+export const TEAL = "#14b8a6", DEEP = "#0f766e", INK = "#0b1f1e", MUTED = "#4b5f5d";
+export const shot = (n) => staticFile("shots/" + n + ".png");
+export const DESK = 860 / 1280, PHONE = 1328 / 780; // screenshot height / width
 
 /* Where things go for each output size (16:9, 1:1, 9:16). */
-function useLayout() {
+export function useLayout() {
   const { width: W, height: H } = useVideoConfig();
   const kind = W > H ? "wide" : W === H ? "square" : "tall";
   return {
@@ -22,12 +22,12 @@ function useLayout() {
   };
 }
 
-const useIn = (delay = 0, damping = 18) => {
+export const useIn = (delay = 0, damping = 18) => {
   const f = useCurrentFrame(), { fps } = useVideoConfig();
   return spring({ frame: f - delay, fps, config: { damping } });
 };
 
-function Background() {
+export function Background() {
   const f = useCurrentFrame();
   const blob = (color, x, y, r) => (
     <div style={{ position: "absolute", left: x, top: y, width: r, height: r, borderRadius: "50%", background: color, filter: "blur(120px)", opacity: 0.55 }} />
@@ -40,7 +40,7 @@ function Background() {
   );
 }
 
-function Caption({ kicker, title }) {
+export function Caption({ kicker, title }) {
   const L = useLayout(), p = useIn(4);
   return (
     <div style={{ position: "absolute", top: L.capTop, left: 60, right: 60, textAlign: "center", opacity: p, transform: `translateY(${(1 - p) * 30}px)` }}>
@@ -54,7 +54,7 @@ function Caption({ kicker, title }) {
    from/to = [focusX, focusY, zoom] with focus as a fraction of the image;
    zoom 1 = image as wide as the box. Children are laid over the image in
    image percentages, so they move with it. */
-function Shot({ src, ratio = DESK, from = [0.5, 0, 1], to = from, children }) {
+export function Shot({ src, ratio = DESK, from = [0.5, 0, 1], to = from, children }) {
   const L = useLayout(), f = useCurrentFrame(), { durationInFrames } = useVideoConfig();
   const t = interpolate(f, [0, durationInFrames], [0, 1], { easing: Easing.inOut(Easing.cubic), extrapolateRight: "clamp" });
   const [fx, fy, z] = from.map((v, i) => v + (to[i] - v) * t);
@@ -77,7 +77,7 @@ const Tour = ({ kicker, title, ...shotProps }) => (
   <AbsoluteFill><Shot {...shotProps} /><Caption kicker={kicker} title={title} /></AbsoluteFill>
 );
 
-const Layer = ({ src, style }) => <Img src={src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", ...style }} />;
+export const Layer = ({ src, style }) => <Img src={src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", ...style }} />;
 
 function Eye() {
   const f = useCurrentFrame();
@@ -122,7 +122,7 @@ function Phones() {
   );
 }
 
-function Logo({ size }) {
+export function Logo({ size }) {
   return <Img src={staticFile("logo.png")} style={{ width: size, height: size, borderRadius: size * 0.22, boxShadow: "0 30px 60px -25px rgba(15,118,110,.6)" }} />;
 }
 
@@ -140,7 +140,7 @@ function Hook() {
   );
 }
 
-function Pills({ kicker, title, items, cols = 1 }) {
+export function Pills({ kicker, title, items, cols = 1 }) {
   const L = useLayout(), ins = items.map((_, i) => useIn(12 + i * 8)); // fixed count per scene, so hook order is stable
   const grid = L.kind === "wide" ? cols : 1;
   return (
