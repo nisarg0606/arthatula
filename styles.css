@@ -1076,7 +1076,7 @@ body:not([data-tab="dashboard"]) #setupBox{display:none}
 @media (max-width:640px){
   /* Beside the theme button, pinned top-right the same way. */
   #hideAmountsBtn{position:absolute;top:calc(env(safe-area-inset-top) + 16px);right:60px;width:36px;height:36px;min-height:36px;padding:0}
-  .app-title{padding-right:112px}
+  .app-title{padding-right:156px}
 }
 /* Market recap + investments */
 .v2-market-chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
@@ -1096,3 +1096,26 @@ body:not([data-tab="dashboard"]) #setupBox{display:none}
 .layout-row .v2-mini{min-width:44px}
 .layout-row .v2-mini:disabled{opacity:.35;cursor:default;pointer-events:none}
 #dashCustomize{display:block;margin:0 auto 24px}
+
+/* Notifications bell (js/ui/notify.js) */
+.notif-wrap{position:relative}
+#notifBtn{position:relative}
+.notif-badge{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;padding:0 5px;border-radius:9999px;background:var(--neg);color:#fff;font-size:11px;line-height:18px;font-weight:700;text-align:center}
+.notif-panel{position:absolute;right:0;top:48px;z-index:60;width:min(360px,calc(100vw - 32px));max-height:min(480px,70vh);overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 32px -8px rgba(15,23,42,.35);text-align:left}
+.notif-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font-size:15px}
+.notif-head span{color:var(--muted);font-size:12px}
+.notif-list{list-style:none;margin:0;padding:0}
+.notif-list li{padding:10px 16px;border-bottom:1px solid var(--line);font-size:14px;line-height:20px}
+.notif-list li:last-child{border-bottom:0}
+.notif-list li.unread{background:var(--accent-tint)}
+.notif-list li[data-go]{cursor:pointer}
+.notif-list .notif-body{color:var(--muted);white-space:pre-line;font-size:13px;line-height:18px}
+.notif-list time{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.notif-empty{padding:16px;color:var(--muted);font-size:14px}
+.hide-amounts .notif-list{filter:blur(6px)}
+@media (max-width:640px){
+  /* Pinned top-right beside the eye and theme buttons. */
+  .notif-wrap{position:absolute;top:calc(env(safe-area-inset-top) + 16px);right:104px}
+  #notifBtn{width:36px;height:36px;min-height:36px}
+  .notif-panel{position:fixed;top:calc(env(safe-area-inset-top) + 60px);left:16px;right:16px;width:auto}
+}

@@ -25,6 +25,7 @@ import { handleV2, HttpError, bodyOf, cleanStr } from "../_v2http.js";
 import { accountStmts } from "./sync.js";
 import { importRows } from "../_v2import.js";
 import { getSimplefinUrl, setSimplefinUrl } from "../settings.js";
+import { notify } from "../_notify.js";
 
 export const AUTO_HOURS = 4;
 const DAY = 86400;
@@ -126,6 +127,8 @@ export async function syncSimplefin(s, db, fetchImpl) {
   }
   /* Bank-side problems (a login that needs fixing) come back as messages. */
   const errors = (set.errlist || []).map((e) => e && e.msg).concat(set.errors || []).filter(Boolean).map(String).slice(0, 5);
+  if (total.added) await notify(db, "transaction", total.added === 1 ? "1 new transaction from SimpleFIN" : total.added + " new transactions from SimpleFIN",
+    total.toReview ? total.toReview + " to review" : "");
   await s.setSetting("simplefin_last_sync", new Date(now * 1000).toISOString());
   await s.setSetting("simplefin_last_error", errors.join(" · "));
   return Object.assign(total, { errors });

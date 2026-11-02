@@ -52,6 +52,7 @@ import {
   isValidTokenHash, pairingFingerprint, openPairing, getPairingWindow, consumePairCode,
   getPendingPairing, setPendingPairing, clearPendingPairing, createSessionForTokenHash
 } from "./budget.js";
+import { notify } from "./_notify.js";
 
 function json(body, status = 200, extraHeaders) {
   return new Response(JSON.stringify(body), {
@@ -203,6 +204,8 @@ export async function onRequestPost(context) {
       if (!slot.ok) return tooManyAttempts(slot.retryAfterMs);
       if (!(await consumePairCode(db, body.pairCode))) return json({ error: "Wrong or expired pairing code." }, 401);
       const pending = await setPendingPairing(db, { tokenHash: body.tokenHash, label: cleanLabel(body.label) });
+      await notify(db, "pairing", (pending.label || "Plaid sync") + " wants to pair",
+        "Fingerprint " + pairingFingerprint(pending.tokenHash) + ". Approve it in Settings → Advanced only if the script printed the same.");
       return json({ ok: true, fingerprint: pairingFingerprint(pending.tokenHash) });
     }
 
