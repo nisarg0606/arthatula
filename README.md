@@ -346,16 +346,29 @@ Streamable HTTP) at `/api/mcp`, so an AI assistant — Claude, ChatGPT,
 Cursor, Grok (xAI remote MCP), or any other MCP client — can work with
 the budget through tools instead of the raw API:
 
-- **Read (classic, dollars):** `get_budget`, `list_expenses`,
-  `list_cards`, `get_bank_snapshot`, `list_pending_charges`,
-  `get_sync_status`, `categorize_expense`
-- **Read (money model, signed cents):** `list_accounts` (balances + net
-  worth), `list_transactions` (date range, account, category, text,
-  to-review filters), `get_budget_status` (budget vs. actual for a month)
-- **Write:** `add_expense`, `update_expense`, `delete_expense`,
-  `request_sync` — expense writes run the same cores as `/api/expenses`,
-  so auto-categorization, dedupe, bank auto-link and the monthly rollup
-  behave exactly as in the app (and the new screens see them too).
+The tools mirror **everything the owner can do in the app** — 68
+tools across both data models:
+
+- **Classic (dollars):** the plan and actuals (`get_budget`,
+  `update_plan`, `set_actuals`), the daily expense log
+  (`list/add/update/delete_expense`, `categorize_expense`), cards,
+  merchant rules, the bank snapshot with its Daily review decisions,
+  pending charges, and the sync queue (`request_sync`,
+  `get_sync_status`).
+- **Money model (signed cents):** accounts, transactions (including
+  splits and review), categories and groups, budgets (`set_budget`,
+  `copy_budget`, `fill_budget`, `get_budget_status`), goals, recurring
+  items, auto-rules, reports, net worth, investments, the market
+  recap, Splitwise, CSV import and full export, the home layout and
+  the setup checklist.
+
+Writes run the same cores as the app's own routes, so
+auto-categorization, dedupe, bank auto-link and the monthly rollups
+behave exactly as in the app. The only things kept owner-only are
+credential-shaped: saving API keys, the access code, session
+management, sync pairing/ingestion, demo data and SimpleFIN connect —
+see **[docs/MCP.md](docs/MCP.md)** for the full tool reference, the
+security model and the complete list.
 
 Connect one in Settings → Advanced → **Connect an AI app (MCP)** → *Create
 MCP token*. The token is shown once, together with the endpoint
