@@ -1,5 +1,6 @@
 /* Spending rules: my share of an expense, daily rollups, what counts as spending, plan room. */
 import { CATEGORY_TO_FIELD } from "./categories.js";
+import { isPendingPayment } from "./pending.js";
 
 /* His effective cost of an expense: the optional myShare (his portion
    of a shared expense) when set, otherwise the full amount. Monthly
@@ -92,6 +93,7 @@ export function pendingInMonth(pendingList, monthKey, counted) {
   (pendingList || []).forEach(function (t) {
     if (!t || typeof t.date !== "string") return;
     if (counted && counted[t.id]) return; /* already an expense ("Count it now") */
+    if (isPendingPayment(t)) return; /* a card payment settling — visible in the list, not spending */
     if (t.date.slice(0, 7) !== monthKey) return;
     total += t.amount || 0;
   });

@@ -2,7 +2,7 @@
 import { formatDateLabel } from "../core/dates.js";
 import { fmt } from "../core/format.js";
 import { DAILY_CATEGORIES } from "../core/categories.js";
-import { countedPending, likelyToChange, unpostedCounted } from "../core/pending.js";
+import { countedPending, isPendingPayment, likelyToChange, unpostedCounted } from "../core/pending.js";
 import { pendingInMonth } from "../core/spending.js";
 import { app, els } from "./context.js";
 import { afterExpensesChanged, deleteExpense, todayLocal, updateExpense } from "./daily.js";
@@ -46,14 +46,20 @@ export function renderPending() {
   var txs = (app.pendingData && app.pendingData.transactions) || [];
   var counted = countedPending(app.state.dailyExpenses);
   var unposted = unpostedCounted(app.state.dailyExpenses, app.pendingData && app.pendingData.transactions, todayLocal());
-  var waiting = txs.filter(function (t) { return !counted[t.id]; });
+  var waiting = txs.filter(function (t) { return !counted[t.id] && !isPendingPayment(t); });
   var total = 0;
   waiting.forEach(function (t) { total += t.amount || 0; });
   sections.forEach(function (section) {
     section.hidden = !txs.length && !unposted.length;
     if (section.hidden) return;
     var meta = section.querySelector(".pending-meta"), list = section.querySelector(".pending-list");
-    if (meta) meta.textContent = waiting.length + (waiting.length === 1 ? " charge · " : " charges · ") + fmt(total) + " — not counted yet";
+    if (meta) {
+      var payments = txs.filter(isPendingPayment).length;
+      meta.textContent = waiting.length
+        ? waiting.length + (waiting.length === 1 ? " charge · " : " charges · ") + fmt(total) + " — not counted yet" + (payments ? " · " + payments + (payments === 1 ? " payment" : " payments") + " in flight" : "")
+        : payments ? payments + (payments === 1 ? " payment" : " payments") + " in flight"
+        : "";
+    }
     if (list) drawPendingList(list, txs, counted, unposted);
   });
 }
@@ -67,14 +73,21 @@ function drawPendingList(list, txs, counted, unposted) {
     main.className = "pending-main";
     var name = document.createElement("span");
     name.className = "pending-name";
-    name.textContent = t.name || "Pending charge";
+    name.textContent = t.name || (isPendingPayment(t) ? "Card payment" : "Pending charge");
     var sub = document.createElement("span");
     sub.className = "pending-sub";
     sub.textContent = [formatDateLabel(t.date), t.accountLabel, t.category].filter(Boolean).join(" · ");
     main.appendChild(name);
     main.appendChild(sub);
     row.appendChild(main);
-    if (counted[t.id]) {
+    if (isPendingPayment(t)) {
+      /* A payment settling onto a card: shown so the money in flight is
+         visible, but it is not an expense — no "Count it now". */
+      var pay = document.createElement("span");
+      pay.className = "pending-badge";
+      pay.textContent = "Payment";
+      row.appendChild(pay);
+    } else if (counted[t.id]) {
       var done = document.createElement("span");
       done.className = "pending-badge counted";
       done.textContent = "Counted";
