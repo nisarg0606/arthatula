@@ -1959,12 +1959,26 @@ async function handleMessage(db, env, session, msg) {
   }
 }
 
+/* RFC 9728 §5.1: a 401 from the resource server points the client at
+   its Protected Resource Metadata, which is how OAuth-only clients
+   (Claude's custom connectors) discover the authorization server.
+   Bearer-header auth itself is unchanged — clients that already hold
+   a token (Claude Code, Cursor, config files) never follow this. */
+function withWwwAuthenticate(response, request) {
+  if (!response || response.status !== 401) return response;
+  const origin = new URL(request.url).origin;
+  const out = new Response(response.body, response);
+  out.headers.set("WWW-Authenticate",
+    'Bearer resource_metadata="' + origin + '/.well-known/oauth-protected-resource", scope="mcp"');
+  return out;
+}
+
 export async function onRequestPost(context) {
   if (!context.env.DB) return noDb();
   const db = context.env.DB;
   try {
     const auth = await requireAuth(db, context.request, { allowMcp: true });
-    if (auth.response) return auth.response;
+    if (auth.response) return withWwwAuthenticate(auth.response, context.request);
     await ensureTables(db);
     let body;
     try {
@@ -1992,7 +2006,7 @@ export async function onRequestPost(context) {
 export async function onRequestGet(context) {
   if (!context.env.DB) return noDb();
   const auth = await requireAuth(context.env.DB, context.request, { allowMcp: true });
-  if (auth.response) return auth.response;
+  if (auth.response) return withWwwAuthenticate(auth.response, context.request);
   return rpcError(null, -32600, "This MCP server is stateless: POST JSON-RPC messages instead.", 405);
 }
 export const onRequestDelete = onRequestGet;

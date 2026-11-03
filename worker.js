@@ -11,7 +11,8 @@
  *
  * tests/worker.test.mjs checks ROUTES covers every file in functions/api.
  */
-import { withSecurityHeaders } from "./functions/_middleware.js";
+import { withSecurityHeaders, CONTENT_SECURITY_POLICY } from "./functions/_middleware.js";
+import { handleOAuthRequest, isOAuthPath } from "./functions/api/_oauth.js";
 import { ensureV2, scope, OWNER_ID } from "./functions/api/_v2db.js";
 import { ensureMarket } from "./functions/api/_market.js";
 import { getSimplefinUrl } from "./functions/api/settings.js";
@@ -136,6 +137,22 @@ async function handleApi(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    /* OAuth 2.1 for /api/mcp lives outside /api/ (/.well-known/*,
+       /oauth/*) — dispatch it before the assets fallback, mirroring
+       functions/_middleware.js on Pages; see functions/api/_oauth.js. */
+    if (isOAuthPath(path)) {
+      const oauthRes = await handleOAuthRequest({
+        request, env, data: {},
+        waitUntil: (p) => ctx.waitUntil(p),
+        next: () => env.ASSETS.fetch(request)
+      });
+      if (oauthRes) {
+        const out = withSecurityHeaders(oauthRes, request.url);
+        out.headers.set("Content-Security-Policy",
+          CONTENT_SECURITY_POLICY.replace("form-action 'self'", "form-action 'self' https:"));
+        return out;
+      }
+    }
     const response = path === "/api" || path.startsWith("/api/") ? await handleApi(request, env, ctx) : await env.ASSETS.fetch(request);
     return withSecurityHeaders(response, request.url);
   },
