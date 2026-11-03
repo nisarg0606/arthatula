@@ -317,8 +317,3 @@ export function errorResponse(err) {
   console.error(err);
   return json({ error: "Internal error" }, 500);
 }
-export async function readJson(request, max = 512 * 1024) {
-  const text = await request.text();
-  if (text.length > max) throw new HttpError(413, "Request too large.");
-  return text ? JSON.parse(text) : {};
-}

@@ -394,9 +394,3 @@ export function goalProgress(goal, accountBalanceCents, todayMonth) {
   }
   return { savedCents: saved, targetCents: target, leftCents: left, pct: target > 0 ? Math.min(saved / target, 1) : 0, perMonthCents: perMonth, monthsLeft: monthsLeft, done: target > 0 && saved >= target };
 }
-
-export function centsToDollars(c) { return Math.round(c) / 100; }
-export function dollarsToCents(d) {
-  const n = typeof d === "number" ? d : parseFloat(d);
-  return Number.isFinite(n) ? Math.round(n * 100) : null;
-}
