@@ -126,6 +126,39 @@ CREATE TABLE IF NOT EXISTS auth_attempts (
 );
 CREATE INDEX IF NOT EXISTS auth_attempts_at ON auth_attempts (at);
 
+-- OAuth 2.1 for the MCP server (functions/api/_oauth.js creates these
+-- itself on first use; listed here for completeness). Dynamically
+-- registered public clients, single-use authorization codes (SHA-256
+-- hash only, <=10 min), and rotating refresh tokens (hash only, each
+-- linked to the 'mcp' session it issued).
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  client_id      TEXT PRIMARY KEY,
+  client_name    TEXT NOT NULL DEFAULT '',
+  redirect_uris  TEXT NOT NULL DEFAULT '[]',
+  grant_types    TEXT NOT NULL DEFAULT '[]',
+  response_types TEXT NOT NULL DEFAULT '[]',
+  scope          TEXT NOT NULL DEFAULT 'mcp',
+  created_at     INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code_hash      TEXT PRIMARY KEY,
+  client_id      TEXT NOT NULL,
+  redirect_uri   TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  scope          TEXT NOT NULL DEFAULT 'mcp',
+  expires_at     INTEGER NOT NULL,
+  used           INTEGER NOT NULL DEFAULT 0,
+  created_at     INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+  token_hash  TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL,
+  session_id  TEXT NOT NULL DEFAULT '',
+  scope       TEXT NOT NULL DEFAULT 'mcp',
+  expires_at  INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL DEFAULT 0
+);
+
 -- Bank snapshot for the Bank tab, pushed by the paired Plaid sync
 -- automation (POST /api/bank, sync sessions only) and read back by
 -- device sessions (GET /api/bank). Money is integer cents; amounts

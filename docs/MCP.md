@@ -12,6 +12,17 @@ short, deliberate list of exceptions under
 
 ## Connect a client
 
+There are two ways in, matching how the client authenticates:
+
+- **Clients that accept a header** (Claude Code, Cursor, config
+  files): hand them a minted token, below.
+- **Claude's apps (web / mobile / Desktop custom connector)**: those
+  only speak **OAuth 2.1** — there is no token/header field in their
+  connector form. ArthaTula runs a small OAuth server for exactly
+  that; see the next section. No token to mint or paste.
+
+### With a token (header clients)
+
 1. In the app: Settings → Advanced → **Connect an AI app (MCP)** →
    *Create MCP token*. The token is shown **once**, together with the
    endpoint and a ready-to-paste config.
@@ -46,12 +57,47 @@ Claude Desktop only starts local servers, so bridge with
 } } }
 ```
 
-Any other client: **Streamable HTTP** transport, the URL above, and the
-same `Authorization` header. The server is stateless — every request
-carries the token — so `GET` (SSE) and `DELETE` answer 405; everything
-is a JSON-RPC `POST` (`initialize`, `tools/list`, `tools/call`,
-`ping`). Supported protocol versions: `2025-06-18`, `2025-03-26`,
-`2024-11-05`.
+Any other header-capable client: **Streamable HTTP** transport, the
+URL above, and the same `Authorization` header. The server is
+stateless — every request carries the token — so `GET` (SSE) and
+`DELETE` answer 405; everything is a JSON-RPC `POST` (`initialize`,
+`tools/list`, `tools/call`, `ping`). Supported protocol versions:
+`2025-06-18`, `2025-03-26`, `2024-11-05`.
+
+### Claude app / custom connector (OAuth)
+
+For Claude on the web, on your phone, or in Claude Desktop's
+Connectors screen — clients whose only auth is an OAuth sign-in:
+
+1. In Claude: **Settings / Customize → Connectors → Add custom
+   connector**.
+2. Name: `ArthaTula`. URL: `https://<your-app>/api/mcp` — exactly
+   that; no token anywhere.
+3. **Connect**. Claude discovers ArthaTula's OAuth endpoints
+   (`/.well-known/oauth-protected-resource` →
+   `/.well-known/oauth-authorization-server`), registers itself, and
+   opens ArthaTula's consent page in your browser.
+4. The page names the client asking. Type **your app access code**
+   and **Approve**. (That code check is the authentication — it uses
+   the same attempt limiter as sign-in. Deny sends Claude back an
+   `access_denied` and issues nothing.)
+5. On the phone, connectors follow your Claude account: open a chat,
+   tap **+ → Connectors**, and toggle **ArthaTula** on for that chat.
+
+Under the hood (RFC 6749 / 7591 / 7636 / 8414 / 8707 / 9728, public
+clients only): authorization-code flow with **PKCE S256 mandatory**,
+dynamic client registration at `/oauth/register`, codes single-use
+and ≤10 minutes, and the access token Claude receives is an ordinary
+**`mcp` session** — labelled `OAuth: <client name>` in Settings →
+sessions, revocable there like any token. Refresh tokens rotate on
+every use: the old one dies and the previous OAuth session is revoked,
+so one grant chain keeps exactly one live session. `POST
+/oauth/revoke` revokes a refresh token (and its session) or an access
+token. A 401 from `/api/mcp` carries
+`WWW-Authenticate: Bearer resource_metadata="…"` pointing clients at
+the discovery document. Before an access code exists, the metadata
+docs still answer (they are public and origin-derived) while
+`/oauth/authorize` and `/oauth/token` refuse with `setupRequired`.
 
 ## Security model
 
@@ -344,6 +390,15 @@ clean.
 - **401 on every call** — the token was revoked, expired (90 days
   unused), or the access code changed. Mint a fresh one in Settings →
   Advanced → Connect an AI app (MCP) and update the client config.
+  For an **OAuth (Claude app) connection**, disconnect and reconnect
+  the connector instead — Claude will run the consent flow again and
+  get a fresh session; revoking the `OAuth: …` session in Settings
+  has the same effect from ArthaTula's side.
+- **Claude says it couldn't connect / no sign-in appears** — check
+  the connector URL is exactly `https://<your-app>/api/mcp` and that
+  `https://<your-app>/.well-known/oauth-authorization-server` returns
+  JSON (not the app page) in a browser; if it returns the app page,
+  that deployment predates the OAuth build.
 - **A tool returns an error** — it is the app's own validation message
   (unknown category, synced account, split that doesn't sum, …). Fix
   the input the way you would in the app.

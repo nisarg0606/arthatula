@@ -45,7 +45,33 @@ export function withSecurityHeaders(response, url) {
   return out;
 }
 
+/* OAuth 2.1 for the MCP server (api/_oauth.js): its paths live OUTSIDE
+ * /api/ — /.well-known/* (discovery) and /oauth/* (register, authorize,
+ * token, revoke). Pages function routing for DOTTED directories like
+ * .well-known is not guaranteed (an unmatched path otherwise falls
+ * through to the static SPA, which is exactly how this feature would
+ * silently fail), so the middleware — which Pages runs for EVERY
+ * request — intercepts those paths itself and dispatches to the same
+ * handlers the functions/oauth + functions/.well-known route files
+ * export. The route files stay as the conventional mapping; this is
+ * the guarantee. */
+import { handleOAuthRequest, isOAuthPath } from "./api/_oauth.js";
+
 export async function onRequest(context) {
+  const url = new URL(context.request.url);
+  if (isOAuthPath(url.pathname)) {
+    const response = await handleOAuthRequest(context);
+    if (response) {
+      const out = withSecurityHeaders(response, context.request.url);
+      /* The consent form's whole job is a 302 out to the client's
+         registered redirect_uri (another origin), which the app-wide
+         form-action 'self' would otherwise block — relax it for the
+         OAuth endpoints only (they serve no scripts regardless). */
+      out.headers.set("Content-Security-Policy",
+        CONTENT_SECURITY_POLICY.replace("form-action 'self'", "form-action 'self' https:"));
+      return out;
+    }
+  }
   const response = await context.next();
   return withSecurityHeaders(response, context.request.url);
 }

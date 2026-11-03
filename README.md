@@ -402,6 +402,16 @@ at `https://<your-app>/api/mcp`, and send the header
 `Authorization: Bearer <token>`. The server is stateless, so `GET` (SSE)
 and `DELETE` answer 405; everything is a JSON-RPC `POST`.
 
+**Claude's apps (web / mobile / Desktop connectors)** take none of
+that config — their custom-connector form only speaks **OAuth 2.1**,
+so ArthaTula runs a small OAuth server for them: add a custom
+connector named `ArthaTula` with the URL `https://<your-app>/api/mcp`,
+hit **Connect**, and approve on ArthaTula's consent page with your
+access code. Claude receives an ordinary `mcp` session (labelled
+`OAuth: …`) behind the scenes; refresh tokens rotate, and the session
+is revocable in Settings like any other. Details in
+**[docs/MCP.md](docs/MCP.md)**.
+
 The token is an `mcp` session — a third least-privilege kind next to
 device and sync sessions. `requireAuth` refuses it on every route
 except `/api/mcp`, so it can never open the app, call the raw API
@@ -716,6 +726,7 @@ node tests/v2-api.test.mjs      # every /api/v2 route: guards, write-back, split
 node tests/v2-autoreview.test.mjs # auto-review: name matching, strict rule, Gemini checks (fake fetch), Not right, Mark all
 node tests/sync.test.mjs        # "Sync now" request queue: auth scope, dedupe, claim/complete, expiry
 node tests/mcp.test.mjs         # MCP server: mcp-session scope, JSON-RPC handshake, every tool, revoke
+node tests/oauth.test.mjs       # OAuth 2.1 for MCP: discovery, DCR, PKCE consent flow, refresh rotation, revoke
 node tests/market.test.mjs      # market recap: trading days, holidays, AI vs plain recap, retries; investments maths and routes
 node tests/layout.test.mjs      # Dashboard layout: validation, save/load, reset
 node tests/holdings.test.mjs    # holdings from the sync: store, replace, keep when absent, clear
