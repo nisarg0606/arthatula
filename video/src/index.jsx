@@ -1,6 +1,7 @@
 import React from "react";
 import { Composition, registerRoot, staticFile } from "remotion";
 import { Promo, duration } from "./Promo.jsx";
+import { Setup, setupDuration } from "./Setup.jsx";
 
 /* Picks up a voice-over prepared by voice.mjs, if there is one. */
 async function calculateMetadata({ props }) {
@@ -15,5 +16,6 @@ registerRoot(() => (
     {SIZES.map(([id, width, height]) => (
       <Composition key={id} id={id} component={Promo} durationInFrames={duration()} calculateMetadata={calculateMetadata} fps={30} width={width} height={height} />
     ))}
+    <Composition id="Setup" component={Setup} durationInFrames={setupDuration} fps={30} width={1920} height={1080} />
   </>
 ));

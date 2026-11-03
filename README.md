@@ -13,6 +13,9 @@
 <p align="center">
   <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula"><img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare"></a>
 </p>
+<p align="center">
+  ▶️ <a href="docs/setup-video.mp4"><b>Watch the 1-minute setup video</b></a> · no coding needed
+</p>
 
 <p align="center">
   <a href="https://github.com/nisarg0606/arthatula/actions/workflows/deploy.yml"><img src="https://github.com/nisarg0606/arthatula/actions/workflows/deploy.yml/badge.svg" alt="Tests"></a>
@@ -120,6 +123,14 @@ AI agent (MCP).
 ## Get your own copy (about 5 minutes, free)
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/nisarg0606/arthatula)
+
+**New to this? Watch the setup first (1 minute, every click shown):**
+
+[![Setup video: set up Arthatula in about 5 minutes](docs/screenshots/setup-video.webp)](docs/setup-video.mp4)
+
+> Use the **Deploy to Cloudflare** button, not GitHub's **Fork**. A copy made
+> with the button updates itself every day (see the
+> [guide](docs/GUIDE.md#7-getting-updates)); a fork doesn't.
 
 1. Click the button and sign in to Cloudflare (or create a free
    account). Connect GitHub when it asks: it copies this project into
