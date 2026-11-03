@@ -28,3 +28,14 @@ export function likelyToChange(t) {
   return t && (t.category === "Eating Out" || t.category === "Fuel/Transport" ||
     /hotel|resort|motel|inn\b|rent a car|rental|airbnb/i.test(t.name || ""));
 }
+
+/* Pending rows that are card PAYMENTS in flight (money moving onto a
+   card), not charges: the sync tags them with this category. They are
+   shown in the pending list so a payment is visible while it settles,
+   but a payment is not spending — it is never totalled with the pending
+   charges, never previews next to Spent, and never gets "Count it now"
+   (counting it would book the payment as an expense). */
+export var PENDING_PAYMENT_CATEGORY = "Credit card payment";
+export function isPendingPayment(t) {
+  return !!t && t.category === PENDING_PAYMENT_CATEGORY;
+}

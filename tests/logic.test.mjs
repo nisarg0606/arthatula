@@ -165,10 +165,13 @@ const pend = [
   { id: "p1", date: "2026-10-27", name: "Costco", amount: 56.06, accountLabel: "Robinhood", category: "Groceries" },
   { id: "p2", date: "2026-10-27", name: "Target", amount: 17.08, accountLabel: "Robinhood", category: "Shopping/Personal" },
   { id: "p3", date: "2026-10-26", name: "Safeway", amount: 8.94, accountLabel: "Amex", category: "Groceries" },
-  { id: "p4", date: "2026-11-02", name: "November charge", amount: 20, accountLabel: "Amex", category: "Groceries" }
+  { id: "p4", date: "2026-11-02", name: "November charge", amount: 20, accountLabel: "Amex", category: "Groceries" },
+  { id: "p5", date: "2026-11-01", name: "ONLINE PYMT FROM CHECKING", amount: 660, accountLabel: "Wells Fargo", category: "Credit card payment" }
 ];
+assert.equal(app.isPendingPayment(pend[4]), true, "a Credit card payment row is a payment in flight");
+assert.equal(app.isPendingPayment(pend[0]), false, "a charge row is not a payment");
 assert.equal(app.pendingInMonth(pend, "2026-10"), 82.08, "October pending = 56.06 + 17.08 + 8.94");
-assert.equal(app.pendingInMonth(pend, "2026-11"), 20, "November pending counts only its own month");
+assert.equal(app.pendingInMonth(pend, "2026-11"), 20, "November pending counts only its own month — and never the $660 card payment in flight");
 assert.equal(app.pendingInMonth(pend, "2026-12"), 0, "a month with nothing pending previews 0");
 assert.equal(app.pendingInMonth(null, "2026-10"), 0, "no snapshot yet previews 0");
 assert.equal(app.pendingInMonth([], "2026-10"), 0, "empty snapshot previews 0");
