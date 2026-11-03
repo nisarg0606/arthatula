@@ -15,10 +15,10 @@ export async function handleV2(context, handler, opts) {
   if (!context.env.DB) return json({ error: "No database bound. Bind a D1 database as DB (see README)." }, 503);
   try {
     const db = context.env.DB;
-    const auth = await requireAuth(db, context.request, { allowSync: !!o.allowSync });
+    /* Side by side: ensureV2 only creates tables, and a cold start would otherwise wait for both in turn. */
+    const [auth] = await Promise.all([requireAuth(db, context.request, { allowSync: !!o.allowSync }), ensureV2(db)]);
     if (auth.response) return auth.response;
     if (o.syncOnly && auth.session.kind !== "sync") return json({ error: "Only the paired sync automation can call this." }, 403);
-    await ensureV2(db);
     const ownerId = ownerFor(auth.session);
     /* The classic app still writes the owner's expenses, bank rows and
        plan: bring v2 up to date first (a no-op when nothing changed). */
