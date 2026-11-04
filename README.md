@@ -344,8 +344,9 @@ The deployed app holds real financial data behind a public URL, so:
 
 A sync session lasts 180 days (re-pair to renew) and is least-privilege:
 it may `GET`/`POST /api/expenses`, `GET`/`PUT /api/cards` (statement
-roll-forward), `POST /api/bank`, `POST /api/pending`, claim and complete
-manual sync requests (`GET /api/sync-requests/claim`,
+roll-forward), `POST /api/bank`, `POST /api/pending`, `POST /api/sync-alerts`
+(failure alerts into the bell + Telegram, deduped per signature), claim
+and complete manual sync requests (`GET /api/sync-requests/claim`,
 `POST /api/sync-requests/:id/complete`), and sign itself out. Everything
 else — the budget, settings, sessions, pairing, filing sync requests,
 deleting or editing expenses — answers 403.
