@@ -29,6 +29,7 @@ import * as mcp from "./functions/api/mcp.js";
 import * as notifications from "./functions/api/notifications.js";
 import * as pending from "./functions/api/pending.js";
 import * as settings from "./functions/api/settings.js";
+import * as syncAlerts from "./functions/api/sync-alerts.js";
 import * as syncRequests from "./functions/api/sync-requests.js";
 import * as syncComplete from "./functions/api/sync-requests/[id]/complete.js";
 import * as syncClaim from "./functions/api/sync-requests/claim.js";
@@ -70,6 +71,7 @@ export const ROUTES = [
   ["/api/notifications", notifications, "api/notifications.js"],
   ["/api/pending", pending, "api/pending.js"],
   ["/api/settings", settings, "api/settings.js"],
+  ["/api/sync-alerts", syncAlerts, "api/sync-alerts.js"],
   ["/api/sync-requests", syncRequests, "api/sync-requests.js"],
   ["/api/sync-requests/:id/complete", syncComplete, "api/sync-requests/[id]/complete.js"],
   ["/api/sync-requests/claim", syncClaim, "api/sync-requests/claim.js"],
