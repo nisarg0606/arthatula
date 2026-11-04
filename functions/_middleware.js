@@ -39,6 +39,10 @@ export const SECURITY_HEADERS = {
 };
 
 export function withSecurityHeaders(response, url) {
+  /* A WebSocket upgrade (the live price stream) can't be rebuilt as a
+     new Response — the runtime ties the socket to the original — so
+     it goes back untouched. */
+  if (response.webSocket || response.status === 101) return response;
   const out = new Response(response.body, response);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) out.headers.set(k, v);
   if (new URL(url).pathname.startsWith("/api/")) out.headers.set("Cache-Control", "no-store");

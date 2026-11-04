@@ -5,6 +5,7 @@
 import { keepScroll } from "../scroll.js";
 import { amountsHidden } from "../../core/format.js";
 import { api, h, clear, money, shortDay, dayLabel, section, button, emptyState, errorState, loading, drawChart, chartColors } from "./kit.js";
+import { streamSymbols, nySession, seedQuote, applyTrade, parseStreamMessage, liveValueCents, dayTotals } from "../../core/v2/live.js";
 
 let root = null, range = "3m", data = null, goTo = null;
 let sortKey = "value", sortDir = -1; /* holdings sort: -1 = high first */
@@ -82,9 +83,26 @@ function fmtQty(q) {
   return String(Math.round(v * 1e8) / 1e8);
 }
 
+/* Live prices (js/core/v2/live.js): when the stream has a price for a
+   holding it wins over the bank's last reported one, everywhere the
+   holding is valued. Quantities and cost basis never move here. */
+let liveState = {}, liveEls = null, liveStarted = false, liveRun = 0;
+let liveWs = null, liveRetry = null, patchTimer = null, lastPrices = {};
+
+function effPriceCents(hd) {
+  const st = liveState[hd.ticker];
+  return st && st.priceCents !== null && st.priceCents !== undefined ? st.priceCents : hd.priceCents;
+}
+function effValueCents(hd) {
+  const lv = liveValueCents(hd, liveState);
+  return lv !== null ? lv : hd.valueCents;
+}
+
 function gainOf(hd) {
-  if (hd.kind === "cash" || hd.costBasisCents === null || hd.costBasisCents === undefined || hd.valueCents === null || hd.valueCents === undefined) return null;
-  const cents = hd.valueCents - hd.costBasisCents;
+  if (hd.kind === "cash" || hd.costBasisCents === null || hd.costBasisCents === undefined) return null;
+  const v = effValueCents(hd);
+  if (v === null || v === undefined) return null;
+  const cents = v - hd.costBasisCents;
   return { cents: cents, pct: hd.costBasisCents ? Math.round(cents / hd.costBasisCents * 10000) / 100 : null };
 }
 
@@ -95,7 +113,8 @@ function sortValue(hd, key) {
   if (key === "gain") return g ? g.cents : null;
   if (key === "gainpct") return g ? g.pct : null;
   if (key === "name") return null;
-  return hd.valueCents === undefined ? null : hd.valueCents;
+  const v = effValueCents(hd);
+  return v === undefined ? null : v;
 }
 function sortedHoldings(list) {
   const out = list.slice();
@@ -118,8 +137,9 @@ function holdingsSection(d) {
   d.accounts.forEach(function (a) { byId[a.id] = a; });
   let value = 0, costedValue = 0, cost = 0;
   d.holdings.forEach(function (hd) {
-    if (hd.valueCents !== null && hd.valueCents !== undefined) value += hd.valueCents;
-    if (gainOf(hd)) { costedValue += hd.valueCents; cost += hd.costBasisCents; }
+    const v = effValueCents(hd);
+    if (v !== null && v !== undefined) value += v;
+    if (gainOf(hd)) { costedValue += v; cost += hd.costBasisCents; }
   });
   const totalGain = cost ? { cents: costedValue - cost, pct: Math.round((costedValue - cost) / cost * 10000) / 100 } : null;
   const sortBar = h("div", { class: "v2-range", attrs: { role: "group", "aria-label": "Sort holdings" } },
@@ -133,27 +153,179 @@ function holdingsSection(d) {
         draw();
       }, "v2-mini" + (active ? " on" : ""), { "aria-pressed": String(active) });
     }));
+  const rows = [];
+  const totalEl = h("span", { class: "v2-tile-value js-lt", text: money(value, { whole: true }) });
+  const dayEl = h("span", { class: "v2-tile-sub js-ltd" });
+  const gainEl = h("span", { class: "v2-tile-value v2-chg js-ltg " + cls(totalGain), text: totalGain ? changeText(totalGain) : "—" });
+  const footEl = h("p", { class: "hint js-lf", text: "From your bank sync. Prices are the latest close your bank reports" + (d.holdingsAsOf ? " — holdings as of " + dayLabel(d.holdingsAsOf) : "") + "." });
+  const statusText = h("span", { text: "" });
+  const statusEl = h("span", { class: "v2-live off", attrs: { role: "status" } }, h("span", { class: "v2-live-dot" }), statusText);
   const body = h("div", null,
     h("div", { class: "v2-tiles" },
-      h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Holdings value" }), h("span", { class: "v2-tile-value", text: money(value, { whole: true }) })),
-      h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Gain / loss" }), h("span", { class: "v2-tile-value v2-chg " + cls(totalGain), text: totalGain ? changeText(totalGain) : "—" }), h("span", { class: "v2-tile-sub", text: "vs cost basis" }))),
+      h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Holdings value" }), totalEl, dayEl),
+      h("div", { class: "v2-tile" }, h("span", { class: "v2-tile-label", text: "Gain / loss" }), gainEl, h("span", { class: "v2-tile-sub", text: "vs cost basis" }))),
     sortBar,
     h("div", { class: "v2-list" }, sortedHoldings(d.holdings).map(function (hd) {
       const a = byId[hd.accountId];
       const g = gainOf(hd);
       const title = hd.kind === "cash" ? "Cash" : (hd.ticker || hd.name || "Security");
-      const sub = [];
-      if (hd.kind !== "cash") sub.push(fmtQty(hd.quantity) + " sh");
-      if (hd.kind !== "cash" && hd.priceCents !== null && hd.priceCents !== undefined) sub.push(money(hd.priceCents) + " / sh");
-      if (a) sub.push(a.name + (a.mask ? " ··" + a.mask : ""));
-      if (hd.asOf) sub.push("priced " + shortDay(hd.asOf));
+      const ep = effPriceCents(hd);
+      const priceEl = hd.kind !== "cash" && ep !== null && ep !== undefined ? h("span", { class: "js-lp", text: money(ep) + " / sh" }) : null;
+      const rowDayEl = hd.kind !== "cash" ? h("span", { class: "js-ld" }) : null;
+      const rest = [];
+      if (a) rest.push(a.name + (a.mask ? " ··" + a.mask : ""));
+      if (hd.asOf) rest.push("priced " + shortDay(hd.asOf));
+      const valueEl = h("span", { class: "v2-amt js-lv", text: effValueCents(hd) === null || effValueCents(hd) === undefined ? "—" : money(effValueCents(hd), { whole: true }) });
+      const rowGainEl = g ? h("span", { class: "v2-chg hint js-lg " + cls(g), text: changeText(g) }) : null;
+      rows.push({ hd: hd, priceEl: priceEl, dayEl: rowDayEl, gainEl: rowGainEl, valueEl: valueEl });
       return h("div", { class: "v2-line" },
-        h("span", { class: "v2-line-name" }, h("span", null, h("strong", { text: title }), hd.name && hd.kind !== "cash" ? h("span", { class: "hint", text: " " + hd.name }) : null), h("span", { class: "v2-tx-sub", text: sub.join(" · ") })),
-        g ? h("span", { class: "v2-chg hint " + cls(g), text: changeText(g) }) : null,
-        h("span", { class: "v2-amt", text: hd.valueCents === null || hd.valueCents === undefined ? "—" : money(hd.valueCents, { whole: true }) }));
+        h("span", { class: "v2-line-name" }, h("span", null, h("strong", { text: title }), hd.name && hd.kind !== "cash" ? h("span", { class: "hint", text: " " + hd.name }) : null),
+          h("span", { class: "v2-tx-sub" },
+            hd.kind !== "cash" ? h("span", { text: fmtQty(hd.quantity) + " sh" }) : null,
+            priceEl ? h("span", { text: " · " }) : null, priceEl, rowDayEl,
+            rest.length ? h("span", { text: (hd.kind !== "cash" ? " · " : "") + rest.join(" · ") }) : null)),
+        rowGainEl,
+        valueEl);
     })),
-    h("p", { class: "hint", text: "From your bank sync. Prices are the latest close your bank reports" + (d.holdingsAsOf ? " — holdings as of " + dayLabel(d.holdingsAsOf) : "") + "." }));
-  return section("Holdings", [], body);
+    footEl);
+  liveEls = { rows: rows, totalEl: totalEl, gainEl: gainEl, dayEl: dayEl, footEl: footEl, statusEl: statusEl, statusText: statusText };
+  return section("Holdings", streamSymbols(d.holdings).length ? [statusEl] : [], body);
+}
+
+/* ---- live streaming: quotes seed the day, trades tick the price ---- */
+
+function setLiveStatus(mode, text) {
+  if (!liveEls) return;
+  liveEls.statusEl.className = "v2-live " + mode;
+  liveEls.statusText.textContent = text;
+}
+
+function stopLive() {
+  liveRun++;
+  liveStarted = false;
+  if (liveRetry) { clearTimeout(liveRetry); liveRetry = null; }
+  if (patchTimer) { clearTimeout(patchTimer); patchTimer = null; }
+  if (liveWs) { try { liveWs.close(); } catch (e) { /* already gone */ } liveWs = null; }
+}
+
+function startLive() {
+  if (liveStarted || !data || !data.holdings || !liveEls) return;
+  const symbols = streamSymbols(data.holdings);
+  if (!symbols.length) return;
+  liveStarted = true;
+  const run = liveRun;
+  const session = nySession(Date.now());
+  setLiveStatus("warn", "Connecting…");
+  api("GET", "quotes?symbols=" + encodeURIComponent(symbols.join(","))).then(function (r) {
+    if (run !== liveRun) return;
+    if (r.status === "nokey") { liveEls.statusEl.style.display = "none"; return; }
+    Object.keys(r.quotes || {}).forEach(function (s) { seedQuote(liveState, s, r.quotes[s]); });
+    applyLive();
+    if (session === "closed") setLiveStatus("off", "Market closed · latest prices");
+    else connectStream(run, symbols, 0);
+  }).catch(function () {
+    if (run !== liveRun) return;
+    if (session === "closed") setLiveStatus("off", "Market closed");
+    else connectStream(run, symbols, 0);
+  });
+}
+
+function connectStream(run, symbols, attempt) {
+  if (run !== liveRun) return;
+  api("POST", "stream-ticket").then(function (t) {
+    if (run !== liveRun) return;
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/api/v2/stream?ticket=" + encodeURIComponent(t.ticket));
+    liveWs = ws;
+    ws.onopen = function () {
+      if (run !== liveRun) return;
+      setLiveStatus("warn", "Connected · waiting for trades");
+      symbols.forEach(function (s) { try { ws.send(JSON.stringify({ type: "subscribe", symbol: s })); } catch (e) { /* closed mid-send */ } });
+    };
+    ws.onmessage = function (ev) {
+      if (run !== liveRun) return;
+      const trades = parseStreamMessage(ev.data);
+      if (!trades.length) return;
+      trades.forEach(function (tr) { applyTrade(liveState, tr.symbol, tr.price, tr.t); });
+      setLiveStatus("on", "Live");
+      schedulePatch();
+    };
+    ws.onclose = function () {
+      if (run !== liveRun) return;
+      liveWs = null;
+      if (typeof document !== "undefined" && document.hidden) return; /* suspended; visibilitychange reconnects */
+      if (nySession(Date.now()) === "closed") { setLiveStatus("off", "Market closed · latest prices"); return; }
+      setLiveStatus("warn", "Reconnecting…");
+      const delay = [2000, 5000, 10000, 30000][Math.min(attempt, 3)];
+      liveRetry = setTimeout(function () { connectStream(run, symbols, attempt + 1); }, delay);
+    };
+    ws.onerror = function () { try { ws.close(); } catch (e) { /* onclose follows */ } };
+  }).catch(function () {
+    if (run !== liveRun) return;
+    setLiveStatus("off", "Live unavailable · bank prices");
+  });
+}
+
+function schedulePatch() {
+  if (patchTimer) return;
+  patchTimer = setTimeout(function () { patchTimer = null; applyLive(); }, 200);
+}
+
+function flash(el, clsName) {
+  el.classList.remove("tick-up", "tick-down");
+  void el.offsetWidth; /* restart the transition */
+  el.classList.add(clsName);
+  setTimeout(function () { el.classList.remove(clsName); }, 900);
+}
+
+/* Repaint every number the live prices touch: rows, tiles, footer. */
+function applyLive() {
+  if (!liveEls || !data || !data.holdings) return;
+  liveEls.rows.forEach(function (row) {
+    const hd = row.hd, st = liveState[hd.ticker];
+    if (row.priceEl && st && st.priceCents !== null && st.priceCents !== undefined) {
+      const prev = lastPrices[hd.ticker];
+      row.priceEl.textContent = money(st.priceCents) + " / sh";
+      if (prev !== null && prev !== undefined && prev !== st.priceCents) flash(row.priceEl, st.priceCents > prev ? "tick-up" : "tick-down");
+      lastPrices[hd.ticker] = st.priceCents;
+    }
+    if (row.dayEl && st && st.dayPct !== null && st.dayPct !== undefined) {
+      row.dayEl.textContent = " · " + pct(st.dayPct) + " today";
+      row.dayEl.className = "js-ld " + (st.dayPct > 0 ? "pos" : st.dayPct < 0 ? "neg" : "");
+    }
+    const v = effValueCents(hd);
+    if (row.valueEl && v !== null && v !== undefined) row.valueEl.textContent = money(v, { whole: true });
+    if (row.gainEl) {
+      const g = gainOf(hd);
+      if (g) { row.gainEl.textContent = changeText(g); row.gainEl.className = "v2-chg hint js-lg " + cls(g); }
+    }
+  });
+  let value = 0, costedValue = 0, cost = 0;
+  data.holdings.forEach(function (hd) {
+    const v = effValueCents(hd);
+    if (v !== null && v !== undefined) value += v;
+    if (gainOf(hd)) { costedValue += v; cost += hd.costBasisCents; }
+  });
+  liveEls.totalEl.textContent = money(value, { whole: true });
+  const totalGain = cost ? { cents: costedValue - cost, pct: Math.round((costedValue - cost) / cost * 10000) / 100 } : null;
+  if (totalGain) { liveEls.gainEl.textContent = changeText(totalGain); liveEls.gainEl.className = "v2-tile-value v2-chg js-ltg " + cls(totalGain); }
+  const dt = dayTotals(data.holdings, liveState);
+  liveEls.dayEl.textContent = dt ? "Today " + money(dt.cents, { signed: true, whole: true }) + " (" + pct(dt.pct) + ")" : "";
+  liveEls.dayEl.className = "v2-tile-sub js-ltd " + (dt ? (dt.cents > 0 ? "pos" : dt.cents < 0 ? "neg" : "") : "");
+  const anySeeded = Object.keys(liveState).length > 0;
+  const anyLive = Object.keys(liveState).some(function (s) { return liveState[s].live; });
+  if (anyLive) liveEls.footEl.textContent = "Prices streaming live from Finnhub · quantities and cost basis from your bank sync" + (data.holdingsAsOf ? " — holdings as of " + dayLabel(data.holdingsAsOf) : "") + ".";
+  else if (anySeeded) liveEls.footEl.textContent = "Prices are Finnhub's latest · quantities and cost basis from your bank sync" + (data.holdingsAsOf ? " — holdings as of " + dayLabel(data.holdingsAsOf) : "") + ".";
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      if (liveRetry) { clearTimeout(liveRetry); liveRetry = null; }
+      if (liveWs) { const ws = liveWs; liveWs = null; try { ws.close(); } catch (e) { /* ignore */ } }
+    } else if (liveStarted && !liveWs && data && data.holdings && nySession(Date.now()) !== "closed") {
+      connectStream(liveRun, streamSymbols(data.holdings), 0);
+    }
+  });
 }
 
 function draw() { return keepScroll(drawNow); }
@@ -203,11 +375,17 @@ function drawNow() {
       h("span", { class: "v2-chg hint " + cls(a.day), text: a.day ? "Today " + changeText(a.day) : "" }),
       h("span", { class: "v2-amt", text: a.balanceCents === null ? "—" : money(a.balanceCents, { whole: true }) }));
   }))));
-  if (d.holdings && d.holdings.length) root.appendChild(holdingsSection(d));
+  if (d.holdings && d.holdings.length) {
+    root.appendChild(holdingsSection(d));
+    if (!liveStarted) startLive(); else applyLive();
+  }
 }
 
 export function render(container) {
   root = container;
+  stopLive();
+  liveState = {};
+  lastPrices = {};
   if (!root.firstChild) loading(root);
   return api("GET", "investments").then(function (r) { data = r; draw(); }).catch(function (e) { errorState(root, e); });
 }

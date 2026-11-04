@@ -48,9 +48,12 @@ import * as v2layout from "./functions/api/v2/layout.js";
 import * as v2migration from "./functions/api/v2/migration.js";
 import * as v2networth from "./functions/api/v2/networth.js";
 import * as v2recurring from "./functions/api/v2/recurring.js";
+import * as v2quotes from "./functions/api/v2/quotes.js";
 import * as v2reports from "./functions/api/v2/reports.js";
 import * as v2rules from "./functions/api/v2/rules.js";
 import * as v2simplefin from "./functions/api/v2/simplefin.js";
+import * as v2stream from "./functions/api/v2/stream.js";
+import * as v2streamticket from "./functions/api/v2/stream-ticket.js";
 import * as v2splitwise from "./functions/api/v2/splitwise.js";
 import * as v2sync from "./functions/api/v2/sync.js";
 import * as v2transactions from "./functions/api/v2/transactions.js";
@@ -89,9 +92,12 @@ export const ROUTES = [
   ["/api/v2/migration", v2migration, "api/v2/migration.js"],
   ["/api/v2/networth", v2networth, "api/v2/networth.js"],
   ["/api/v2/recurring", v2recurring, "api/v2/recurring.js"],
+  ["/api/v2/quotes", v2quotes, "api/v2/quotes.js"],
   ["/api/v2/reports", v2reports, "api/v2/reports.js"],
   ["/api/v2/rules", v2rules, "api/v2/rules.js"],
   ["/api/v2/simplefin", v2simplefin, "api/v2/simplefin.js"],
+  ["/api/v2/stream", v2stream, "api/v2/stream.js"],
+  ["/api/v2/stream-ticket", v2streamticket, "api/v2/stream-ticket.js"],
   ["/api/v2/splitwise", v2splitwise, "api/v2/splitwise.js"],
   ["/api/v2/sync", v2sync, "api/v2/sync.js"],
   ["/api/v2/transactions", v2transactions, "api/v2/transactions.js"]
