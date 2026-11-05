@@ -88,6 +88,16 @@ await patchState(env.DB, { monthKey: "2026-11", patch: { takeHomePay: 4100, rent
 let r = await mirrorV1(env.DB);
 assert.equal(r.skipped, false);
 assert.equal((await mirrorV1(env.DB)).skipped, true, "unchanged v1 data: second run is a no-op");
+/* A repeat sync of the same bank data, then a full re-mirror, rewrites
+   no transaction rows (D1 bills rows written; this used to be all of them). */
+const writes = () => env.DB.db.prepare("SELECT total_changes() AS n").get().n;
+const writesBefore = writes();
+await upsertBankData(env.DB, {
+  syncedAt: "2026-11-21T12:00:00.000Z",
+  transactions: [{ id: "b_pay", accountId: "chk1", date: "2026-11-01", name: "PAYROLL ACME", amount: -2050 }]
+});
+await mirrorV1(env.DB, { force: true });
+assert.ok(writes() - writesBefore <= 3, "unchanged data writes only bookkeeping rows, got " + (writes() - writesBefore));
 
 /* ---------- 3. the migration gate ---------- */
 let gate = await compareTotals(env.DB);

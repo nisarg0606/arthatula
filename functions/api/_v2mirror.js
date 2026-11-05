@@ -94,7 +94,10 @@ export async function mirrorV1(db, opts) {
          balance: the classic snapshot only wins when it is newer. */
       "balance_cents = CASE WHEN excluded.balance_at > IFNULL(accounts.balance_at, '') THEN excluded.balance_cents ELSE accounts.balance_cents END, " +
       "available_cents = CASE WHEN excluded.balance_at > IFNULL(accounts.balance_at, '') THEN excluded.available_cents ELSE accounts.available_cents END, " +
-      "balance_at = MAX(excluded.balance_at, IFNULL(accounts.balance_at, '')), updated_at = datetime('now')",
+      "balance_at = MAX(excluded.balance_at, IFNULL(accounts.balance_at, '')), updated_at = datetime('now') " +
+      /* Unchanged rows are skipped: D1 bills every row (and index entry) an upsert rewrites. */
+      "WHERE accounts.institution IS NOT excluded.institution OR accounts.subtype IS NOT excluded.subtype OR accounts.mask IS NOT excluded.mask " +
+      "OR excluded.balance_at > IFNULL(accounts.balance_at, '')",
       newId("acc_"), "plaid:" + a.plaid_account_id, a.name || a.institution || "Account", a.institution || "",
       isCard ? "credit" : "depository", a.subtype || "", a.mask || "",
       a.current_cents, a.available_cents, String(a.updated_at || "").slice(0, 10) || null
@@ -136,7 +139,8 @@ export async function mirrorV1(db, opts) {
     if (twin) {
       mergedCards.push(c.id);
       twinByCardExt["card:" + c.id] = twin;
-      acctStmts.push(["UPDATE accounts SET statement_start = ?3, statement_end = ?4, due_date = ?5, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2",
+      acctStmts.push(["UPDATE accounts SET statement_start = ?3, statement_end = ?4, due_date = ?5, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2 " +
+        "AND (statement_start IS NOT ?3 OR statement_end IS NOT ?4 OR due_date IS NOT ?5)",
         twin, c.statement_start, c.statement_end, c.due_date || null]);
       continue;
     }
@@ -144,7 +148,9 @@ export async function mirrorV1(db, opts) {
       "INSERT INTO accounts (id, owner_id, external_id, name, type, statement_start, statement_end, due_date, source) " +
       "VALUES (?2, ?1, ?3, ?4, 'credit', ?5, ?6, ?7, 'v1card') " +
       "ON CONFLICT(owner_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = excluded.name, " +
-      "statement_start = excluded.statement_start, statement_end = excluded.statement_end, due_date = excluded.due_date, updated_at = datetime('now')",
+      "statement_start = excluded.statement_start, statement_end = excluded.statement_end, due_date = excluded.due_date, updated_at = datetime('now') " +
+      "WHERE accounts.name IS NOT excluded.name OR accounts.statement_start IS NOT excluded.statement_start " +
+      "OR accounts.statement_end IS NOT excluded.statement_end OR accounts.due_date IS NOT excluded.due_date",
       newId("acc_"), "card:" + c.id, c.name, c.statement_start, c.statement_end, c.due_date || null
     ]);
   }
@@ -180,7 +186,7 @@ export async function mirrorV1(db, opts) {
   });
   await s.batch(acctRows.filter((r) => r.balance_cents !== null && r.balance_at).map((r) => [
     "INSERT INTO balance_snapshots (owner_id, account_id, date, balance_cents) VALUES (?1, ?2, ?3, ?4) " +
-    "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents",
+    "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents WHERE balance_snapshots.balance_cents IS NOT excluded.balance_cents",
     r.id, r.balance_at, r.balance_cents
   ]));
 
@@ -320,7 +326,16 @@ export async function mirrorV1(db, opts) {
       "pending = excluded.pending, " +
       "hidden = CASE WHEN transactions.category_locked = 1 OR excluded.source <> 'v1bank' THEN transactions.hidden ELSE excluded.hidden END, " +
       "needs_review = CASE WHEN transactions.category_locked = 1 OR excluded.source <> 'v1bank' THEN transactions.needs_review ELSE excluded.needs_review END, " +
-      "exclude_reports = excluded.exclude_reports, v1_expense_id = excluded.v1_expense_id, updated_at = datetime('now')",
+      "exclude_reports = excluded.exclude_reports, v1_expense_id = excluded.v1_expense_id, updated_at = datetime('now') " +
+      /* Only rows whose SET above would change something: without this every run rewrote every transaction. */
+      "WHERE transactions.source IS NOT excluded.source OR transactions.account_id IS NOT excluded.account_id OR transactions.date IS NOT excluded.date " +
+      "OR transactions.merchant IS NOT excluded.merchant OR transactions.description IS NOT excluded.description " +
+      "OR transactions.amount_cents IS NOT excluded.amount_cents OR transactions.my_share_cents IS NOT excluded.my_share_cents " +
+      "OR transactions.pending IS NOT excluded.pending OR transactions.exclude_reports IS NOT excluded.exclude_reports " +
+      "OR transactions.v1_expense_id IS NOT excluded.v1_expense_id " +
+      "OR (transactions.category_locked <> 1 AND transactions.category_id IS NOT excluded.category_id) " +
+      "OR (excluded.source = 'v1exp' AND transactions.notes IS NOT excluded.notes) " +
+      "OR (transactions.category_locked <> 1 AND excluded.source = 'v1bank' AND (transactions.hidden IS NOT excluded.hidden OR transactions.needs_review IS NOT excluded.needs_review))",
       newId("tx_"), d.ext, d.source, d.accountId, d.date, String(d.merchant || "").slice(0, 300), String(d.description || "").slice(0, 500),
       d.amount, d.share, categoryId, locked, d.notes, tags, d.pending, hidden, d.exclude, d.review, d.v1
     ]);
@@ -344,7 +359,7 @@ export async function mirrorV1(db, opts) {
       if (totals[cid]) {
         budgetStmts.push([
           "INSERT INTO budgets (owner_id, month, category_id, amount_cents, source) VALUES (?1, ?2, ?3, ?4, 'v1') " +
-          "ON CONFLICT(owner_id, month, category_id) DO UPDATE SET amount_cents = excluded.amount_cents WHERE budgets.source = 'v1'",
+          "ON CONFLICT(owner_id, month, category_id) DO UPDATE SET amount_cents = excluded.amount_cents WHERE budgets.source = 'v1' AND budgets.amount_cents IS NOT excluded.amount_cents",
           m.monthKey, cid, totals[cid]
         ]);
       } else {

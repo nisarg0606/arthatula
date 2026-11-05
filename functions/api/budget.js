@@ -792,7 +792,7 @@ export async function getBankSnapshot(db) {
   ).all();
   const accRows = acc.results || [];
   const txRows = tx.results || [];
-  let syncedAt = null;
+  let syncedAt = await getSetting(db, "bank_synced_at");
   for (const r of accRows.concat(txRows)) {
     if (r.updated_at && (!syncedAt || r.updated_at > syncedAt)) syncedAt = r.updated_at;
   }
@@ -928,7 +928,12 @@ export async function upsertBankData(db, body) {
       "INSERT INTO bank_transactions (plaid_transaction_id, account_id, date, name, amount_cents, pending, pfc, updated_at) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(plaid_transaction_id) DO UPDATE SET " +
       "account_id = excluded.account_id, date = excluded.date, name = excluded.name, amount_cents = excluded.amount_cents, " +
-      "pending = excluded.pending, pfc = excluded.pfc, updated_at = excluded.updated_at"
+      "pending = excluded.pending, pfc = excluded.pfc, updated_at = excluded.updated_at " +
+      /* Unchanged rows are skipped: D1 bills every rewritten row, and a new
+         updated_at would also re-run the whole v2 mirror. */
+      "WHERE bank_transactions.account_id IS NOT excluded.account_id OR bank_transactions.date IS NOT excluded.date " +
+      "OR bank_transactions.name IS NOT excluded.name OR bank_transactions.amount_cents IS NOT excluded.amount_cents " +
+      "OR bank_transactions.pending IS NOT excluded.pending OR bank_transactions.pfc IS NOT excluded.pfc"
     ).bind(
       id,
       cleanBankText(t.accountId, 200),
@@ -941,7 +946,9 @@ export async function upsertBankData(db, body) {
     ));
     transactions++;
   }
-  if (stmts.length) await db.batch(stmts);
+  /* Skipped rows keep their old updated_at, so the push time lives here for syncedAt. */
+  stmts.push(db.prepare("INSERT INTO budget_settings (key, value) VALUES ('bank_synced_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(stamp));
+  await db.batch(stmts);
   await autoLinkBankTransactions(db);
   return { accounts, transactions };
 }
@@ -973,7 +980,7 @@ export async function getPendingSnapshot(db) {
     "SELECT * FROM pending_transactions ORDER BY date DESC, plaid_transaction_id DESC LIMIT 200"
   ).all();
   const rows = tx.results || [];
-  let syncedAt = null;
+  let syncedAt = rows.length ? await getSetting(db, "pending_synced_at") : null; /* empty set: null, as before */
   for (const r of rows) {
     if (r.updated_at && (!syncedAt || r.updated_at > syncedAt)) syncedAt = r.updated_at;
   }
@@ -995,7 +1002,8 @@ export async function replacePendingData(db, body) {
   const txIn = Array.isArray(src.transactions) ? src.transactions.slice(0, PENDING_ARRAY_CAP) : [];
   const known = new Set(((await db.prepare("SELECT plaid_transaction_id AS id FROM pending_transactions").all()).results || []).map((r) => r.id));
   const fresh = [];
-  const stmts = [db.prepare("DELETE FROM pending_transactions")];
+  const kept = new Set();
+  const stmts = [];
   let transactions = 0;
   for (const t of txIn) {
     if (!t || typeof t !== "object") continue;
@@ -1005,7 +1013,12 @@ export async function replacePendingData(db, body) {
     if (cents === null || cents <= 0) continue;
     stmts.push(db.prepare(
       "INSERT INTO pending_transactions (plaid_transaction_id, date, name, amount_cents, account_label, category, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(plaid_transaction_id) DO UPDATE SET date = excluded.date, name = excluded.name, " +
+      "amount_cents = excluded.amount_cents, account_label = excluded.account_label, category = excluded.category, updated_at = excluded.updated_at " +
+      /* Still a replace, but unchanged charges are not rewritten (D1 bills every written row). */
+      "WHERE pending_transactions.date IS NOT excluded.date OR pending_transactions.name IS NOT excluded.name " +
+      "OR pending_transactions.amount_cents IS NOT excluded.amount_cents OR pending_transactions.account_label IS NOT excluded.account_label " +
+      "OR pending_transactions.category IS NOT excluded.category"
     ).bind(
       id,
       t.date,
@@ -1015,9 +1028,12 @@ export async function replacePendingData(db, body) {
       cleanBankText(t.category, 100),
       stamp
     ));
-    if (!known.has(id)) fresh.push(usd(cents / 100) + " · " + cleanBankText(t.name, 500));
+    if (!known.has(id) && !kept.has(id)) fresh.push(usd(cents / 100) + " · " + cleanBankText(t.name, 500));
+    kept.add(id);
     transactions++;
   }
+  for (const id of known) if (!kept.has(id)) stmts.push(db.prepare("DELETE FROM pending_transactions WHERE plaid_transaction_id = ?").bind(id));
+  stmts.push(db.prepare("INSERT INTO budget_settings (key, value) VALUES ('pending_synced_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(stamp));
   await db.batch(stmts);
   /* One row per new charge; a burst (the first push) becomes one row. */
   if (fresh.length > 3) await notify(db, "pending", fresh.length + " new pending charges", fresh.slice(0, 10).join("\n"));

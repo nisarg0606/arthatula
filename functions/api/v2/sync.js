@@ -37,7 +37,11 @@ export function accountStmts(ext, a, asOf, source) {
     "VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12) " +
     "ON CONFLICT(owner_id, external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = excluded.name, institution = excluded.institution, type = excluded.type, " +
     "subtype = excluded.subtype, mask = excluded.mask, balance_cents = excluded.balance_cents, available_cents = excluded.available_cents, " +
-    "balance_at = excluded.balance_at, updated_at = datetime('now')",
+    "balance_at = excluded.balance_at, updated_at = datetime('now') " +
+    /* Unchanged rows are skipped: D1 bills every row an upsert rewrites. */
+    "WHERE accounts.name IS NOT excluded.name OR accounts.institution IS NOT excluded.institution OR accounts.type IS NOT excluded.type " +
+    "OR accounts.subtype IS NOT excluded.subtype OR accounts.mask IS NOT excluded.mask OR accounts.balance_cents IS NOT excluded.balance_cents " +
+    "OR accounts.available_cents IS NOT excluded.available_cents OR accounts.balance_at IS NOT excluded.balance_at",
     newId("acc_"), ext, str(a.name, 200) || "Account", str(a.institution, 200), type, str(a.subtype, 60), str(a.mask, 20),
     bal, cents(a.availableCents), asOf, source
   ]];
@@ -45,7 +49,7 @@ export function accountStmts(ext, a, asOf, source) {
     stmts.push([
       "INSERT INTO balance_snapshots (owner_id, account_id, date, balance_cents) " +
       "SELECT ?1, id, ?3, ?4 FROM accounts WHERE owner_id = ?1 AND external_id = ?2 " +
-      "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents",
+      "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents WHERE balance_snapshots.balance_cents IS NOT excluded.balance_cents",
       ext, asOf, bal
     ]);
   }
