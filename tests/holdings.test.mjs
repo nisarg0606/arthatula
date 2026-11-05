@@ -88,6 +88,16 @@ inv = await ok(investments, "GET", "investments");
 assert.equal(inv.holdings.length, 1);
 console.log("ok 4 - a holdings-less push leaves stored positions untouched");
 
+/* 4b. The hourly sync re-pushing the same positions rewrites none of
+      them (D1 bills rows written). */
+await ok(sync, "POST", "sync", { accounts: [INV], holdings: [AVGO, AAPL], asOf: "2026-11-02" }, syncTok);
+const changes = () => env.DB.db.prepare("SELECT total_changes() AS n").get().n;
+const writesBefore = changes();
+await ok(sync, "POST", "sync", { accounts: [INV], holdings: [AVGO, AAPL], asOf: "2026-11-02" }, syncTok);
+assert.equal(changes() - writesBefore, 1, "only the mirror_fp reset is written");
+assert.equal((await ok(investments, "GET", "investments")).holdings.length, 2);
+console.log("ok 4b - an identical re-push writes no holdings or account rows");
+
 /* 5. An empty holdings array IS a complete set: it clears them. */
 r = await ok(sync, "POST", "sync", { accounts: [INV], holdings: [], asOf: "2026-11-02" }, syncTok);
 inv = await ok(investments, "GET", "investments");

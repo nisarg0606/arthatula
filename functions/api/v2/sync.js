@@ -6,7 +6,7 @@
  *        -> { ok, accounts, holdings }
  *        When the holdings key is present it is the COMPLETE position
  *        set for the pushed accounts: their stored holdings are
- *        replaced, so a sold position disappears. When the key is
+ *        replaced (changed rows only), so a sold position disappears. When the key is
  *        absent (older sync), stored holdings are left untouched.
  *        Sync sessions ONLY. Upserts every account by its Plaid id —
  *        including credit cards, loans and investment accounts the
@@ -70,20 +70,32 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
   let holdingsCount = 0;
   if (Array.isArray(b.holdings)) {
     const pushedExts = [...new Set(b.accounts.slice(0, CAP).filter((a) => a && str(a.id, 200)).map((a) => "plaid:" + str(a.id, 200)))];
-    for (const ext of pushedExts) {
-      stmts.push(["DELETE FROM holdings WHERE owner_id = ?1 AND account_id IN (SELECT id FROM accounts WHERE owner_id = ?1 AND external_id = ?2)", ext]);
-    }
+    /* Still a full replace, but as upserts plus deletes of positions that
+       vanished: an hourly delete-all + re-insert was most of D1's writes. */
+    const pushed = new Set();
     for (const hd of b.holdings.slice(0, 500)) {
       if (!hd || typeof hd !== "object" || !str(hd.accountId, 200) || !str(hd.securityId, 200)) continue;
       const qty = num(hd.quantity);
       if (qty === null) continue;
+      pushed.add("plaid:" + str(hd.accountId, 200) + "|" + str(hd.securityId, 200));
       stmts.push([
         "INSERT INTO holdings (owner_id, account_id, security_id, ticker, name, quantity, cost_basis_cents, price_cents, value_cents, kind, as_of) " +
-        "SELECT ?1, id, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11 FROM accounts WHERE owner_id = ?1 AND external_id = ?2",
+        "SELECT ?1, id, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11 FROM accounts WHERE owner_id = ?1 AND external_id = ?2 " +
+        "ON CONFLICT(owner_id, account_id, security_id) DO UPDATE SET ticker = excluded.ticker, name = excluded.name, quantity = excluded.quantity, " +
+        "cost_basis_cents = excluded.cost_basis_cents, price_cents = excluded.price_cents, value_cents = excluded.value_cents, kind = excluded.kind, " +
+        "as_of = excluded.as_of, updated_at = datetime('now') " +
+        "WHERE holdings.ticker IS NOT excluded.ticker OR holdings.name IS NOT excluded.name OR holdings.quantity IS NOT excluded.quantity " +
+        "OR holdings.cost_basis_cents IS NOT excluded.cost_basis_cents OR holdings.price_cents IS NOT excluded.price_cents " +
+        "OR holdings.value_cents IS NOT excluded.value_cents OR holdings.kind IS NOT excluded.kind OR holdings.as_of IS NOT excluded.as_of",
         "plaid:" + str(hd.accountId, 200), str(hd.securityId, 200), str(hd.ticker, 20), str(hd.name, 200), qty,
         cents(hd.costBasisCents), cents(hd.priceCents), cents(hd.valueCents), str(hd.kind, 20), dateStr(hd.asOf, asOf)
       ]);
       holdingsCount++;
+    }
+    const stored = await s.all("SELECT a.external_id AS ext, h.security_id AS sec FROM holdings h JOIN accounts a ON a.id = h.account_id WHERE h.owner_id = ?1 AND a.owner_id = ?1");
+    for (const r of stored) {
+      if (pushedExts.indexOf(r.ext) === -1 || pushed.has(r.ext + "|" + r.sec)) continue;
+      stmts.push(["DELETE FROM holdings WHERE owner_id = ?1 AND security_id = ?3 AND account_id IN (SELECT id FROM accounts WHERE owner_id = ?1 AND external_id = ?2)", r.ext, r.sec]);
     }
   }
   await s.batch(stmts);
