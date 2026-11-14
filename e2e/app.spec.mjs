@@ -550,8 +550,8 @@ test("new screens: add a transaction, file it, and see it in the budget and cash
   await input.press("Enter");
   await expect(page.locator("#v2Budget .v2-budget-row", { hasText: "Groceries" }).locator(".v2-plan-input")).toHaveValue("500");
   await openTab(page, "cashflow");
-  await expect(page.locator("#v2Cashflow .v2-cat-row", { hasText: "🛒 Groceries" })).toBeVisible();
-  await expect(page.locator("#v2Cashflow .v2-table")).toBeVisible();
+  await expect(page.locator("#v2Cashflow .v2-cat-row", { hasText: "🛒 Groceries" }).first()).toBeVisible();
+  await expect(page.locator("#v2Cashflow .v2-table").first()).toBeVisible();
 
   /* Delete it again. */
   await openTab(page, "transactions");
