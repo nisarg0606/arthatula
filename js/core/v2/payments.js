@@ -39,7 +39,13 @@ export function addMonthsToDate(date, n) {
    grace-period guess of 21 days after the statement closes. */
 export function cycleFor(account, date) {
   if (!account || !account.statementStart || !account.statementEnd || !date) return null;
-  const due0 = account.dueDate || addDays(account.statementEnd, 21);
+  /* Synced accounts carry the current (open) statement period with
+     the PREVIOUS statement's due date — Plaid reports the last issued
+     statement's due date, and a statement is never due before it
+     closes. A due date on or before the close therefore belongs to
+     the cycle before, and this cycle's due date is one month on. */
+  let due0 = account.dueDate || addDays(account.statementEnd, 21);
+  if (account.dueDate && account.dueDate <= account.statementEnd) due0 = addMonthsToDate(account.dueDate, 1);
   let n = 0;
   while (date > addMonthsToDate(account.statementEnd, n) && n < 240) n++;
   while (date < addMonthsToDate(account.statementStart, n) && n > -240) n--;
@@ -91,6 +97,7 @@ export function paymentFlow(transactions, categories, accounts, from, to) {
   const months = {};
   monthRange(from, to).forEach(function (k) { months[k] = { month: k, incomeCents: 0, outCents: 0, netCents: 0, byCategory: {} }; });
   const billByKey = {};
+  const chargeOut = {};
   (transactions || []).forEach(function (tx) {
     if (!tx || isCardBillTx(tx, cats)) return;
     const lines = reportLines(tx);
@@ -113,6 +120,8 @@ export function paymentFlow(transactions, categories, accounts, from, to) {
         bucket.outCents += -line.cents;
         bucket.byCategory[key] = (bucket.byCategory[key] || 0) + -line.cents;
         billCents -= line.cents;
+        const cm = monthOf(tx.date);
+        chargeOut[cm] = (chargeOut[cm] || 0) + -line.cents;
       }
     });
     /* Every transaction in the cycle moves the statement total —
@@ -122,9 +131,11 @@ export function paymentFlow(transactions, categories, accounts, from, to) {
       const due = paymentDateFor(tx, acct);
       if (due !== tx.date) {
         const key = acct.id + "|" + due;
+        const cyc = cycleFor(acct, tx.date);
         const b = billByKey[key] || (billByKey[key] = {
           accountId: acct.id, name: acct.name || "Card", mask: acct.mask || "",
-          dueDate: due, month: monthOf(due), cents: 0, count: 0
+          dueDate: due, month: monthOf(due), cents: 0, count: 0,
+          closes: cyc ? cyc.end : null
         });
         b.cents += billCents;
         b.count += 1;
@@ -146,7 +157,7 @@ export function paymentFlow(transactions, categories, accounts, from, to) {
   const bills = Object.keys(billByKey).map(function (k) { return billByKey[k]; })
     .filter(function (b) { return b.cents > 0; })
     .sort(function (a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
-  return { months: list, bills: bills, total: total };
+  return { months: list, bills: bills, total: total, chargeOutByMonth: chargeOut };
 }
 
 /* Planned income for the range with the forecast's convention: a
@@ -172,6 +183,24 @@ export function applyPlannedIncome(months, planned, currentMonth) {
     const p = (planned || {})[m.month] || 0;
     const income = m.month >= currentMonth && p > 0 ? Math.max(m.incomeCents, p) : m.incomeCents;
     return { month: m.month, incomeCents: income, outCents: m.outCents, netCents: income - m.outCents, byCategory: m.byCategory };
+  });
+}
+
+/* Months after the current one also carry what is still to come
+   from the plan: planned spending for the month minus what has
+   already been spent in it on a charge basis — the remainder
+   convention the forecast uses for the current month. Regular
+   charges like rent and utilities live in the plan until they post,
+   so a future month is not just the card bills already visible.
+   The current month and earlier stay on actuals alone: their
+   regular charges have largely posted already. */
+export function applyPlannedSpending(months, planned, chargeOutByMonth, currentMonth) {
+  return (months || []).map(function (m) {
+    if (m.month <= currentMonth) return m;
+    const add = Math.max(((planned || {})[m.month] || 0) - ((chargeOutByMonth || {})[m.month] || 0), 0);
+    if (!add) return m;
+    const out = m.outCents + add;
+    return { month: m.month, incomeCents: m.incomeCents, outCents: out, netCents: m.incomeCents - out, byCategory: m.byCategory };
   });
 }
 
