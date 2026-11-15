@@ -41,10 +41,13 @@ import {
   verifyAccessCode, reserveAttempt, clearAttempts,
   createSession, deleteSessionById, sha256Hex, timingSafeEqualHex
 } from "./budget.js";
+import { readCapped } from "./auth.js";
 
 export const OAUTH_SCOPE = "mcp";
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const REFRESH_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+export const MAX_REGISTER_BODY = 16 * 1024;
+export const MAX_REGISTRATIONS_PER_HOUR = 20;
 export const ACCESS_EXPIRES_IN = 90 * 24 * 60 * 60; /* the mcp session's sliding window, seconds */
 
 /* ------------------------------------------------------------------ */
@@ -196,8 +199,17 @@ export async function registerClient(context) {
   if (!context.env.DB) return noDb();
   const db = context.env.DB;
   await ensureOAuthTables(db);
+  /* Open to anyone (RFC 7591), so it is capped twice: by body size, and
+     by how many clients may register per hour. A real client registers
+     once per connection; a flood of registrations was unlimited writes. */
+  const raw = await readCapped(context.request, MAX_REGISTER_BODY);
+  if (raw === null) return oauthError("invalid_client_metadata", "Registration request too large.", 413);
+  const recent = await db.prepare("SELECT COUNT(*) AS n FROM oauth_clients WHERE created_at > ?").bind(Date.now() - 60 * 60 * 1000).first();
+  if (recent && Number(recent.n) >= MAX_REGISTRATIONS_PER_HOUR) {
+    return json({ error: "temporarily_unavailable", error_description: "Too many client registrations in the last hour. Try again later." }, 429, { "Retry-After": "3600" });
+  }
   let body;
-  try { body = await context.request.json(); } catch { return oauthError("invalid_client_metadata", "Request body must be JSON."); }
+  try { body = JSON.parse(raw); } catch { return oauthError("invalid_client_metadata", "Request body must be JSON."); }
   if (!body || typeof body !== "object") return oauthError("invalid_client_metadata", "Request body must be a JSON object.");
 
   const uris = body.redirect_uris;
@@ -378,6 +390,9 @@ export async function authorizePost(context) {
   await clearAttempts(db);
 
   const code = randomToken(32);
+  /* Used and expired codes have no further use; without this every
+     approval left a row behind for good. */
+  await db.prepare("DELETE FROM oauth_codes WHERE used = 1 OR expires_at <= ?").bind(Date.now()).run();
   await db.prepare(
     "INSERT INTO oauth_codes (code_hash, client_id, redirect_uri, code_challenge, scope, expires_at, used, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)"
   ).bind(await sha256Hex(code), v.client.client_id, v.redirectUri, params.code_challenge, OAUTH_SCOPE, Date.now() + CODE_TTL_MS, Date.now()).run();

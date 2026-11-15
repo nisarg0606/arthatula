@@ -63,6 +63,14 @@ function json(body, status = 200, extraHeaders) {
 function noDb() {
   return json({ error: "Database binding DB is not configured. Connect the D1 database to this Pages project (or run via wrangler) to store the budget." }, 503);
 }
+export const MAX_AUTH_BODY = 16 * 1024;
+/* The body as text, or null when it is larger than `max` bytes. */
+export async function readCapped(request, max) {
+  const declared = Number(request.headers.get("Content-Length"));
+  if (Number.isFinite(declared) && declared > max) return null;
+  const text = await request.text().catch(() => "");
+  return new TextEncoder().encode(text).length > max ? null : text;
+}
 function cleanLabel(v) { return typeof v === "string" ? v.slice(0, 100) : ""; }
 function validNewCode(v) { return typeof v === "string" && v.length >= MIN_CODE_LENGTH; }
 const SHORT_CODE_ERROR = "Access code must be at least " + MIN_CODE_LENGTH + " characters.";
@@ -134,7 +142,12 @@ export async function onRequestPost(context) {
   const db = context.env.DB;
   try {
     await ensureTables(db);
-    const body = await context.request.json().catch(() => ({}));
+    /* Most of these actions run before anyone is signed in, so the body
+       is capped: every real request here is well under 1 KB. */
+    const raw = await readCapped(context.request, MAX_AUTH_BODY);
+    if (raw === null) return json({ error: "Request too large." }, 413);
+    let body = {};
+    try { body = raw ? JSON.parse(raw) : {}; } catch (e) { body = {}; }
     const action = body && body.action;
 
     if (action === "setup") {

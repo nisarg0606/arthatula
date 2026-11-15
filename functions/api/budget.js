@@ -33,6 +33,11 @@ export function planMonthKeys(start, nowKey) {
   for (let k = start; keys.length < PLAN_LENGTH || k <= nowKey; k = addMonth(k, 1)) keys.push(k);
   return keys;
 }
+/* "date belongs to month M" as an index range plus the exact prefix
+   check: the range lets SQLite use idx_daily_expenses_date, the substr
+   keeps the result identical to the old substr-only filter. */
+const IN_MONTH = "date >= ? AND date < ? AND substr(date, 1, 7) = ?";
+function monthRange(monthKey) { return [monthKey, addMonth(monthKey, 1), monthKey]; }
 export async function monthKeys(db) {
   return planMonthKeys((await getSetting(db, "plan_start")) || thisMonth(), thisMonth());
 }
@@ -239,6 +244,12 @@ async function createTables(db) {
     db.prepare(CREATE_BANK_REVIEW),
     db.prepare(CREATE_SYNC_REQUESTS),
     db.prepare("CREATE INDEX IF NOT EXISTS auth_attempts_at ON auth_attempts (at)"),
+    /* Every signed-in request looks its session up by token hash, and the
+       daily log is read a month at a time: without these both were full
+       table scans. (schema.sql had the date index; databases the app
+       created itself never got it.) */
+    db.prepare("CREATE INDEX IF NOT EXISTS sessions_token_hash ON sessions (token_hash)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_daily_expenses_date ON daily_expenses (date)"),
     db.prepare("PRAGMA table_info(daily_expenses)")
   ];
   const pragmaIndex = stmts.length - 1;
@@ -475,9 +486,15 @@ export async function createSession(db, { kind = "device", label = "" } = {}) {
   const k = kind === "sync" ? "sync" : kind === "mcp" ? "mcp" : "device";
   const expiresAt = sessionExpiry(k, now);
   const cleanLabel = String(label || "").slice(0, 100);
-  await db.prepare(
-    "INSERT INTO sessions (id, token_hash, kind, label, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).bind(id, tokenHash, k, cleanLabel, sqlTime(now), sqlTime(now), expiresAt).run();
+  await db.batch([
+    /* Expired sessions were only removed when their own token came
+       back, so abandoned ones (an old phone, a lost MCP token) stayed
+       in the table and the Settings list for good. Sign-in clears them. */
+    db.prepare("DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?").bind(sqlTime(now)),
+    db.prepare(
+      "INSERT INTO sessions (id, token_hash, kind, label, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(id, tokenHash, k, cleanLabel, sqlTime(now), sqlTime(now), expiresAt)
+  ]);
   return {
     token,
     session: { id, kind: k, label: cleanLabel, createdAt: sqlTime(now), lastSeenAt: sqlTime(now), expiresAt, current: true }
@@ -1303,8 +1320,8 @@ export async function syncDailyRollup(db, monthKey) {
   if (!(await monthKeys(db)).includes(monthKey)) return readState(db);
   const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
   const { results } = await db
-    .prepare("SELECT category, SUM(COALESCE(my_share, amount)) AS total, COUNT(*) AS n FROM daily_expenses WHERE substr(date, 1, 7) = ? AND date >= ? GROUP BY category")
-    .bind(monthKey, baselineDate)
+    .prepare("SELECT category, SUM(COALESCE(my_share, amount)) AS total, COUNT(*) AS n FROM daily_expenses WHERE " + IN_MONTH + " AND date >= ? GROUP BY category")
+    .bind(...monthRange(monthKey), baselineDate)
     .all();
   const rows = results || [];
   const totalCount = rows.reduce((s, r) => s + (r.n || 0), 0);
@@ -1335,10 +1352,10 @@ export async function syncDailyRollup(db, monthKey) {
 export async function listDailyExpenses(db, monthKey) {
   await ensureTables(db);
   const sql = monthKey
-    ? "SELECT * FROM daily_expenses WHERE substr(date, 1, 7) = ? ORDER BY date DESC, id DESC"
+    ? "SELECT * FROM daily_expenses WHERE " + IN_MONTH + " ORDER BY date DESC, id DESC"
     : "SELECT * FROM daily_expenses ORDER BY date DESC, id DESC";
   const stmt = db.prepare(sql);
-  const { results } = monthKey ? await stmt.bind(monthKey).all() : await stmt.all();
+  const { results } = monthKey ? await stmt.bind(...monthRange(monthKey)).all() : await stmt.all();
   return (results || []).map((r) => ({
     id: r.id, date: r.date, description: r.description,
     amount: Math.round((r.amount || 0) * 100) / 100,

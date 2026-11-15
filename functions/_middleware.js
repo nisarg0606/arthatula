@@ -45,8 +45,39 @@ export function withSecurityHeaders(response, url) {
   if (response.webSocket || response.status === 101) return response;
   const out = new Response(response.body, response);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) out.headers.set(k, v);
-  if (new URL(url).pathname.startsWith("/api/")) out.headers.set("Cache-Control", "no-store");
+  const path = new URL(url).pathname;
+  if (path.startsWith("/api/")) out.headers.set("Cache-Control", "no-store");
+  /* Files under vendor/ carry their version in the name
+     (chart-4.4.1.umd.js), so a browser may keep them for a year instead
+     of asking again on every visit; an upgrade ships under a new name. */
+  else if (path.startsWith("/vendor/") && /\d+\.\d+\.\d+/.test(path) && response.status === 200) {
+    out.headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  }
   return out;
+}
+
+/* Repository files that are not part of the app. The Worker never
+   serves them (.assetsignore), but a Pages deploy of "." uploads the
+   whole checkout as static files, so source, tests, tooling and config
+   would be readable at their paths. Both entry points answer 404 for
+   them. tests/worker.test.mjs checks this covers .assetsignore. */
+export const INTERNAL_PATHS = [
+  "/.git", "/.github", "/.wrangler", "/node_modules", "/e2e", "/functions", "/tests", "/tools",
+  "/docs", "/video", "/worker.js", "/wrangler.toml", "/package.json", "/package-lock.json",
+  "/schema.sql", "/netlify.toml", "/vercel.json", "/tailwind.config.js", "/README.md", "/LICENSE",
+  "/.dev.vars", "/.assetsignore", "/.gitignore", "/budget-data.json"
+];
+export function isInternalPath(pathname) {
+  let p;
+  try { p = decodeURIComponent(String(pathname || "")); } catch (e) { return true; }
+  p = p.replace(/\/{2,}/g, "/").toLowerCase();
+  return INTERNAL_PATHS.some((x) => {
+    const want = x.toLowerCase();
+    return p === want || p.startsWith(want + "/") || (want === "/.dev.vars" && p.startsWith(want));
+  });
+}
+export function notFound() {
+  return new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
 
 /* OAuth 2.1 for the MCP server (api/_oauth.js): its paths live OUTSIDE
@@ -76,6 +107,7 @@ export async function onRequest(context) {
       return out;
     }
   }
+  if (isInternalPath(url.pathname)) return withSecurityHeaders(notFound(), context.request.url);
   const response = await context.next();
   return withSecurityHeaders(response, context.request.url);
 }
