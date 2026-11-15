@@ -228,7 +228,10 @@ worth knowing:
   Returns immediately; poll `get_sync_status`.
 - **`get_sync_status`** — The latest sync request: status
   (pending/running/done/failed), timestamps, and the run summary when
-  it finished.
+  it finished, plus `lastBankSyncAt`: when bank data last arrived from
+  any sync. The scheduled nightly sync makes no request, so check
+  `lastBankSyncAt` before asking for a new sync: an old request with a
+  recent `lastBankSyncAt` means the data is already fresh.
 
 ### Money model — accounts
 

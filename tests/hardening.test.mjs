@@ -94,3 +94,15 @@ test("the notification tables are checked once per database, not on every poll",
   assert.deepEqual(out.notifications.map((n) => n.title), ["Second", "First"]);
   assert.equal(out.unread, 2);
 });
+
+test("lastBankSyncAt reports the newest bank data from any sync, even with no sync request", async () => {
+  const { lastBankSyncAt } = await import("../functions/api/budget.js");
+  const env = { DB: new FakeD1() };
+  await ensureTables(env.DB);
+  assert.equal(await lastBankSyncAt(env.DB), null, "nothing synced yet; works before v2 tables exist");
+  env.DB.db.exec("INSERT INTO budget_settings (key, value) VALUES ('bank_synced_at', '2026-11-15T07:07:24.278Z')");
+  assert.equal(await lastBankSyncAt(env.DB), "2026-11-15T07:07:24.278Z");
+  env.DB.db.exec("CREATE TABLE v2_settings (owner_id TEXT, key TEXT, value TEXT)");
+  env.DB.db.exec("INSERT INTO v2_settings VALUES ('me', 'simplefin_last_sync', '2026-11-15T09:00:00.000Z')");
+  assert.equal(await lastBankSyncAt(env.DB), "2026-11-15T09:00:00.000Z", "a newer SimpleFIN pull wins");
+});
