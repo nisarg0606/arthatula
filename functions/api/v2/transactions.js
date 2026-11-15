@@ -3,6 +3,7 @@
  * cents: negative = money out, positive = money in.
  *   GET ?from=&to=&accountId=&categoryId=&q=&review=1&hidden=1&limit=&offset=
  *        -> { transactions, total }   newest first; limit ≤ 500 (default 200)
+ *        hidden=1 includes hidden rows; hidden=only returns just them.
  *   POST { date, merchant, amountCents, accountId?, categoryId?, notes?, tags? } -> 201 { transaction }
  *        auto=1: rows auto-review took off To review (see ../_v2autoreview.js)
  *   PATCH { reviewAll: true } -> { updated }
@@ -77,7 +78,8 @@ export const onRequestGet = (context) => handleV2(context, async ({ s, url }) =>
   }
   if (p.get("review") === "1") list = list.filter((t) => t.needsReview && !t.hidden);
   if (p.get("auto") === "1") list = list.filter((t) => t.autoReview && !t.hidden);
-  if (p.get("hidden") !== "1") list = list.filter((t) => !t.hidden);
+  if (p.get("hidden") === "only") list = list.filter((t) => t.hidden);
+  else if (p.get("hidden") !== "1") list = list.filter((t) => !t.hidden);
   const q = (p.get("q") || "").trim().toLowerCase();
   if (q) list = list.filter((t) => (t.merchant + " " + t.description + " " + t.notes + " " + t.tags.join(" ")).toLowerCase().indexOf(q) !== -1);
   return { transactions: list.slice(offset, offset + limit), total: list.length };

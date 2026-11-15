@@ -163,6 +163,9 @@ assert.equal((await call(transactions, "PATCH", "transactions", { id: mine.id, p
 await ok(transactions, "PATCH", "transactions", { id: mine.id, patch: { hidden: true } });
 assert.ok(!(await ok(transactions, "GET", "transactions")).transactions.some((x) => x.id === mine.id), "hidden rows are left out");
 assert.ok((await ok(transactions, "GET", "transactions?hidden=1")).transactions.some((x) => x.id === mine.id));
+const hiddenOnly = (await ok(transactions, "GET", "transactions?hidden=only")).transactions;
+assert.ok(hiddenOnly.some((x) => x.id === mine.id), "hidden=only returns the hidden row");
+assert.ok(hiddenOnly.every((x) => x.hidden), "hidden=only returns hidden rows only");
 await ok(transactions, "DELETE", "transactions?id=" + mine.id);
 assert.equal((await call(transactions, "DELETE", "transactions?id=" + autopay.id)).status, 409, "bank rows are hidden, not deleted");
 /* Deleting a classic row deletes it from the daily log too. */
