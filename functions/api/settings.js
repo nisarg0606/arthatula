@@ -139,7 +139,11 @@ export async function onRequestPut(context) {
     await ensureTables(context.env.DB);
     const db = context.env.DB;
     const url = typeof body.aiBaseUrl === "string" ? body.aiBaseUrl.trim() : null;
-    if (url && !/^https?:\/\/[^\s]+$/.test(url)) return json({ error: "The base URL must start with https:// (or http:// for a local server)." }, 400);
+    /* https only: the saved API key goes with every request to this URL,
+       and over http it would cross the network in the clear. (The server
+       runs on Cloudflare, so an http://localhost server was never
+       reachable from it anyway.) */
+    if (url && !/^https:\/\/[^\s]+$/.test(url)) return json({ error: "The base URL must start with https://." }, 400);
     if (typeof body.aiProvider === "string") {
       if (!PROVIDERS[body.aiProvider]) return json({ error: "Unknown AI provider." }, 400);
       await setSetting(db, "ai_provider", body.aiProvider);

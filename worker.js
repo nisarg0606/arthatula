@@ -11,7 +11,7 @@
  *
  * tests/worker.test.mjs checks ROUTES covers every file in functions/api.
  */
-import { withSecurityHeaders, CONTENT_SECURITY_POLICY } from "./functions/_middleware.js";
+import { withSecurityHeaders, CONTENT_SECURITY_POLICY, isInternalPath, notFound } from "./functions/_middleware.js";
 import { handleOAuthRequest, isOAuthPath } from "./functions/api/_oauth.js";
 import { ensureV2, scope, OWNER_ID } from "./functions/api/_v2db.js";
 import { ensureMarket } from "./functions/api/_market.js";
@@ -161,7 +161,10 @@ export default {
         return out;
       }
     }
-    const response = path === "/api" || path.startsWith("/api/") ? await handleApi(request, env, ctx) : await env.ASSETS.fetch(request);
+    const isApi = path === "/api" || path.startsWith("/api/");
+    /* .assetsignore already keeps these out; this is the second lock. */
+    if (!isApi && isInternalPath(path)) return withSecurityHeaders(notFound(), request.url);
+    const response = isApi ? await handleApi(request, env, ctx) : await env.ASSETS.fetch(request);
     return withSecurityHeaders(response, request.url);
   },
   /* The nightly market recap and SimpleFIN pull (wrangler.toml

@@ -12,12 +12,22 @@
  */
 export const KEEP = 200; /* older rows are dropped */
 
-async function ensure(db) {
-  await db.prepare(
-    "CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, " +
-    "title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')), read_at TEXT)"
-  ).run();
-  await db.prepare("CREATE TABLE IF NOT EXISTS budget_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
+/* Once per DB binding per isolate, like ensureTables in budget.js: the
+   bell polls every 30 seconds, and two CREATE TABLE round trips on each
+   poll were most of its cost. One batch, retried on the next call if it
+   fails. */
+const ready = new WeakMap();
+function ensure(db) {
+  if (!ready.has(db)) {
+    ready.set(db, db.batch([
+      db.prepare(
+        "CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, " +
+        "title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')), read_at TEXT)"
+      ),
+      db.prepare("CREATE TABLE IF NOT EXISTS budget_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    ]).catch((e) => { ready.delete(db); throw e; }));
+  }
+  return ready.get(db);
 }
 async function getSetting(db, key) {
   const row = await db.prepare("SELECT value FROM budget_settings WHERE key = ?").bind(key).first();
@@ -40,9 +50,15 @@ export async function notify(db, kind, title, body) {
     await ensure(db);
     title = String(title || "").slice(0, 200);
     body = String(body || "").slice(0, 1000);
-    await db.prepare("INSERT INTO notifications (kind, title, body) VALUES (?, ?, ?)").bind(kind, title, body).run();
-    await db.prepare("DELETE FROM notifications WHERE id <= (SELECT MAX(id) FROM notifications) - ?").bind(KEEP).run();
-    const token = await getSetting(db, "telegram_bot_token"), chat = await getSetting(db, "telegram_chat_id");
+    /* One round trip: the insert, the trim to KEEP rows and both Telegram settings. */
+    const out = await db.batch([
+      db.prepare("INSERT INTO notifications (kind, title, body) VALUES (?, ?, ?)").bind(kind, title, body),
+      db.prepare("DELETE FROM notifications WHERE id <= (SELECT MAX(id) FROM notifications) - ?").bind(KEEP),
+      db.prepare("SELECT key, value FROM budget_settings WHERE key IN ('telegram_bot_token', 'telegram_chat_id')")
+    ]);
+    const settings = {};
+    for (const r of (out[2] && out[2].results) || []) settings[r.key] = r.value;
+    const token = settings.telegram_bot_token || "", chat = settings.telegram_chat_id || "";
     if (token && chat) await telegram(token, "sendMessage", { chat_id: chat, text: body ? title + "\n" + body : title });
   } catch (e) { /* best-effort */ }
 }

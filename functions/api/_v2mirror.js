@@ -227,10 +227,17 @@ export async function mirrorV1(db, opts) {
   /* Moves between his own accounts pair up even when the name gives
      nothing away: an inflow matched by an equal outflow from a
      DIFFERENT account within 3 days is a transfer, not income. */
-  const ownOutflows = bankTx.filter((t) => !t.pending && t.amount_cents > 0 && !linked[t.plaid_transaction_id]);
-  const pairsWithOwnOutflow = (inflow) => ownOutflows.some((o) =>
-    o.account_id !== inflow.account_id && o.amount_cents === -inflow.amount_cents &&
-    Math.abs(daysBetween(o.date, inflow.date)) <= 3);
+  /* Outflows grouped by amount, so each inflow only checks the outflows
+     of its own size: a scan of every outflow per inflow grew with the
+     square of the bank history and ran on every mirror. */
+  const outflowsByAmount = new Map();
+  for (const t of bankTx) {
+    if (t.pending || !(t.amount_cents > 0) || linked[t.plaid_transaction_id]) continue;
+    if (!outflowsByAmount.has(t.amount_cents)) outflowsByAmount.set(t.amount_cents, []);
+    outflowsByAmount.get(t.amount_cents).push(t);
+  }
+  const pairsWithOwnOutflow = (inflow) => (outflowsByAmount.get(-inflow.amount_cents) || []).some((o) =>
+    o.account_id !== inflow.account_id && Math.abs(daysBetween(o.date, inflow.date)) <= 3);
   const SELF_MOVE_NAME = /zelle payment from nisarg|requested transfer|internal transfer|online transfer|internet transfer|acct transfer|account transfer|xfer|funds transfer|americanexpress transfer|external transfer|ext trnsfr/i;
   const P2P_NAME = /zelle payment from|venmo|cash app/i;
   /* Is this unlinked bank inflow income? Only asked in months whose
