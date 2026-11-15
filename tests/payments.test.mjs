@@ -7,7 +7,7 @@
  * Run: node tests/payments.test.mjs
  */
 import assert from "node:assert/strict";
-import { addMonthsToDate, cycleFor, paymentDateFor, isCardBillTx, fundedByPriorPaycheck, paymentFlow, carryPlannedIncome, applyPlannedIncome, runningBalances, lowestBalance } from "../js/core/v2/payments.js";
+import { addMonthsToDate, cycleFor, paymentDateFor, isCardBillTx, fundedByPriorPaycheck, paymentFlow, carryPlannedIncome, applyPlannedIncome, applyPlannedSpending, runningBalances, lowestBalance } from "../js/core/v2/payments.js";
 
 /* ---- month shifting ---- */
 assert.equal(addMonthsToDate("2026-12-05", 1), "2027-01-05");
@@ -87,9 +87,9 @@ assert.equal(byMonth["2027-01"].byCategory.fam, 25475, "the iPhone installment s
 assert.equal(byMonth["2027-01"].byCategory.shop, -5000, "the refund lowers January's Shopping");
 
 assert.deepEqual(flow.bills, [
-  { accountId: "acc_amex", name: "Blue Cash Everyday", mask: "4007", dueDate: "2026-12-04", month: "2026-12", cents: 89000, count: 2 },
-  { accountId: "acc_amex", name: "Blue Cash Everyday", mask: "4007", dueDate: "2027-01-04", month: "2027-01", cents: 112475, count: 5 },
-  { accountId: "acc_amex", name: "Blue Cash Everyday", mask: "4007", dueDate: "2027-02-04", month: "2027-02", cents: 10000, count: 1 }
+  { accountId: "acc_amex", name: "Blue Cash Everyday", mask: "4007", dueDate: "2026-12-04", month: "2026-12", cents: 89000, count: 2, closes: "2026-11-05" },
+  { accountId: "acc_amex", name: "Blue Cash Everyday", mask: "4007", dueDate: "2027-01-04", month: "2027-01", cents: 112475, count: 5, closes: "2026-12-05" },
+  { accountId: "acc_amex", name: "Blue Cash Everyday", mask: "4007", dueDate: "2027-02-04", month: "2027-02", cents: 10000, count: 1, closes: "2027-01-05" }
 ], "charges grouped into the statement they will be paid with");
 
 /* A card with no statement dates: charges stay in their charge month
@@ -119,5 +119,42 @@ const tight = runningBalances([{ month: "2026-10", incomeCents: 0, outCents: 0, 
 assert.equal(tight[0].balanceCents, null, "months before the anchor have no running balance");
 assert.equal(tight[1].balanceCents, -40000);
 assert.equal(tight[1].shortfall, true, "a month ending under zero is flagged");
+
+/* ---- synced accounts: the stored due date lags one statement ----
+   Plaid-fed accounts carry the open statement period (Oct 12 –
+   Nov 11) with the PREVIOUS statement's due date (Nov 5). A statement
+   is never due before it closes, so that due date belongs to the
+   cycle before and the open cycle is due one month later. */
+const AMEX_LIVE = { id: "acc_amex_live", type: "credit", name: "Amex", mask: "4007", statementStart: "2026-10-12", statementEnd: "2026-11-11", dueDate: "2026-11-05" };
+assert.deepEqual(cycleFor(AMEX_LIVE, "2026-10-19"), { start: "2026-10-12", end: "2026-11-11", due: "2026-12-05" }, "the open cycle is due a month after the stored due date");
+assert.deepEqual(cycleFor(AMEX_LIVE, "2026-11-13"), { start: "2026-11-12", end: "2026-12-11", due: "2027-01-05" }, "the next cycle rolls the corrected due date forward");
+assert.deepEqual(cycleFor(AMEX_LIVE, "2026-09-20"), { start: "2026-09-12", end: "2026-10-11", due: "2026-11-05" }, "the stored due date belongs to the cycle before");
+
+const liveFlow = paymentFlow([
+  { date: "2026-10-19", merchant: "Affirm", amountCents: -44500, categoryId: "loan", accountId: "acc_amex_live" },
+  { date: "2026-11-04", merchant: "Affirm", amountCents: -44500, categoryId: "loan", accountId: "acc_amex_live" },
+  { date: "2026-11-13", merchant: "Affirm (iPhone)", amountCents: -25475, categoryId: "fam", accountId: "acc_amex_live" }
+], CATS, [AMEX_LIVE], "2026-11", "2027-01");
+const decBill = liveFlow.bills.find(function (b) { return b.dueDate === "2026-12-05"; });
+assert.equal(decBill.cents, 89000, "both Affirm installments land on the December Amex bill, not November's");
+assert.equal(decBill.closes, "2026-11-11", "a bill carries the day its statement closes");
+const janBill = liveFlow.bills.find(function (b) { return b.dueDate === "2027-01-05"; });
+assert.equal(janBill.cents, 25475, "the iPhone lands on the January bill");
+assert.equal(liveFlow.chargeOutByMonth["2026-11"], 69975, "charge-basis November spending: the Nov 4 and Nov 13 charges");
+assert.equal(liveFlow.months[1].outCents, 89000, "December's money out is the December bill");
+
+/* ---- planned spending still to come ---- */
+const psMonths = [
+  { month: "2026-11", incomeCents: 100000, outCents: 50000, netCents: 50000, byCategory: {} },
+  { month: "2026-12", incomeCents: 100000, outCents: 30000, netCents: 70000, byCategory: {} },
+  { month: "2027-01", incomeCents: 100000, outCents: 0, netCents: 100000, byCategory: {} }
+];
+const ps = applyPlannedSpending(psMonths, { "2026-12": 90000, "2027-01": 40000 }, { "2026-12": 25000 }, "2026-11");
+assert.equal(ps[0].outCents, 50000, "the current month stays on actuals alone");
+assert.equal(ps[1].outCents, 95000, "a future month adds the planned spending not yet spent in it");
+assert.equal(ps[1].netCents, 5000, "net is recomputed after the add-on");
+assert.equal(ps[2].outCents, 40000, "nothing spent yet: the whole plan is still to come");
+const psNone = applyPlannedSpending(psMonths, { "2026-12": 10000 }, { "2026-12": 25000 }, "2026-11");
+assert.equal(psNone[1].outCents, 30000, "the add-on never goes negative when spending already passed the plan");
 
 console.log("payments.test.mjs: all assertions passed");

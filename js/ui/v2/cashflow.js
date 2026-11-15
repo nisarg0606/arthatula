@@ -1,9 +1,9 @@
 /* Cash flow screen: income vs spending by month over a range, spending
    by category for the range, the same months re-timed by when money
    actually leaves (Payments), and the rolling 12-month forecast. */
-import { v2, api, h, clear, money, monthLabel, dayLabel, thisMonth, loadBasics, section, button, errorState, loading, drawChart, chartColors, categoryName } from "./kit.js";
+import { v2, api, h, clear, money, monthLabel, dayLabel, thisMonth, todayIso, loadBasics, section, button, errorState, loading, drawChart, chartColors, categoryName } from "./kit.js";
 import { addMonths } from "../../core/v2/money.js";
-import { paymentFlow, carryPlannedIncome, applyPlannedIncome, runningBalances, lowestBalance, fundedByPriorPaycheck } from "../../core/v2/payments.js";
+import { paymentFlow, carryPlannedIncome, applyPlannedIncome, applyPlannedSpending, runningBalances, lowestBalance, fundedByPriorPaycheck } from "../../core/v2/payments.js";
 
 let root = null;
 const range = { from: null, to: null };
@@ -108,7 +108,7 @@ function drawPayments(data, box) {
   const outTotal = months.reduce(function (s, m) { return s + m.outCents; }, 0);
   const net = inTotal - outTotal;
   const low = lowestBalance(months);
-  box.appendChild(h("p", { class: "hint", text: "Card charges are counted in the month that card's statement is due — a charge in a statement closing in early December is paid in January — not the month you spent it. Everything else stays in its own month. Income for this month onward is your plan where you have one. The balance starts from your cash today (" + money(data.cashCents, { whole: true }) + " in checking, savings and cash) and runs from " + monthLabel(thisMonth(), true) + " onward." }));
+  box.appendChild(h("p", { class: "hint", text: "Card charges are counted in the month that card's statement is due — a charge in a statement closing in early December is paid in January — not the month you spent it. Everything else stays in its own month. Income for this month onward is your plan where you have one. Months after this one also include what is left of that month's planned spending — rent, utilities and other regular charges — until the real charges post. The balance starts from your cash today (" + money(data.cashCents, { whole: true }) + " in checking, savings and cash) and runs from " + monthLabel(thisMonth(), true) + " onward." }));
   box.appendChild(h("div", { class: "v2-tiles" },
     tileOf("Money in", money(inTotal, { whole: true })),
     tileOf("Money out", money(outTotal, { whole: true })),
@@ -127,9 +127,12 @@ function drawPayments(data, box) {
   box.appendChild(data.bills.length ? h("div", { class: "table-scroll" }, h("table", { class: "v2-table" },
     h("thead", null, h("tr", null, ["Due", "Card", "Charges", "Amount", ""].map(function (x) { return h("th", { text: x }); }))),
     h("tbody", null, data.bills.map(function (b) {
+      const notes = [];
+      if (b.closes && b.closes >= todayIso()) notes.push("Still open · closes " + dayLabel(b.closes) + " · amount so far");
+      if (fundedByPriorPaycheck(b.dueDate)) notes.push("Lands right after the " + monthLabel(addMonths(b.month, -1)) + " end-of-month paycheck");
       return h("tr", null, h("td", { text: dayLabel(b.dueDate) }), h("td", { text: b.name + (b.mask ? " ··" + b.mask : "") }),
         h("td", { text: String(b.count) }), h("td", { text: money(b.cents, { whole: true }) }),
-        h("td", { class: "hint", text: fundedByPriorPaycheck(b.dueDate) ? "Lands right after the " + monthLabel(addMonths(b.month, -1)) + " end-of-month paycheck" : "" }));
+        h("td", { class: "hint", text: notes.join(" · ") }));
     })))) : h("p", { class: "hint", text: "No card bills due in this range." }));
   const rows = Object.keys(data.byCategory).map(function (id) {
     const cat = v2.categories.find(function (x) { return x.id === id; });
@@ -156,14 +159,15 @@ function loadPayments(box, fcPromise) {
     fcPromise.catch(function () { return null; })];
   return Promise.all(jobs).then(function (res) {
     const plannedRaw = {};
-    if (res[1]) res[1].months.forEach(function (m) { plannedRaw[m.month] = m.plannedIncomeCents; });
+    const plannedSpendRaw = {};
+    if (res[1]) res[1].months.forEach(function (m) { plannedRaw[m.month] = m.plannedIncomeCents; plannedSpendRaw[m.month] = m.plannedSpendingCents; });
     const idx = {};
     v2.categories.forEach(function (c) { idx[c.id] = c; });
     const flow = paymentFlow(res[0], idx, v2.accounts, payRange.from, payRange.to);
     const planned = carryPlannedIncome(plannedRaw, payRange.from, payRange.to);
     const cash = v2.accounts.filter(function (a) { return !a.hidden && (a.type === "depository" || a.type === "cash") && a.balanceCents !== null; })
       .reduce(function (s, a) { return s + a.balanceCents; }, 0);
-    const months = runningBalances(applyPlannedIncome(flow.months, planned, thisMonth()), cash, thisMonth());
+    const months = runningBalances(applyPlannedSpending(applyPlannedIncome(flow.months, planned, thisMonth()), plannedSpendRaw, flow.chargeOutByMonth, thisMonth()), cash, thisMonth());
     drawPayments({ months: months, bills: flow.bills, byCategory: flow.total.byCategory, cashCents: cash }, box);
   }).catch(function (e) { errorState(box, e); });
 }
