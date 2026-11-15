@@ -12,12 +12,12 @@ import { openCsvImport, openSimplefin } from "./bankimport.js";
 import { renderPending } from "../pending.js";
 import { paintSync } from "../sync.js";
 
-const state = { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, page: 1, list: [], total: 0 };
+const state = { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, hidden: false, page: 1, list: [], total: 0 };
 let root = null, listEl = null, countEl = null;
 
 /* Jump here from another screen with a filter already set. */
 export function showFiltered(filter) {
-  Object.assign(state, { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, page: 1 }, filter || {});
+  Object.assign(state, { q: "", accountId: "", categoryId: "", month: "", review: false, auto: false, hidden: false, page: 1 }, filter || {});
 }
 
 /* Re-read the list in place (after auto-review, from ./index.js). */
@@ -45,6 +45,7 @@ function query() {
   if (state.month) { p.set("from", state.month + "-01"); p.set("to", state.month + "-31"); }
   if (state.review) p.set("review", "1");
   if (state.auto) p.set("auto", "1");
+  if (state.hidden) p.set("hidden", "only");
   p.set("limit", String(PAGE_SIZE));
   p.set("offset", String((state.page - 1) * PAGE_SIZE));
   return "transactions?" + p.toString();
@@ -84,6 +85,7 @@ function txRow(t) {
         t.needsReview ? h("span", { class: "v2-chip warn", text: "To review" }) : null,
         t.autoReview ? h("span", { class: "v2-chip ai", text: autoLabel(t.autoReview), attrs: { title: t.autoReview.reason } }) : null,
         t.excludeReports ? h("span", { class: "v2-chip muted", text: "Not counted" }) : null,
+        t.hidden ? h("span", { class: "v2-chip muted", text: "Hidden" }) : null,
         t.tags.map(function (tag) { return h("span", { class: "v2-tag", text: "#" + tag }); }),
         t.notes ? h("span", { class: "v2-tx-note", text: t.notes }) : null)),
     h("span", { class: "v2-tx-right" },
@@ -110,11 +112,14 @@ function drawList() {
       h("span", { class: "hint", text: state.total === 1 ? "1 transaction waits for you." : state.total + " transactions wait for you." }),
       button("Mark all reviewed", markAllReviewed, "btn-primary", { id: "v2ReviewAll" })));
   }
+  if (state.hidden && state.total > 0) {
+    listEl.appendChild(h("p", { class: "hint v2-bulk", text: "These count nowhere. Open one and untick \u201cHide this transaction everywhere\u201d to bring it back." }));
+  }
   if (state.auto && state.total > 0) {
     listEl.appendChild(h("p", { class: "hint v2-bulk", text: "These were taken off To review because they match what you did before. They are counted. Open one and choose \u201cNot right\u201d if it isn\u2019t." }));
   }
   if (!state.list.length) {
-    listEl.appendChild(emptyState(state.review ? "Nothing to review — every transaction has a category." : state.auto ? "Nothing here: the AI hasn't taken anything off To review." : "No transactions match."));
+    listEl.appendChild(emptyState(state.review ? "Nothing to review — every transaction has a category." : state.auto ? "Nothing here: the AI hasn't taken anything off To review." : state.hidden ? "Nothing hidden: transactions you hide will show up here." : "No transactions match."));
     return;
   }
   let day = null, group = null;
@@ -288,12 +293,16 @@ function filters() {
   review.checked = state.review;
   const auto = h("input", { attrs: { type: "checkbox" } });
   auto.checked = state.auto;
-  /* The two are either/or: ticking one unticks the other. */
-  review.addEventListener("change", function () { state.review = review.checked; if (review.checked) { state.auto = false; auto.checked = false; } state.page = 1; load(); });
-  auto.addEventListener("change", function () { state.auto = auto.checked; if (auto.checked) { state.review = false; review.checked = false; } state.page = 1; load(); });
+  const hiddenOnly = h("input", { attrs: { type: "checkbox" } });
+  hiddenOnly.checked = state.hidden;
+  /* The three are either/or: ticking one unticks the others. */
+  review.addEventListener("change", function () { state.review = review.checked; if (review.checked) { state.auto = false; auto.checked = false; state.hidden = false; hiddenOnly.checked = false; } state.page = 1; load(); });
+  auto.addEventListener("change", function () { state.auto = auto.checked; if (auto.checked) { state.review = false; review.checked = false; state.hidden = false; hiddenOnly.checked = false; } state.page = 1; load(); });
+  hiddenOnly.addEventListener("change", function () { state.hidden = hiddenOnly.checked; if (hiddenOnly.checked) { state.review = false; review.checked = false; state.auto = false; auto.checked = false; } state.page = 1; load(); });
   return h("div", { class: "v2-filters" }, search, acct, cat, month,
     h("label", { class: "switch-label v2-check" }, review, h("span", { text: "To review only" })),
-    h("label", { class: "switch-label v2-check" }, auto, h("span", { text: "Checked by AI" })));
+    h("label", { class: "switch-label v2-check" }, auto, h("span", { text: "Checked by AI" })),
+    h("label", { class: "switch-label v2-check" }, hiddenOnly, h("span", { text: "Show hidden" })));
 }
 
 export function render(container) {
