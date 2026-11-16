@@ -1136,6 +1136,23 @@ export async function getLatestSyncRequest(db) {
 
 /* Is a sync automation paired (an unexpired sync session)? Without
    one a "Sync now" request would only wait and expire. */
+/* When bank data last arrived from any sync (the paired Plaid sync's
+   push or SimpleFIN), as an ISO time, or null. The nightly Plaid run
+   makes no sync request, so the latest request alone can look days old
+   while the data is fresh. */
+export async function lastBankSyncAt(db) {
+  await ensureTables(db);
+  const rows = await db.prepare(
+    "SELECT value FROM budget_settings WHERE key = 'bank_synced_at' " +
+    "UNION ALL SELECT value FROM v2_settings WHERE key = 'simplefin_last_sync'"
+  ).all().catch(() => db.prepare("SELECT value FROM budget_settings WHERE key = 'bank_synced_at'").all());
+  let best = null;
+  for (const r of (rows && rows.results) || []) {
+    const t = Date.parse(String(r.value || "").replace(" ", "T"));
+    if (Number.isFinite(t) && (best === null || t > best)) best = t;
+  }
+  return best === null ? null : new Date(best).toISOString();
+}
 export async function hasSyncSession(db) {
   const row = await db.prepare(
     "SELECT 1 FROM sessions WHERE kind = 'sync' AND (expires_at IS NULL OR expires_at > ?) LIMIT 1"

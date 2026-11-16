@@ -50,7 +50,7 @@
  */
 import {
   ensureTables, requireAuth, readState, listDailyExpenses, listCards,
-  getBankSnapshot, getPendingSnapshot, requestSync, getLatestSyncRequest,
+  getBankSnapshot, getPendingSnapshot, requestSync, getLatestSyncRequest, lastBankSyncAt,
   patchState, patchActual, getMerchantRules, createCard, updateCard, deleteCard,
   setBankReview, setIgnoreRules, REVIEW_KINDS
 } from "./budget.js";
@@ -226,7 +226,7 @@ const TOOLS = [
   },
   {
     name: "get_sync_status",
-    description: "The latest sync request (from Sync now or this tool): status pending/running/done/failed, timestamps, and the run summary when finished.",
+    description: "The latest sync request (from Sync now or this tool): status pending/running/done/failed, timestamps, and the run summary when finished. The scheduled nightly sync makes no request, so an old request does not mean stale data: lastBankSyncAt is when bank data last arrived from any sync. Check it before asking for a new sync.",
     inputSchema: NO_ARGS
   },
   {
@@ -947,7 +947,7 @@ async function callTool(db, env, session, name, args) {
       return toolOk({ request: r.request, created: r.created });
     }
     case "get_sync_status":
-      return toolOk({ request: await getLatestSyncRequest(db) });
+      return toolOk({ request: await getLatestSyncRequest(db), lastBankSyncAt: await lastBankSyncAt(db) });
     case "list_accounts": {
       const accounts = await loadAccounts(await v2Scope(db, session));
       return toolOk({ accounts, netWorth: netWorthNow(accounts) });

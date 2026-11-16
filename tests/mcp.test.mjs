@@ -250,6 +250,7 @@ const okText = (result) => JSON.parse(result.content[0].text);
 
   const status0 = await call(env, mcpToken, "get_sync_status");
   assert.equal(status0.structuredContent.request, null, "no sync requests yet");
+  assert.ok("lastBankSyncAt" in status0.structuredContent, "sync status says when bank data last arrived");
   const req1 = await call(env, mcpToken, "request_sync");
   assert.equal(req1.structuredContent.created, true);
   assert.equal(req1.structuredContent.request.status, "pending");
