@@ -233,4 +233,52 @@ assert.equal(stuck.status, "failed", "a run 10+ minutes past its claim expires")
   assert.equal(syncResultExpired(null, now), false);
 }
 
+/* ---------- 9. Sync on open: the server decides, so opening often is cheap */
+{
+  const { autoSync, AUTO_SYNC_FRESH_MS } = await import("../functions/api/budget.js");
+  const envA = { DB: new FakeD1() };
+  const dev = await setupTestAuth(envA);
+  const ctxA = authedCtx(envA, dev);
+  const autoPost = async () => (await syncRequestPost(ctxA({ auto: true }, "POST", REQUESTS))).json();
+
+  /* Nothing paired: skipped, and no request is filed. */
+  assert.equal((await autoPost()).skipped, "not-paired");
+  assert.equal((await (await syncLatestGet(ctxA(undefined, "GET", LATEST))).json()).request, null);
+
+  const syncTok = await pairedSyncToken(envA, dev);
+  /* Paired, no bank data yet, no request: a sync is queued. */
+  let out = await autoPost();
+  assert.equal(out.status, "pending");
+  const firstId = out.id;
+  /* Opening again while it waits hands back the same request. */
+  assert.equal((await autoPost()).id, firstId);
+  /* It finishes; a request filed under 30 minutes ago means no new one. */
+  const claimCtx = makeCtx(envA, undefined, "GET", CLAIM, authHeaders(syncTok));
+  await syncClaimGet(claimCtx);
+  await syncCompletePost(completeCtx(envA, syncTok, firstId, { status: "failed", result: { error: "x" } }));
+  assert.equal((await autoPost()).skipped, "recent-request", "a failing sync isn't retried on every open");
+
+  /* Once that request is old, stale bank data queues a new sync... */
+  const old = new Date(Date.now() - AUTO_SYNC_FRESH_MS - 60e3).toISOString().slice(0, 19).replace("T", " ");
+  await envA.DB.prepare("UPDATE sync_requests SET requested_at = ?").bind(old).run();
+  await envA.DB.prepare("INSERT INTO budget_settings (key, value) VALUES ('bank_synced_at', ?)").bind(new Date(Date.now() - 2 * 3600e3).toISOString()).run();
+  out = await autoPost();
+  assert.equal(out.status, "pending", "two-hour-old bank data syncs");
+  assert.notEqual(out.id, firstId);
+  await syncClaimGet(claimCtx);
+  await syncCompletePost(completeCtx(envA, syncTok, out.id, { status: "done", result: { addedCount: 0 } }));
+  await envA.DB.prepare("UPDATE sync_requests SET requested_at = ?").bind(old).run();
+
+  /* ...and fresh bank data skips it. */
+  await envA.DB.prepare("UPDATE budget_settings SET value = ? WHERE key = 'bank_synced_at'").bind(new Date(Date.now() - 5 * 60e3).toISOString()).run();
+  out = await autoPost();
+  assert.equal(out.skipped, "fresh");
+  assert.ok(out.lastBankSyncAt);
+  assert.equal((await autoSync(envA.DB, Date.now() + AUTO_SYNC_FRESH_MS)).request.status, "pending", "fresh only for 30 minutes");
+
+  /* The Sync now button still always queues, whatever the data's age. */
+  const manual = await syncRequestPost(ctxA({}, "POST", REQUESTS));
+  assert.ok(manual.status === 200 || manual.status === 201);
+}
+
 console.log("sync.test.mjs: all assertions passed");
