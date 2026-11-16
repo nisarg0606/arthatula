@@ -483,6 +483,12 @@ All calls carry `Authorization: Bearer <sync token>`. Amounts are dollars.
   (`GET /api/sync-requests/latest`); an active request younger than
   10 minutes is returned instead of duplicated, and one older than
   that is expired to `failed` so the button can never wedge.
+- Sync on open: each time the app opens or comes back to the screen it
+  sends `POST /api/sync-requests` `{ auto: true }` in the background.
+  The server queues a sync only when a sync automation is paired, bank
+  data is over 30 minutes old and no request was filed in the last 30
+  minutes; otherwise it answers `{ skipped }`. Plaid keys stay with the
+  sync engine; the app only files the request.
 - Don't import as expenses: transfers between the owner's own accounts,
   card bill payments, refunds or money in. The app pairs own-account
   transfers itself and asks the owner about money to or from people.

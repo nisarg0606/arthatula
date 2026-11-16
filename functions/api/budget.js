@@ -1160,6 +1160,27 @@ export async function hasSyncSession(db) {
   return !!row;
 }
 
+/* Sync on open: the app asks for a sync each time it opens, and this
+   decides whether one is worth running, so opening the app often never
+   hammers Plaid. It skips when no sync automation is paired (the request
+   would only expire), when bank data arrived within AUTO_SYNC_FRESH_MS,
+   or when any request was filed within that window (a failing sync is
+   not retried on every open). An active request is handed back as-is.
+   -> { request, created } or { skipped, lastBankSyncAt } */
+export const AUTO_SYNC_FRESH_MS = 30 * 60 * 1000;
+export async function autoSync(db, now = Date.now()) {
+  await ensureTables(db);
+  const last = await lastBankSyncAt(db);
+  if (!(await hasSyncSession(db))) return { skipped: "not-paired", lastBankSyncAt: last };
+  if (last && now - Date.parse(last) < AUTO_SYNC_FRESH_MS) return { skipped: "fresh", lastBankSyncAt: last };
+  const latest = await getLatestSyncRequest(db);
+  if (latest && (latest.status === "pending" || latest.status === "running")) return { request: latest, created: false };
+  if (latest && now - parseSqlTime(latest.requestedAt) < AUTO_SYNC_FRESH_MS) {
+    return { skipped: "recent-request", lastBankSyncAt: last };
+  }
+  return requestSync(db);
+}
+
 /* Atomically claim the oldest pending request for the sync
    automation: the conditional UPDATE is the claim — exactly one
    poller can turn a given row pending -> running. -> request | null */

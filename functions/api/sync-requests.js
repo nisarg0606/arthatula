@@ -14,8 +14,14 @@
  *        pending or running request younger than 10 minutes already
  *        exists it is returned as-is (200) instead of inserting a
  *        duplicate; a fresh request answers 201.
+ *   POST /api/sync-requests { auto: true } -> { id, status } or
+ *        { skipped, lastBankSyncAt } (200)
+ *        Sent by the app when it opens. The server decides whether a
+ *        sync is worth running (see autoSync in ./budget.js): it skips
+ *        when bank data is under 30 minutes old, when a request was
+ *        filed in the last 30 minutes, or when nothing is paired.
  */
-import { ensureTables, requestSync, requireAuth } from "./budget.js";
+import { autoSync, ensureTables, requestSync, requireAuth } from "./budget.js";
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -34,6 +40,12 @@ export async function onRequestPost(context) {
     const auth = await requireAuth(context.env.DB, context.request);
     if (auth.response) return auth.response;
     await ensureTables(context.env.DB);
+    const body = await context.request.json().catch(() => null);
+    if (body && body.auto === true) {
+      const out = await autoSync(context.env.DB);
+      if (out.skipped) return json({ skipped: out.skipped, lastBankSyncAt: out.lastBankSyncAt });
+      return json({ id: out.request.id, status: out.request.status }, out.created ? 201 : 200);
+    }
     const { request, created } = await requestSync(context.env.DB);
     return json({ id: request.id, status: request.status }, created ? 201 : 200);
   } catch (err) {

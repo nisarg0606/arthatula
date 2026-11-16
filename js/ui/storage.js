@@ -5,7 +5,7 @@ import { loadBank } from "./bank.js";
 import { app, els } from "./context.js";
 import { render } from "./dashboard.js";
 import { loadPending } from "./pending.js";
-import { checkSyncStatus } from "./sync.js";
+import { autoSyncOnOpen, checkSyncStatus } from "./sync.js";
 import { refreshGeminiStatus } from "./settings.js";
 import { setSignedIn, onShow as onShowV2 } from "./v2/index.js";
 
@@ -125,6 +125,7 @@ export function load() {
     checkSyncStatus(true);
     refreshGeminiStatus();
     render();
+    autoSyncOnOpen(); /* background Plaid sync when the data is old */
   }).catch(function () {
     var local = loadLocal();
     app.state = local || blankState();

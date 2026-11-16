@@ -60,8 +60,24 @@ async function pauseClock(page) {
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
 }
 
+/* The app asks for a background sync each time it opens. Tests share
+   one database, so these asks would file requests that later tests
+   trip over: answer them "skipped" here. The sync-on-open test below
+   checks the ask itself. */
+async function skipAutoSync(page, seen) {
+  await page.route("**/api/sync-requests", async (route) => {
+    const body = route.request().postDataJSON && route.request().postDataJSON();
+    if (route.request().method() === "POST" && body && body.auto === true) {
+      if (seen) seen.push(body);
+      return route.fulfill({ json: { skipped: "test" } });
+    }
+    return route.continue();
+  });
+}
+
 test.beforeEach(async ({ page, request }) => {
   await signIn(page, request);
+  await skipAutoSync(page);
   await page.goto("/");
   await expect(page.locator("#authGate")).toBeHidden();
 });
@@ -410,6 +426,19 @@ test("add a note to an expense; it stays after a reload and shows in the popup",
   await page.locator("#doughnutChart").scrollIntoViewIfNeeded();
   await page.locator("#doughnutChart").click({ position: box });
   await expect(page.locator("#txDialog")).toContainText(note);
+});
+
+test("opening the app asks for a background sync, once per open", async ({ page }) => {
+  const seen = [];
+  await page.unroute("**/api/sync-requests");
+  await skipAutoSync(page, seen);
+  await page.reload();
+  await expect(page.locator("#authGate")).toBeHidden();
+  await expect.poll(() => seen.length).toBe(1);
+  /* Coming back to the tab within 5 minutes doesn't ask again. */
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.waitForTimeout(500);
+  expect(seen.length).toBe(1);
 });
 
 test("Sync now still updates when each status check is slow to answer", async ({ page, request }, info) => {

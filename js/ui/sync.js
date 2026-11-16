@@ -149,10 +149,37 @@ function onSyncNow() {
   });
 }
 
+/* Sync on open: each time the app opens or comes back to the screen,
+   ask the server for a sync in the background. The server skips it
+   when bank data is under 30 minutes old (see autoSync in
+   functions/api/budget.js), so nothing here blocks the first screen
+   and opening the app often costs one small request. This page also
+   waits 5 minutes between asks, so switching tabs doesn't send one. */
+var AUTO_SYNC_GAP_MS = 5 * 60 * 1000;
+var lastAutoSyncAsk = 0;
+export function autoSyncOnOpen() {
+  if (app.mode !== "database") return;
+  if (Date.now() - lastAutoSyncAsk < AUTO_SYNC_GAP_MS) return;
+  lastAutoSyncAsk = Date.now();
+  apiFetch("/api/sync-requests", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ auto: true })
+  }).then(function (res) {
+    return res.ok ? res.json() : null;
+  }).then(function (data) {
+    if (!data || data.skipped || !data.id) return;
+    syncWasActive = true;
+    startSyncPolling();
+    checkSyncStatus(false);
+  }).catch(function () { /* the next open tries again */ });
+}
+
 /* Wires up this part of the app; main.js calls every init() in order.
    Delegated, so rows drawn later (the Transactions screen) work too. */
 export function init() {
   document.addEventListener("click", function (e) {
     if (e.target.closest && e.target.closest(".sync-btn")) onSyncNow();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) autoSyncOnOpen();
   });
 }
