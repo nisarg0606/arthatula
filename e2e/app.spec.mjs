@@ -184,6 +184,11 @@ test("every screen works without a script error", async ({ page }, info) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  /* Let the first load's background requests (auto-review, SimpleFIN)
+     finish first: a reload cancels any still in flight, and WebKit logs
+     each cancelled fetch as a console error ("... due to access control
+     checks"), which is the test racing the page, not a script error. */
+  await page.waitForLoadState("networkidle");
   await page.reload();
   await expect(page.locator("#authGate")).toBeHidden();
 
