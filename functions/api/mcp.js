@@ -79,6 +79,7 @@ import { status as demoStatus } from "./v2/demo.js";
 import { getAiConfig } from "./_ai.js";
 import { importRows, csvIds } from "./_v2import.js";
 import { netWorthNow } from "./v2/accounts.js";
+import { mergeAccounts } from "./_v2merge.js";
 import { FEEDBACK_KINDS, FEEDBACK_REPO, TITLE_MAX, DETAILS_MAX, scrub, feedbackUrl } from "../../js/core/feedback.js";
 import { monthView } from "./v2/budgets.js";
 
@@ -434,6 +435,16 @@ const TOOLS = [
       type: "object",
       properties: { id: { type: "string" } },
       required: ["id"],
+      additionalProperties: false
+    }
+  },
+  {
+    name: "merge_accounts",
+    description: "Merge one money-model account into another of the same type (the repair for a bank reconnect that minted a duplicate account): transactions, holdings, balance snapshots and goals move to the target; rows the target already has (same date, amount and payee) are deleted from the source instead of moved; the source account is then deleted. Hand-added transactions always move.",
+    inputSchema: {
+      type: "object",
+      properties: { fromId: { type: "string" }, toId: { type: "string" } },
+      required: ["fromId", "toId"],
       additionalProperties: false
     }
   },
@@ -1162,6 +1173,10 @@ async function callTool(db, env, session, name, args) {
         ]);
         return { deleted: row.id };
       });
+    }
+    case "merge_accounts": {
+      const s = await v2Scope(db, session);
+      return attempt(async () => mergeAccounts(s, String(args.fromId || ""), String(args.toId || "")));
     }
     case "add_transaction": {
       const s = await v2Scope(db, session);
