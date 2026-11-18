@@ -246,6 +246,18 @@ worth knowing:
 - **`delete_account`** — Delete a manual account by `id`. Synced
   accounts can't be deleted (hide them instead). Its transactions are
   kept, unlinked.
+- **`merge_accounts`** — Merge `fromId` into `toId` (same type): its
+  transactions, holdings, balance snapshots and goals move over, rows
+  the target already has are dropped, and the source is deleted.
+- **`repair_relinked_accounts`** — One-time repair after a bank was
+  linked again from scratch in Plaid and every account came in twice.
+  Without `apply` it is a dry run that lists what it would fold
+  together; with `apply: true` it folds each older copy (same bank,
+  last 4 digits and type) into the newest, on the Bank tab and in the
+  money model, keeping history, review marks, expense links and card
+  statement/due dates. Look-alike accounts that are both still syncing
+  are reported under `ambiguous` and left alone. Running it again
+  finds nothing to do.
 - **`get_investments`** — Investment accounts with day/month changes,
   the total value series, and current holdings (quantity, price,
   value, gain/loss vs. cost basis).

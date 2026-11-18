@@ -137,7 +137,7 @@ const okText = (result) => JSON.parse(result.content[0].text);
     "get_reports", "get_settings", "get_splitwise", "get_sync_status",
     "import_transactions", "list_accounts", "list_cards", "list_categories",
     "list_expenses", "list_goals", "list_pending_charges", "list_recurring",
-    "list_rules", "list_transactions", "merge_accounts", "request_sync", "resolve_recurring_suggestion",
+    "list_rules", "list_transactions", "merge_accounts", "repair_relinked_accounts", "request_sync", "resolve_recurring_suggestion",
     "review_all_transactions", "review_bank_transaction", "run_auto_review", "send_feedback",
     "set_actuals", "set_budget", "set_ignore_rules", "set_layout",
     "set_merchant_rules", "update_account", "update_card", "update_category",
