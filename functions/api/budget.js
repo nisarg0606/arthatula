@@ -1086,9 +1086,14 @@ function rowToSyncRequest(r) {
   };
 }
 
+/* A request the automation never picked up (the VM or its poller is
+   down) or never finished used to turn to failed without a word, so a
+   stopped sync looked exactly like a quiet day. It now says so in the
+   bell and on Telegram, once per expiry: only rows this UPDATE changed
+   count, and the next call finds nothing left to expire. */
 async function expireStaleSyncRequests(db) {
   const cutoff = sqlTime(new Date(Date.now() - SYNC_REQUEST_ACTIVE_MS));
-  await db.prepare(
+  const res = await db.prepare(
     "UPDATE sync_requests SET status = 'failed', " +
     "result = ?, finished_at = ? " +
     "WHERE (status = 'pending' AND requested_at < ?) " +
@@ -1099,6 +1104,11 @@ async function expireStaleSyncRequests(db) {
     cutoff,
     cutoff
   ).run();
+  if (res && res.meta && res.meta.changes) {
+    await notify(db, "sync", "Sync didn't run",
+      "A sync request waited " + Math.round(SYNC_REQUEST_ACTIVE_MS / 60000) + " minutes and the sync automation never finished it. " +
+      "Check that the computer running the Plaid sync is on and its poller is running.");
+  }
 }
 
 /* Queue a sync for a device session, or return the active one.
@@ -1142,16 +1152,48 @@ export async function getLatestSyncRequest(db) {
    while the data is fresh. */
 export async function lastBankSyncAt(db) {
   await ensureTables(db);
-  const rows = await db.prepare(
-    "SELECT value FROM budget_settings WHERE key = 'bank_synced_at' " +
-    "UNION ALL SELECT value FROM v2_settings WHERE key = 'simplefin_last_sync'"
-  ).all().catch(() => db.prepare("SELECT value FROM budget_settings WHERE key = 'bank_synced_at'").all());
+  /* Each source on its own, so one missing table or row can't hide the
+     others. bank_accounts' updated_at is rewritten with the push's stamp
+     on every Plaid push, so it still answers when the bank_synced_at
+     setting is absent (it was null in production while the snapshot
+     showed a push). */
+  const sources = [
+    "SELECT value AS v FROM budget_settings WHERE key = 'bank_synced_at'",
+    "SELECT MAX(updated_at) AS v FROM bank_accounts",
+    "SELECT value AS v FROM v2_settings WHERE key = 'simplefin_last_sync'"
+  ];
+  const lists = await Promise.all(sources.map((q) =>
+    db.prepare(q).all().then((r) => (r && r.results) || []).catch(() => [])));
   let best = null;
-  for (const r of (rows && rows.results) || []) {
-    const t = Date.parse(String(r.value || "").replace(" ", "T"));
+  for (const r of [].concat(...lists)) {
+    const t = Date.parse(String((r && r.v) || "").replace(" ", "T"));
     if (Number.isFinite(t) && (best === null || t > best)) best = t;
   }
   return best === null ? null : new Date(best).toISOString();
+}
+
+/* Stopped-sync watchdog. The paired Plaid sync runs every night, so
+   bank data older than SYNC_STALE_MS means it has stopped, and a
+   stopped sync sends nothing: no imports, no pending charges and no
+   failure alerts (those come from the sync itself). This raises one
+   alert in the bell and on Telegram per stale stretch: the bank-data
+   time it alerted for is kept, so it stays quiet until new data
+   arrives and goes stale again. Runs when the app opens (autoSync) and
+   from the Worker's cron. Only with a paired Plaid sync: SimpleFIN
+   alone pulls on weekdays, so a weekend would look stale.
+   -> { stale, lastBankSyncAt, alerted } */
+export const SYNC_STALE_MS = 26 * 60 * 60 * 1000;
+export async function checkSyncHealth(db, now = Date.now()) {
+  const last = await lastBankSyncAt(db);
+  if (!last || now - Date.parse(last) < SYNC_STALE_MS) return { stale: false, lastBankSyncAt: last, alerted: false };
+  if (!(await hasSyncSession(db))) return { stale: false, lastBankSyncAt: last, alerted: false };
+  if ((await getSetting(db, "sync_stale_alerted_for")) === last) return { stale: true, lastBankSyncAt: last, alerted: false };
+  await setSetting(db, "sync_stale_alerted_for", last);
+  const hours = Math.floor((now - Date.parse(last)) / 3600000);
+  await notify(db, "sync", "No bank data for " + (hours >= 48 ? Math.floor(hours / 24) + " days" : hours + " hours"),
+    "The Plaid sync usually runs every night, but nothing has arrived since then, so new transactions won't show up or notify you. " +
+    "Check that the computer running the sync is on and the sync and its poller are running.");
+  return { stale: true, lastBankSyncAt: last, alerted: true };
 }
 export async function hasSyncSession(db) {
   const row = await db.prepare(
@@ -1172,6 +1214,7 @@ export async function autoSync(db, now = Date.now()) {
   await ensureTables(db);
   const last = await lastBankSyncAt(db);
   if (!(await hasSyncSession(db))) return { skipped: "not-paired", lastBankSyncAt: last };
+  await checkSyncHealth(db, now).catch(() => { /* an alert must not block the sync */ });
   if (last && now - Date.parse(last) < AUTO_SYNC_FRESH_MS) return { skipped: "fresh", lastBankSyncAt: last };
   const latest = await getLatestSyncRequest(db);
   if (latest && (latest.status === "pending" || latest.status === "running")) return { request: latest, created: false };

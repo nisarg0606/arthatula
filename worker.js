@@ -176,6 +176,6 @@ export default {
     ctx.waitUntil(ensureV2(env.DB).then(() => Promise.all([
       ensureMarket(s, env),
       getSimplefinUrl(env.DB).then((url) => url && syncSimplefin(s, env.DB)).catch(() => { /* status shows the error */ })
-    ])));
+    ])).then(() => budget.checkSyncHealth(env.DB)).catch(() => { /* best-effort: a stopped-sync alert */ }));
   }
 };

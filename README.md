@@ -482,7 +482,13 @@ All calls carry `Authorization: Bearer <sync token>`. Amounts are dollars.
   (`POST /api/sync-requests`) and read the newest one
   (`GET /api/sync-requests/latest`); an active request younger than
   10 minutes is returned instead of duplicated, and one older than
-  that is expired to `failed` so the button can never wedge.
+  that is expired to `failed` so the button can never wedge. That
+  expiry also posts a "Sync didn't run" alert to the bell and Telegram.
+- Stopped-sync alert: with a sync automation paired, bank data older
+  than 26 hours raises one "No bank data for …" alert in the bell and
+  on Telegram (checked when the app opens and on the Worker's cron),
+  then stays quiet until new data arrives. A stopped sync sends nothing
+  else, so without this a dead VM looked like a quiet day.
 - Sync on open: each time the app opens or comes back to the screen it
   sends `POST /api/sync-requests` `{ auto: true }` in the background.
   The server queues a sync only when a sync automation is paired, bank
