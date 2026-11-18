@@ -24,6 +24,7 @@
  */
 import { MONEY_FIELDS, readState } from "./budget.js";
 import { OWNER_ID, ensureV2, scope, newId } from "./_v2db.js";
+import { identityKeyOf, namesCollide, planRekeys } from "./_v2identity.js";
 import { loadCategories, loadTransactions, loadRules, categoryIndex } from "./_v2store.js";
 import { summarize, monthOf, applyRules, daysBetween } from "../../js/core/v2/money.js";
 
@@ -82,8 +83,51 @@ export async function mirrorV1(db, opts) {
   /* ---- accounts ---- */
   const bankAccounts = ((await db.prepare("SELECT * FROM bank_accounts").all()).results) || [];
   const cards = ((await db.prepare("SELECT * FROM credit_cards").all()).results) || [];
+  /* A bank reconnect re-issues the feed's account ids, so the classic
+     snapshot can hold two generations of the same real account. Only
+     the newest generation (by the snapshot's own updated_at) is the
+     account; older generations resolve to it everywhere below, so
+     the mirror never mints a second v2 account for one real account
+     and never mirrors the same bank transaction twice. */
+  const acctTypeOf = (a) => (/credit/i.test(a.subtype || "") ? "credit" : "depository");
+  const winnerOfPlaidId = {};
+  {
+    const groups = new Map();
+    for (const a of bankAccounts) {
+      const k = identityKeyOf({ institution: a.institution, mask: a.mask, type: acctTypeOf(a) });
+      if (!k) continue;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(a);
+    }
+    for (const rows of groups.values()) {
+      const ids = [...new Set(rows.map((r) => r.plaid_account_id))];
+      if (ids.length < 2) continue;
+      let winner = rows[0];
+      for (const r of rows) if (String(r.updated_at || "") > String(winner.updated_at || "")) winner = r;
+      for (const id of ids) if (id !== winner.plaid_account_id) winnerOfPlaidId[id] = winner.plaid_account_id;
+    }
+  }
+  const winnerIdOf = (plaidId) => winnerOfPlaidId[plaidId] || plaidId;
   const acctStmts = [];
+  /* If the v2 account for a group still carries an older generation's
+     feed id, re-key it to the winning generation before the upserts,
+     so the upsert lands on the existing account. */
+  {
+    const existing = await s.all("SELECT id, external_id, institution, mask, type FROM accounts WHERE owner_id = ?1 AND source = 'plaid' AND external_id IS NOT NULL");
+    const seen = new Set();
+    const pushed = [];
+    for (const a of bankAccounts) {
+      const wid = winnerIdOf(a.plaid_account_id);
+      if (seen.has(wid)) continue;
+      seen.add(wid);
+      pushed.push({ ext: "plaid:" + wid, institution: a.institution || "", mask: a.mask || "", type: acctTypeOf(a) });
+    }
+    for (const rk of planRekeys(existing, pushed)) {
+      acctStmts.push(["UPDATE accounts SET external_id = ?3, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", rk.accountId, rk.toExt]);
+    }
+  }
   for (const a of bankAccounts) {
+    if (winnerOfPlaidId[a.plaid_account_id]) continue; /* an older generation of another row */
     const isCard = /credit/i.test(a.subtype || "");
     acctStmts.push([
       "INSERT INTO accounts (id, owner_id, external_id, name, institution, type, subtype, mask, balance_cents, available_cents, balance_at, source) " +
@@ -196,7 +240,7 @@ export async function mirrorV1(db, opts) {
   (((await db.prepare("SELECT plaid_transaction_id AS id, kind FROM bank_tx_review").all()).results) || [])
     .forEach((r) => { reviews[r.id] = r.kind; });
   const bankAcctOf = {};
-  bankTx.forEach((t) => { bankAcctOf[t.plaid_transaction_id] = t.account_id; });
+  bankTx.forEach((t) => { bankAcctOf[t.plaid_transaction_id] = winnerIdOf(t.account_id); });
   const linked = {};
   const desired = [];
   for (const e of state.dailyExpenses) {
@@ -237,7 +281,7 @@ export async function mirrorV1(db, opts) {
     outflowsByAmount.get(t.amount_cents).push(t);
   }
   const pairsWithOwnOutflow = (inflow) => (outflowsByAmount.get(-inflow.amount_cents) || []).some((o) =>
-    o.account_id !== inflow.account_id && Math.abs(daysBetween(o.date, inflow.date)) <= 3);
+    winnerIdOf(o.account_id) !== winnerIdOf(inflow.account_id) && Math.abs(daysBetween(o.date, inflow.date)) <= 3);
   const SELF_MOVE_NAME = /zelle payment from nisarg|requested transfer|internal transfer|online transfer|internet transfer|acct transfer|account transfer|xfer|funds transfer|americanexpress transfer|external transfer|ext trnsfr/i;
   const P2P_NAME = /zelle payment from|venmo|cash app/i;
   /* Is this unlinked bank inflow income? Only asked in months whose
@@ -259,9 +303,35 @@ export async function mirrorV1(db, opts) {
     return P2P_NAME.test(name);
   };
 
+  /* The same real bank transaction can sit in the snapshot under two
+     feed ids (one per account generation). Cluster those copies and
+     mirror only one — the winning generation's — so nothing counts
+     twice; a cluster an expense already covers mirrors not at all.
+     Copies the mirror wrote for the losing generation in earlier
+     runs fall out of `wanted` below and are deleted as stale. */
+  const emittedBankTx = [];
+  {
+    const clusters = new Map();
+    for (const t of bankTx) {
+      if (t.pending) continue;
+      const k = winnerIdOf(t.account_id) + "|" + t.date + "|" + t.amount_cents;
+      if (!clusters.has(k)) clusters.set(k, []);
+      clusters.get(k).push(t);
+    }
+    for (const members of clusters.values()) {
+      const groups = [];
+      for (const t of members) {
+        const g = groups.find((x) => namesCollide(x[0].name, t.name));
+        if (g) g.push(t); else groups.push([t]);
+      }
+      for (const g of groups) {
+        if (g.some((t) => linked[t.plaid_transaction_id])) continue;
+        emittedBankTx.push(g.find((t) => t.account_id === winnerIdOf(t.account_id)) || g[0]);
+      }
+    }
+  }
   const reviewedIncome = {};
-  for (const t of bankTx) {
-    if (t.pending || linked[t.plaid_transaction_id]) continue;
+  for (const t of emittedBankTx) {
     const kind = reviews[t.plaid_transaction_id] || null;
     const amount = -t.amount_cents;
     if (kind === "income") reviewedIncome[monthOf(t.date)] = (reviewedIncome[monthOf(t.date)] || 0) + amount;
@@ -277,7 +347,7 @@ export async function mirrorV1(db, opts) {
       ext: "bank:" + t.plaid_transaction_id, source: "v1bank", date: t.date, merchant: t.name, description: t.name,
       amount: amount, share: null,
       categoryId: kind === "income" ? cat("Other income") : kind === "repayment" ? cat("Repayment") : defaultCat,
-      accountId: acctByExt["plaid:" + t.account_id] || null, notes: "",
+      accountId: acctByExt["plaid:" + winnerIdOf(t.account_id)] || null, notes: "",
       pending: 0, hidden: kind === "ignore" ? 1 : 0, exclude: 0, review: kind ? 0 : 1, v1: null
     });
   }

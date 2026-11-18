@@ -19,6 +19,7 @@
  */
 import { handleV2, HttpError, bodyOf } from "../_v2http.js";
 import { newId } from "../_v2db.js";
+import { planRekeys } from "../_v2identity.js";
 import { ACCOUNT_TYPES } from "../../../js/core/v2/money.js";
 
 const CAP = 100;
@@ -60,10 +61,26 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
   const b = await bodyOf(request);
   if (!Array.isArray(b.accounts)) throw new HttpError(400, "accounts must be a list.");
   const asOf = typeof b.asOf === "string" && /^\d{4}-\d{2}-\d{2}/.test(b.asOf) ? b.asOf.slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const valid = b.accounts.slice(0, CAP).filter((a) => a && typeof a === "object" && str(a.id, 200));
+  /* A reconnect re-issues the feed's account ids. Recognise the same
+     real account by identity (institution + mask + type) and re-key
+     its existing row to the new id, so this push updates that account
+     instead of minting a duplicate that net worth would count too. */
+  const existing = await s.all("SELECT id, external_id, institution, mask, type FROM accounts WHERE owner_id = ?1 AND source = 'plaid' AND external_id IS NOT NULL");
+  const rekeys = planRekeys(existing, valid.map((a) => ({
+    ext: "plaid:" + str(a.id, 200),
+    institution: str(a.institution, 200),
+    mask: str(a.mask, 20),
+    type: ACCOUNT_TYPES.indexOf(a.type) !== -1 ? a.type : "other"
+  })));
+  const rekeyMap = {};
   const stmts = [];
+  for (const rk of rekeys) {
+    rekeyMap[rk.fromExt] = rk.toExt;
+    stmts.push(["UPDATE accounts SET external_id = ?3, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", rk.accountId, rk.toExt]);
+  }
   let n = 0;
-  for (const a of b.accounts.slice(0, CAP)) {
-    if (!a || typeof a !== "object" || !str(a.id, 200)) continue;
+  for (const a of valid) {
     stmts.push(...accountStmts("plaid:" + str(a.id, 200), a, asOf, "plaid"));
     n++;
   }
@@ -92,10 +109,15 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
       ]);
       holdingsCount++;
     }
-    const stored = await s.all("SELECT a.external_id AS ext, h.security_id AS sec FROM holdings h JOIN accounts a ON a.id = h.account_id WHERE h.owner_id = ?1 AND a.owner_id = ?1");
+    const stored = await s.all("SELECT a.id AS account_id, a.external_id AS ext, h.security_id AS sec FROM holdings h JOIN accounts a ON a.id = h.account_id WHERE h.owner_id = ?1 AND a.owner_id = ?1");
     for (const r of stored) {
-      if (pushedExts.indexOf(r.ext) === -1 || pushed.has(r.ext + "|" + r.sec)) continue;
-      stmts.push(["DELETE FROM holdings WHERE owner_id = ?1 AND security_id = ?3 AND account_id IN (SELECT id FROM accounts WHERE owner_id = ?1 AND external_id = ?2)", r.ext, r.sec]);
+      /* Holdings of an account re-keyed above still belong to a pushed
+         account — judge them by their post-rekey id, and delete by
+         account id so the re-key (earlier in this batch) can't
+         orphan the delete. */
+      const effExt = rekeyMap[r.ext] || r.ext;
+      if (pushedExts.indexOf(effExt) === -1 || pushed.has(effExt + "|" + r.sec)) continue;
+      stmts.push(["DELETE FROM holdings WHERE owner_id = ?1 AND account_id = ?2 AND security_id = ?3", r.account_id, r.sec]);
     }
   }
   await s.batch(stmts);
