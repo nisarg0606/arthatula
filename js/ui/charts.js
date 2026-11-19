@@ -131,7 +131,10 @@ export function hideFallback(canvasEl, fallbackEl) {
   if (fallbackEl) fallbackEl.hidden = true;
 }
 
-export const DOUGHNUT_COLORS = ["#14b8a6", "#8b5cf6", "#f59e0b", "#f43f5e", "#3b82f6", "#10b981", "#ec4899", "#06b6d4", "#a855f7", "#f97316", "#84cc16", "#71717a", "#0ea5e9"];
+/* One colour per daily category, in DAILY_CATEGORIES order (keep the
+   list at least as long, or two categories share a colour and read as
+   one in the doughnut). */
+export const DOUGHNUT_COLORS = ["#14b8a6", "#8b5cf6", "#f59e0b", "#f43f5e", "#3b82f6", "#10b981", "#ec4899", "#06b6d4", "#a855f7", "#f97316", "#84cc16", "#71717a", "#0ea5e9", "#eab308", "#94a3b8"];
 
 export function renderCharts(cmp) {
   var labels = ["Start"].concat(MONTHS.map(function (m) { return m.label; }));
