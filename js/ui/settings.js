@@ -2,6 +2,7 @@
    provider's status from GET /api/settings (its "ai" object). */
 import { app, els } from "./context.js";
 import { apiFetch } from "./storage.js";
+import { openSimplefin } from "./v2/bankimport.js";
 
 /* ================= AI provider settings ================= */
 
@@ -132,4 +133,6 @@ export function init() {
         .catch(function () { alert("Could not clear — settings need the database (Database mode)."); });
     });
   }
+  var sfBtn = document.getElementById("simplefinOpenBtn");
+  if (sfBtn) sfBtn.addEventListener("click", function () { openSimplefin(); });
 }
