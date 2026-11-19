@@ -44,6 +44,8 @@ state.dailyExpenses.push({ id: 9, date: "2026-11-05", description: "Lunch", amou
 assert.deepEqual(app.reviewQueue(state, bank).map((t) => t.id), ["in-2"], "linked rows are done");
 bank = { transactions: txs, reviews: { "in-2": "repayment" } };
 assert.deepEqual(app.reviewQueue(state, bank), [], "reviewed rows are done");
+assert.deepEqual(app.reviewQueue(state, { transactions: [{ id: "cy", accountId: "A", date: "2026-11-09", name: "CYBRID-CROBO.MON F4867FCB", amount: 1592.53, pfc: "TRANSFER_OUT" }], reviews: {} }), [],
+  "sends to India are counted on their own, never logged as an expense");
 
 // 3. Owed to me: the non-share part of shared expenses minus repayments.
 state.dailyExpenses.push(

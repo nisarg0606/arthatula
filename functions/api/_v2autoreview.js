@@ -9,7 +9,8 @@
  *                 Gemini" with the reason.
  *   "duplicate" — the same amount is already in your daily log within a
  *                 few days, so it is already counted there: it leaves the
- *                 list and keeps its current (not counted) category.
+ *                 list and is hidden so it isn't counted twice ("Not
+ *                 right" brings it back).
  *   "ask"       — anything new or unclear stays on To review for you.
  *
  * Gemini only ever picks from the categories of the similar past rows it
@@ -188,7 +189,8 @@ export async function runAutoReview(s, env, fetchImpl) {
       stmts.push(["UPDATE transactions SET category_id = ?3, category_locked = 1, needs_review = 0, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", it.tx.id, d.categoryId]);
     } else if (d.decision === "duplicate") {
       counts.duplicates++;
-      stmts.push(["UPDATE transactions SET category_locked = 1, needs_review = 0, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", it.tx.id]);
+      /* Hidden, so the copy stops counting next to the daily-log entry it repeats. */
+      stmts.push(["UPDATE transactions SET category_locked = 1, needs_review = 0, hidden = 1, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", it.tx.id]);
     } else counts.asked++;
   }
   await s.batch(stmts);
