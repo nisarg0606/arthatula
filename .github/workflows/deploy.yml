@@ -1,6 +1,7 @@
 name: Test and deploy
 
-# Pull requests run everything: the unit tests and the browser tests.
+# Pull requests run the unit tests and the browser tests the change
+# needs (see the changes job: iPhone only when the page itself changed).
 # A push to main (a merged pull request) re-runs only the fast unit
 # tests and then deploys — the browser tests already passed on the
 # pull request against that same merge, and repeating them on main
@@ -61,17 +62,45 @@ jobs:
   # is no per-run browser download or apt install (that step took 38 s to
   # 5 min and once hung). The image tag must match @playwright/test in
   # e2e/package.json exactly.
+  # Which browsers this pull request needs. The iPhone (WebKit) run is
+  # the slowest job (~5 min) and only catches what the page itself does,
+  # so it runs only when the PR touches what the browser loads. A change
+  # that's only server code runs Chrome (which still drives every API
+  # flow end to end); one that's only tests/tools/video runs neither.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      projects: ${{ steps.pick.outputs.projects }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --name-only)
+          echo "$files"
+          if echo "$files" | grep -qE '^(index\.html|styles\.css|tailwind\.(css|config\.js)|theme-init\.js|manifest\.webmanifest|icons/|vendor/|js/|e2e/|\.github/workflows/)'; then
+            p='["iphone-safari","desktop-chrome"]'
+          elif echo "$files" | grep -qvE '^(tests/|tools/|video/)'; then
+            p='["desktop-chrome"]'
+          else
+            p='[]'
+          fi
+          echo "projects=$p" | tee -a "$GITHUB_OUTPUT"
+
   browser:
     # Pull requests only. On main the deploy job accepts this job
     # being skipped (see its condition) — the PR run is the test.
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.projects != '[]'
     name: browser (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        project: [iphone-safari, desktop-chrome]
+        project: ${{ fromJSON(needs.changes.outputs.projects) }}
     container:
       image: mcr.microsoft.com/playwright:v1.56.0-noble
       options: --user 1001
