@@ -7,7 +7,8 @@
 import assert from "node:assert/strict";
 import { FakeD1 } from "./_fake-d1.mjs";
 import { ensureV2, ensureOwner, scope, DEFAULT_ICONS, DEFAULT_GROUPS } from "../functions/api/_v2db.js";
-import { CATEGORY_ICONS } from "../js/core/categories.js";
+import fs from "node:fs";
+import { CATEGORY_ICONS, DAILY_CATEGORIES } from "../js/core/categories.js";
 
 const db = new FakeD1();
 await ensureV2(db);
@@ -40,5 +41,10 @@ assert.ok(Object.keys(now).every((n) => /^[\w &/-]+$/.test(n)), "plain names");
 
 /* The classic list's emoji match the money model's. */
 for (const [c, i] of Object.entries(CATEGORY_ICONS)) assert.equal(i, DEFAULT_ICONS[c], c);
+
+/* Every daily category gets its own chart colour (read from the source: charts.js needs a browser). */
+const palette = JSON.parse(/DOUGHNUT_COLORS = (\[[^\]]*\])/.exec(fs.readFileSync(new URL("../js/ui/charts.js", import.meta.url), "utf8"))[1]);
+assert.ok(palette.length >= DAILY_CATEGORIES.length, "a colour per category");
+assert.equal(new Set(palette.slice(0, DAILY_CATEGORIES.length)).size, DAILY_CATEGORIES.length, "no two categories share a colour");
 
 console.log("category-icons tests passed");
