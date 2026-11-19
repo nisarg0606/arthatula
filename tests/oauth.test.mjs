@@ -243,7 +243,7 @@ let clientId, access1, refresh1, access2, refresh2, goodCode;
   const list = await mcpList(env, access1);
   assert.equal(list.status, 200, "OAuth access token calls /api/mcp");
   const tools = (await list.json()).result.tools;
-  assert.equal(tools.length, 69, "all 69 tools listed");
+  assert.equal(tools.length, 70, "all 70 tools listed");
   const raw = await expGet(makeCtx(env, undefined, "GET", "http://local/api/expenses", authHeaders(access1)));
   assert.equal(raw.status, 403, "OAuth token refused on the raw API (mcp kind invariant)");
   const sessions = await oauthSessions(env, device);

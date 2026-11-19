@@ -276,6 +276,7 @@ functions/api/categorize.js Pages Function: POST /api/categorize (Gemini + rules
 functions/api/settings.js Pages Function: GET / PUT /api/settings (masked Gemini status, key saving)
 functions/api/sync-requests.js + sync-requests/  Pages Functions: the "Sync now" request queue (file / latest / claim / complete)
 tools/sync-poller.mjs   VM poller: claims queued sync requests and runs the Plaid sync engine (no agent)
+tools/plaid-relink.mjs  reconnect a bank in place (Plaid Link update mode), so its account ids don't change
 functions/api/auth.js     Pages Function: /api/auth (setup, sign-in, sessions, pairing)
 functions/api/mcp.js      Pages Function: /api/mcp — MCP server for AI assistants (see "AI assistant (MCP)")
 functions/_middleware.js  security headers (CSP, framing, no-store on the API) for every response
@@ -350,6 +351,36 @@ and complete manual sync requests (`GET /api/sync-requests/claim`,
 `POST /api/sync-requests/:id/complete`), and sign itself out. Everything
 else — the budget, settings, sessions, pairing, filing sync requests,
 deleting or editing expenses — answers 403.
+
+### Reconnecting a bank (keep the same accounts)
+
+When a bank's Plaid connection breaks (`ITEM_LOGIN_REQUIRED`, or the
+bank wants you to sign in again), reconnect it **in place** instead of
+linking it again from scratch. A fresh link is a new Plaid Item, and
+Plaid gives every account and transaction a new id, so the app would
+see a second copy of each account. On the sync computer:
+
+```
+PLAID_CLIENT_ID=… PLAID_SECRET=… PLAID_ENV=production \
+node tools/plaid-relink.mjs --access-token-file <that bank's access token file>
+```
+
+and open the address it prints. It runs Plaid Link in update mode on
+the existing Item: same access token, same account ids, nothing to
+change in the sync. If the sync engine has its own "link a bank"
+command, have it pass the Item's `access_token` to `/link/token/create`
+for a broken bank rather than starting a new link.
+
+If a bank does get linked from scratch anyway, the app folds it back
+together: on the next `POST /api/bank`, an account the push no longer
+sends with the same institution, last 4 digits and type as one it does
+send is merged into the new one (history moves over, payments both
+copies hold are kept once, expense links, review marks and ignore
+rules follow), and `/api/v2/sync` re-keys the money-model account the
+same way. Look-alike accounts that are both still being pushed are
+left alone and raise one notification. For duplicates made before
+this existed, the MCP tool `repair_relinked_accounts` does a dry run
+and, with `apply: true`, the merge (see docs/MCP.md).
 
 ### AI assistant (MCP)
 

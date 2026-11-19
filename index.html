@@ -586,6 +586,11 @@
             <button type="button" id="pairDenyBtn" class="danger">Deny</button>
           </div>
         </div>
+        <h3 class="chart-title mt-6">Bank sync (SimpleFIN)</h3>
+        <details class="explain"><summary>What's this?</summary><p>SimpleFIN Bridge links US (and some Canadian) banks and cards for about $15 a year, with no script or computer left running. Paste a setup token once; the server then pulls new transactions when you open the app.</p></details>
+        <div class="actions mt-2">
+          <button type="button" id="simplefinOpenBtn">Set up SimpleFIN</button>
+        </div>
         <h3 class="chart-title mt-6" title="MCP is a standard way for AI apps to use other apps.">Connect an AI app (MCP)</h3>
         <details class="explain"><summary>What's MCP?</summary><p>MCP (Model Context Protocol) is a standard way for AI apps such as Claude or ChatGPT to use other apps. Here it lets one read your budget and add expenses when you ask it to. Skip it if you don't use one.</p></details>
         <p class="hint">Connect an AI assistant (Claude, ChatGPT, Cursor, and other MCP clients) to this budget. Create a token, then paste the endpoint and token into the assistant's MCP settings. The token can <strong>only</strong> use the MCP tools — read the budget, accounts, transactions, bank snapshot and pending charges, add / edit / delete expenses, and request a sync. It can't open the app, call the raw API, change settings or the access code, or manage devices. Each token appears in the list below as its own session: revoke it there any time, and changing your access code signs it out too.</p>

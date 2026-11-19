@@ -87,7 +87,7 @@ assert.equal(res.status, 403, "sync GET refused");
 /* ---------- 3. Sync POST upserts; device GET reads dollars back ------ */
 res = await postAs(syncCtx, snapshot(300.45, 80.15, SYNCED_1));
 assert.equal(res.status, 200);
-assert.deepEqual(await res.json(), { ok: true, accounts: 2, transactions: 3 });
+assert.deepEqual(await res.json(), { ok: true, accounts: 2, transactions: 3, relink: { merged: [], ambiguous: [] } });
 
 res = await getAs(devCtx);
 assert.equal(res.status, 200);
@@ -112,7 +112,7 @@ assert.equal(body.transactions[2].amount, 80.15);
 /* ---------- 4. Re-push updates in place — no duplicates -------------- */
 res = await postAs(syncCtx, snapshot(300.25, 160.0, SYNCED_2));
 assert.equal(res.status, 200);
-assert.deepEqual(await res.json(), { ok: true, accounts: 2, transactions: 3 });
+assert.deepEqual(await res.json(), { ok: true, accounts: 2, transactions: 3, relink: { merged: [], ambiguous: [] } });
 body = await (await getAs(devCtx)).json();
 assert.equal(body.syncedAt, SYNCED_2);
 assert.equal(body.accounts.find((a) => a.id === "acc-checking").currentBalance, 300.25, "balance updated");
@@ -149,7 +149,7 @@ res = await postAs(syncCtx, {
   ]
 });
 assert.equal(res.status, 200);
-assert.deepEqual(await res.json(), { ok: true, accounts: 1, transactions: 1 });
+assert.deepEqual(await res.json(), { ok: true, accounts: 1, transactions: 1, relink: { merged: [], ambiguous: [] } });
 
 /* ---------- 6. Per-call cap of 500 ------------------------------------ */
 {

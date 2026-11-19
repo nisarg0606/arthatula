@@ -182,7 +182,10 @@ export async function mirrorV1(db, opts) {
     return t.trim().replace(/\s+/g, "");
   };
   const syncedCredit = {};
-  (await s.all("SELECT id, name, institution FROM accounts WHERE owner_id = ?1 AND source IN ('plaid', 'simplefin') AND type = 'credit'"))
+  /* Visible accounts first, then the newest: while a reconnect's old
+     copy of a card is still around (hidden), the card's statement and
+     due dates belong on the copy the sync now updates, not the old one. */
+  (await s.all("SELECT id, name, institution FROM accounts WHERE owner_id = ?1 AND source IN ('plaid', 'simplefin') AND type = 'credit' ORDER BY hidden ASC, created_at DESC, id"))
     .forEach((r) => {
       for (const text of [r.name, r.institution]) {
         const k = issuerKey(text);
