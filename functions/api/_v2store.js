@@ -28,6 +28,8 @@ export function rowToTransaction(r, splits, auto) {
     notes: r.notes || "", tags: Array.isArray(tags) ? tags : [],
     pending: !!r.pending, hidden: !!r.hidden, excludeReports: !!r.exclude_reports, needsReview: !!r.needs_review,
     v1ExpenseId: r.v1_expense_id || null,
+    /* The charge this row pays back, when it is a linked refund. */
+    refundOf: r.refund_of || null,
     splits: splits || [],
     /* Set while auto-review's decision stands and you haven't confirmed it. */
     autoReview: auto && auto.verdict === "reviewed" ? { by: auto.reviewer, decision: auto.decision, reason: auto.reason || "", at: auto.checked_at } : null,
