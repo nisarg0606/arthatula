@@ -136,11 +136,18 @@ export function openDialog(title, body, actions) {
   dialogEl.appendChild(h("div", { class: "actions v2-dialog-actions" }, (actions || []).map(function (a) {
     return h("button", {
       class: a.primary ? "btn-primary" : (a.danger ? "danger" : ""), text: a.label, attrs: { type: "button" },
-      on: { click: function () {
+      on: { click: function (ev) {
         status.textContent = ""; status.classList.remove("err");
+        const btns = dialogEl.querySelectorAll(".v2-dialog-actions button");
+        const btn = ev.currentTarget, label = btn.textContent;
+        /* Slow saves: lock the buttons and say so until the call settles. */
+        const busy = function (on) {
+          btns.forEach(function (b) { b.disabled = on; });
+          btn.textContent = on ? "Saving…" : label;
+        };
         try {
           const r = a.onClick(close, fail);
-          if (r && r.then) r.then(function () {}, fail);
+          if (r && r.then) { busy(true); r.then(function () { busy(false); }, function (e) { busy(false); fail(e); }); }
         } catch (e) { fail(e); }
       } }
     });
