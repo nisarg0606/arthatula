@@ -52,7 +52,7 @@ import {
   ensureTables, requireAuth, readState, listDailyExpenses, listCards,
   getBankSnapshot, getPendingSnapshot, requestSync, getLatestSyncRequest, lastBankSyncAt,
   patchState, patchActual, getMerchantRules, createCard, updateCard, deleteCard,
-  setBankReview, setIgnoreRules, REVIEW_KINDS
+  setBankReview, setIgnoreRules, REVIEW_KINDS, applyBankRelink
 } from "./budget.js";
 import { describeSettings, getSplitwiseApiKey, getSplitwiseCache, setSplitwiseCache } from "./settings.js";
 import { HttpError, cleanStr, cleanCents, cleanDate, cleanMonth, oneOf } from "./_v2http.js";
@@ -79,7 +79,7 @@ import { status as demoStatus } from "./v2/demo.js";
 import { getAiConfig } from "./_ai.js";
 import { importRows, csvIds } from "./_v2import.js";
 import { netWorthNow } from "./v2/accounts.js";
-import { mergeAccounts } from "./_v2merge.js";
+import { mergeAccounts, mergeDuplicatePlaidAccounts } from "./_v2merge.js";
 import { FEEDBACK_KINDS, FEEDBACK_REPO, TITLE_MAX, DETAILS_MAX, scrub, feedbackUrl } from "../../js/core/feedback.js";
 import { monthView } from "./v2/budgets.js";
 
@@ -445,6 +445,15 @@ const TOOLS = [
       type: "object",
       properties: { fromId: { type: "string" }, toId: { type: "string" } },
       required: ["fromId", "toId"],
+      additionalProperties: false
+    }
+  },
+  {
+    name: "repair_relinked_accounts",
+    description: "One-time repair after a bank was linked again from scratch in Plaid and its accounts came in twice. Without apply (the default) it only reports what it would do. With apply: true it folds every older copy of an account (same bank, last 4 digits and type) into the newest: on the Bank tab the old account's payment history moves to the new account and payments both copies hold are kept once (the expense link and review mark move to the copy that stays); in the money model the older account merges into the newest (merge_accounts), carrying statement and due dates, and the merged account keeps the hidden and net-worth settings of the copy that was left visible. Look-alike accounts that are both still syncing are listed under ambiguous and never merged. Safe to run again: with nothing left to fold it does nothing.",
+    inputSchema: {
+      type: "object",
+      properties: { apply: { type: "boolean", description: "true to make the changes; leave out for a dry run" } },
       additionalProperties: false
     }
   },
@@ -1177,6 +1186,23 @@ async function callTool(db, env, session, name, args) {
     case "merge_accounts": {
       const s = await v2Scope(db, session);
       return attempt(async () => mergeAccounts(s, String(args.fromId || ""), String(args.toId || "")));
+    }
+    case "repair_relinked_accounts": {
+      const apply = args.apply === true;
+      return attempt(async () => {
+        await ensureTables(db);
+        const bank = await applyBankRelink(db, { apply });
+        const s = await v2Scope(db, session);
+        const accts = await mergeDuplicatePlaidAccounts(s, { apply });
+        return {
+          applied: apply,
+          bankTab: { merges: bank.merges, ambiguous: bank.ambiguous, incomeMarksDropped: bank.droppedIncome },
+          accounts: {
+            merges: accts.merges.map((m) => ({ keep: m.toId, mergeIn: m.fromIds, name: m.name, institution: m.institution, mask: m.mask, type: m.type, hidden: !!m.hidden, includeInNetWorth: !!m.includeInNetWorth, results: m.results })),
+            ambiguous: accts.ambiguous
+          }
+        };
+      });
     }
     case "add_transaction": {
       const s = await v2Scope(db, session);

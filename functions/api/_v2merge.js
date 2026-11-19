@@ -13,7 +13,7 @@
  * is gone — not hidden.
  */
 import { HttpError } from "./_v2http.js";
-import { namesCollide } from "./_v2identity.js";
+import { identityKeyOf, namesCollide } from "./_v2identity.js";
 
 export async function mergeAccounts(s, fromId, toId) {
   if (!fromId || !toId || fromId === toId) throw new HttpError(400, "fromId and toId must be two different accounts.");
@@ -55,4 +55,56 @@ export async function mergeAccounts(s, fromId, toId) {
   stmts.push(["DELETE FROM accounts WHERE owner_id = ?1 AND id = ?2", from.id]);
   await s.batch(stmts);
   return { merged: from.id, into: to.id, movedTransactions: fromTxs.length - duplicateIds.length, removedDuplicates: duplicateIds.length };
+}
+
+/*
+ * Find and fold money-model accounts that are two generations of one
+ * real account: synced (source plaid), same institution, mask and type
+ * (identityKeyOf), created before re-keying existed (PR 64) or by a
+ * link that re-issued ids while both were still around. The newest
+ * account (by created_at) is the one the sync now pushes to, so it
+ * stays and the older ones merge into it (mergeAccounts: history,
+ * holdings, snapshots, goals and statement/due dates move over).
+ * When the owner had hidden all but one copy, the copy they kept
+ * visible says how the account should show: the survivor takes its
+ * hidden and net-worth settings. A group whose newest account isn't
+ * unique is left alone and reported.
+ * apply false: plan only.
+ */
+export function planV2Duplicates(rows) {
+  const groups = new Map();
+  for (const r of rows || []) {
+    const k = identityKeyOf(r);
+    if (!k) continue;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const merges = [], ambiguous = [];
+  for (const [identity, list] of groups) {
+    if (list.length < 2) continue;
+    const newest = list.reduce((m, r) => (String(r.created_at || "") > m ? String(r.created_at || "") : m), "");
+    const top = list.filter((r) => String(r.created_at || "") === newest);
+    if (top.length !== 1) { ambiguous.push({ identity, ids: list.map((r) => r.id) }); continue; }
+    const to = top[0];
+    const visible = list.filter((r) => !r.hidden);
+    const flagsFrom = visible.length === 1 ? visible[0] : to;
+    merges.push({
+      identity, toId: to.id, fromIds: list.filter((r) => r.id !== to.id).map((r) => r.id),
+      name: to.name, institution: to.institution, mask: to.mask, type: to.type,
+      hidden: flagsFrom.hidden ? 1 : 0, includeInNetWorth: flagsFrom.include_in_net_worth ? 1 : 0
+    });
+  }
+  return { merges, ambiguous };
+}
+
+export async function mergeDuplicatePlaidAccounts(s, opts) {
+  const rows = await s.all("SELECT id, external_id, name, institution, mask, type, hidden, include_in_net_worth, created_at FROM accounts WHERE owner_id = ?1 AND source = 'plaid'");
+  const plan = planV2Duplicates(rows);
+  if (!opts || opts.apply === false) return plan;
+  for (const m of plan.merges) {
+    m.results = [];
+    for (const fromId of m.fromIds) m.results.push(await mergeAccounts(s, fromId, m.toId));
+    await s.batch([["UPDATE accounts SET hidden = ?3, include_in_net_worth = ?4, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", m.toId, m.hidden, m.includeInNetWorth]]);
+  }
+  return plan;
 }
