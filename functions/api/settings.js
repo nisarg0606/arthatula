@@ -82,11 +82,12 @@ export async function setSplitwiseCache(db, payload) {
 
 export async function describeSettings(env) {
   await ensureTables(env.DB);
-  const cfg = await getAiConfig(env);
+  const [cfg, swSavedKey, fhSavedKey] = await Promise.all([
+    getAiConfig(env), getSetting(env.DB, "splitwise_api_key"), getSetting(env.DB, "finnhub_api_key")]);
   const p = PROVIDERS[cfg.provider];
   const envKey = env[p.envKey] || null;
-  const savedKey = await getSetting(env.DB, cfg.provider + "_api_key");
-  const savedModel = await getSetting(env.DB, cfg.provider + "_model");
+  const [savedKey, savedModel] = await Promise.all([
+    getSetting(env.DB, cfg.provider + "_api_key"), getSetting(env.DB, cfg.provider + "_model")]);
   const envModel = cfg.provider === "gemini" ? env.GEMINI_MODEL : env.AI_MODEL;
   const ai = {
     provider: cfg.provider,
@@ -102,10 +103,8 @@ export async function describeSettings(env) {
     source: envKey ? "env" : savedKey ? "saved" : null
   };
   const swEnvKey = env.SPLITWISE_API_KEY || null;
-  const swSavedKey = await getSetting(env.DB, "splitwise_api_key");
   const swKey = swEnvKey || swSavedKey;
   const fhEnvKey = env.FINNHUB_API_KEY || null;
-  const fhSavedKey = await getSetting(env.DB, "finnhub_api_key");
   const fhKey = fhEnvKey || fhSavedKey;
   return {
     ai,

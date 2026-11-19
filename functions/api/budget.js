@@ -804,21 +804,22 @@ function rowToBankTransaction(r) {
 
 export async function getBankSnapshot(db) {
   await ensureTables(db);
-  const acc = await db.prepare("SELECT * FROM bank_accounts ORDER BY institution, name").all();
-  const tx = await db.prepare(
-    "SELECT * FROM bank_transactions ORDER BY date DESC, plaid_transaction_id DESC LIMIT 400"
-  ).all();
+  /* Independent reads: in parallel, not one round trip after another. */
+  const [acc, tx, saved, reviews, ignoreRules] = await Promise.all([
+    db.prepare("SELECT * FROM bank_accounts ORDER BY institution, name").all(),
+    db.prepare("SELECT * FROM bank_transactions ORDER BY date DESC, plaid_transaction_id DESC LIMIT 400").all(),
+    getSetting(db, "bank_synced_at"), getReviews(db), getIgnoreRules(db)]);
   const accRows = acc.results || [];
   const txRows = tx.results || [];
-  let syncedAt = await getSetting(db, "bank_synced_at");
+  let syncedAt = saved;
   for (const r of accRows.concat(txRows)) {
     if (r.updated_at && (!syncedAt || r.updated_at > syncedAt)) syncedAt = r.updated_at;
   }
   return {
     accounts: accRows.map(rowToBankAccount),
     transactions: txRows.map(rowToBankTransaction),
-    reviews: await getReviews(db),
-    ignoreRules: await getIgnoreRules(db),
+    reviews,
+    ignoreRules,
     syncedAt
   };
 }
