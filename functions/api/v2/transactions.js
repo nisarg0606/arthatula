@@ -12,7 +12,10 @@
  *        patch: categoryId, merchant, notes, tags, hidden, needsReview,
  *        excludeReports, amountCents, myShareCents (null = all mine),
  *        date, accountId, splits ([{ categoryId, amountCents }] summing
- *        to the transaction's amount — or my share when set; [] removes).
+ *        to the transaction's amount — or my share when set; [] removes),
+ *        refundOf (the id of the charge this row refunds, or null to
+ *        unlink; the refund takes the charge's category so the pair
+ *        nets out — see ../_v2refund.js).
  *        needsReview true on an auto-reviewed row = "Not right": it goes
  *        back on To review and is never auto-reviewed again; reviewing
  *        it yourself confirms auto-review's call.
@@ -25,6 +28,7 @@ import { handleV2, HttpError, cleanStr, cleanCents, cleanDate, bodyOf } from "..
 import { newId } from "../_v2db.js";
 import { loadTransactions, rowToTransaction, rowToSplit, loadAutoReviews } from "../_v2store.js";
 import { mirrorV1 } from "../_v2mirror.js";
+import { resolveRefundTarget } from "../_v2refund.js";
 import { isValidCategory } from "../_categories.js";
 import { onRequestPut as v1Put, onRequestDelete as v1Delete } from "../expenses.js";
 
@@ -166,6 +170,22 @@ export const onRequestPatch = (context) => handleV2(context, async ({ s, db, req
     }
     add("needs_review", 0);
   }
+  if (p.refundOf !== undefined) {
+    if (p.refundOf === null) {
+      add("refund_of", null);
+    } else {
+      const target = await resolveRefundTarget(s, tx, p.refundOf);
+      add("refund_of", target.id);
+      /* Nullify: the refund carries the charge's category, so the
+         pair nets out there. An explicit categoryId in the same
+         patch wins over the copy. */
+      if (p.categoryId === undefined && target.category_id) {
+        add("category_id", target.category_id);
+        add("category_locked", 1);
+        add("needs_review", 0);
+      }
+    }
+  }
   if (p.accountId !== undefined) {
     if (tx.source !== "manual") throw new HttpError(409, "Only rows you added by hand can move between accounts.");
     add("account_id", await checkAccount(s, p.accountId));
@@ -225,6 +245,7 @@ export const onRequestDelete = (context) => handleV2(context, async ({ s, db, ur
   } else if (tx.source === "manual" || tx.source === "demo" || tx.source === "csv") {
     await s.batch([
       ["DELETE FROM transaction_splits WHERE owner_id = ?1 AND transaction_id = ?2", tx.id],
+      ["UPDATE transactions SET refund_of = NULL WHERE owner_id = ?1 AND refund_of = ?2", tx.id],
       ["DELETE FROM transactions WHERE owner_id = ?1 AND id = ?2", tx.id]
     ]);
   } else {

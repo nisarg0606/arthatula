@@ -120,6 +120,7 @@ const SCHEMA = [
     exclude_reports INTEGER NOT NULL DEFAULT 0,
     needs_review INTEGER NOT NULL DEFAULT 0,
     v1_expense_id INTEGER,
+    refund_of TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
@@ -239,10 +240,22 @@ export async function ensureV2(db) {
     ready.set(db, (async () => {
       await ensureTables(db);
       await db.batch(SCHEMA.map((sql) => db.prepare(sql)));
+      await migrateV2Columns(db);
       await ensureOwner(db, OWNER_ID);
     })().catch((e) => { ready.delete(db); throw e; }));
   }
   return ready.get(db);
+}
+
+/* Columns added after the v2 tables shipped: CREATE TABLE IF NOT
+   EXISTS never adds them to an existing database, so add each one
+   explicitly when absent. Only an old database ever alters, once. */
+async function migrateV2Columns(db) {
+  const rows = await db.prepare("PRAGMA table_info(transactions)").all();
+  const names = ((rows && rows.results) || []).map((c) => c.name);
+  if (names.length && !names.includes("refund_of")) {
+    await db.prepare("ALTER TABLE transactions ADD COLUMN refund_of TEXT").run();
+  }
 }
 
 /* The merge aliases for this scope's owner: { external_id: account_id }. */

@@ -23,6 +23,8 @@ import { merchantCategory } from "../../js/core/merchant.js";
 import { getMerchantRules } from "./budget.js";
 import { categorizeByRules } from "./_categories.js";
 import { nameTokens } from "./_v2autoreview.js";
+import { looksLikeRefund, pickRefundOriginal, refundShiftDay } from "./_v2refund.js";
+import { adoptionKeyOf } from "./_v2identity.js";
 
 const RAILS = new Set(["upi", "neft", "imps", "rtgs", "nach", "txn", "ref", "transfer", "to", "from", "by"]);
 function tokens(name) { return nameTokens(name).filter((w) => !RAILS.has(w)); }
@@ -76,8 +78,9 @@ export async function importRows(s, db, accountId, rows, source) {
   const catId = {};
   cats.categories.forEach((c) => { catId[c.name.toLowerCase()] = c.id; });
 
-  const out = { added: 0, duplicates: 0, categorized: 0, toReview: 0 };
+  const out = { added: 0, duplicates: 0, categorized: 0, toReview: 0, refundsLinked: 0 };
   const stmts = [];
+  const fresh = [];
   for (const r of rows) {
     if (ext.has(r.externalId)) { out.duplicates++; continue; }
     const hit = twinOf(r);
@@ -101,13 +104,54 @@ export async function importRows(s, db, accountId, rows, source) {
       else if (guess !== "Misc/Other") categoryId = catId[guess.toLowerCase()] || null;
     }
     if (review) out.toReview++; else out.categorized++;
+    const id = newId("tx_");
     stmts.push([
       "INSERT INTO transactions (id, owner_id, external_id, source, account_id, date, merchant, description, amount_cents, category_id, category_locked, tags, hidden, needs_review) " +
       "VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13) ON CONFLICT(owner_id, external_id) WHERE external_id IS NOT NULL DO NOTHING",
-      newId("tx_"), r.externalId, source, accountId, r.date, r.description, r.amountCents, categoryId, locked, tags, hidden, review
+      id, r.externalId, source, accountId, r.date, r.description, r.amountCents, categoryId, locked, tags, hidden, review
     ]);
+    fresh.push({ id, date: r.date, merchant: r.description, amountCents: r.amountCents, categoryId, locked, review });
     out.added++;
   }
   await s.batch(stmts);
+  await linkImportedRefunds(s, acct, accountId, fresh, out);
   return out;
+}
+
+/* A fresh credit on a card that clearly pays back one stored charge
+   is linked to it (and takes its category), so the pair nullifies
+   instead of sitting in To review as unexplained income. Only an
+   unambiguous match links — anything else waits for a manual link.
+   Two reads for the whole batch, however many rows it carried. */
+async function linkImportedRefunds(s, acct, accountId, fresh, out) {
+  const plausible = fresh.filter(looksLikeRefund);
+  if (!plausible.length || !acct || acct.type !== "credit") return;
+  const accounts = await s.all("SELECT id, name, mask, type FROM accounts WHERE owner_id = ?1");
+  const me = accounts.find((a) => a.id === accountId);
+  const key = me ? adoptionKeyOf(me) : null;
+  const family = new Set(accounts.filter((a) => key && adoptionKeyOf(a) === key).map((a) => a.id));
+  family.add(accountId);
+  const dates = plausible.map((r) => r.date).sort();
+  const [charges, sums] = await Promise.all([
+    s.all("SELECT id, account_id, date, merchant, amount_cents, category_id, refund_of FROM transactions WHERE owner_id = ?1 AND amount_cents < 0 AND hidden = 0 AND date >= ?2 AND date <= ?3",
+      refundShiftDay(dates[0], -180), dates[dates.length - 1]),
+    s.all("SELECT refund_of, SUM(amount_cents) AS total FROM transactions WHERE owner_id = ?1 AND refund_of IS NOT NULL GROUP BY refund_of")
+  ]);
+  const linkedTotals = {};
+  sums.forEach((r) => { linkedTotals[r.refund_of] = Math.abs(r.total || 0); });
+  const updates = [];
+  for (const row of plausible) {
+    const target = pickRefundOriginal(charges, linkedTotals, row, family);
+    if (!target) continue;
+    const params = [row.id, target.id];
+    let sql = "UPDATE transactions SET refund_of = ?3";
+    if (!row.locked && target.category_id) {
+      sql += ", category_id = ?4, category_locked = 1, needs_review = 0";
+      params.push(target.category_id);
+      if (row.review) { out.toReview--; out.categorized++; }
+    }
+    updates.push([sql + ", updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", ...params]);
+    out.refundsLinked++;
+  }
+  if (updates.length) await s.batch(updates);
 }

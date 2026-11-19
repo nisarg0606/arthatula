@@ -61,6 +61,7 @@ import { categorize } from "./categorize.js";
 import { CATEGORIES } from "./_categories.js";
 import { ensureV2, scope, ownerFor, OWNER_ID, newId } from "./_v2db.js";
 import { mirrorV1 } from "./_v2mirror.js";
+import { resolveRefundTarget } from "./_v2refund.js";
 import {
   loadAccounts, loadTransactions, loadCategories, loadBudgets, loadRules,
   rowToAccount, rowToGoal, rowToRecurring, categoryIndex
@@ -477,7 +478,7 @@ const TOOLS = [
   },
   {
     name: "update_transaction",
-    description: "Patch a money-model transaction by id (from list_transactions). patch may include merchant, date, amountCents, myShareCents (null = all mine), categoryId (null clears), accountId (hand-added rows only), notes, tags, hidden, needsReview, excludeReports, and splits ([{ categoryId, amountCents, notes? }] summing to the amount — or to my share when set; [] removes the split). Rows from the classic daily log are written back to it, so both apps agree; bank rows' amounts/dates can't change here.",
+    description: "Patch a money-model transaction by id (from list_transactions). patch may include merchant, date, amountCents, myShareCents (null = all mine), categoryId (null clears), accountId (hand-added rows only), notes, tags, hidden, needsReview, excludeReports, refundOf (the id of the charge this row refunds, or null to unlink — the refund takes the charge's category so the pair nets out, and refunds against a charge can't exceed it), and splits ([{ categoryId, amountCents, notes? }] summing to the amount — or to my share when set; [] removes the split). Rows from the classic daily log are written back to it, so both apps agree; bank rows' amounts/dates can't change here.",
     inputSchema: {
       type: "object",
       properties: { id: { type: "string" }, patch: { type: "object" } },
@@ -1297,6 +1298,19 @@ async function callTool(db, env, session, name, args) {
             add("category_locked", 1);
           }
           add("needs_review", 0);
+        }
+        if (patch.refundOf !== undefined) {
+          if (patch.refundOf === null) {
+            add("refund_of", null);
+          } else {
+            const target = await resolveRefundTarget(s, tx, patch.refundOf);
+            add("refund_of", target.id);
+            if (patch.categoryId === undefined && target.category_id) {
+              add("category_id", target.category_id);
+              add("category_locked", 1);
+              add("needs_review", 0);
+            }
+          }
         }
         if (patch.accountId !== undefined) {
           if (tx.source !== "manual") throw new HttpError(409, "Only rows you added by hand can move between accounts.");

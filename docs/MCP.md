@@ -273,7 +273,11 @@ worth knowing:
 - **`update_transaction`** — Patch by `id`: merchant, date,
   amountCents, categoryId, notes, needsReview, hidden, pending — or a
   full split via `splits: [{ categoryId, amountCents }]` (must sum to
-  the transaction's amount; `splits: []` clears it).
+  the transaction's amount; `splits: []` clears it). `refundOf` links
+  the row to the charge it refunds (or null to unlink): the refund
+  takes the charge's category so the pair nets out, and refunds
+  against a charge can't exceed it. Bank imports auto-link a credit
+  when exactly one charge on the same card clearly matches.
 - **`delete_transaction`** — Delete by `id` (hand-added, imported and
   classic daily-log rows; daily-log deletes also fix the classic
   month rollup).
