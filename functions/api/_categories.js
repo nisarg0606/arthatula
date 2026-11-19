@@ -7,7 +7,7 @@
 export const CATEGORIES = [
   "Groceries", "Eating Out", "Rent", "Utilities", "Phone & Internet",
   "Fuel/Transport", "Insurance", "Subscriptions", "Shopping/Personal",
-  "Gym", "Loan/Debt Payment", "One-off", "Immigration", "Misc/Other"
+  "Gym", "Loan/Debt Payment", "One-off", "Immigration", "Sent to India", "Misc/Other"
 ];
 
 /* Daily-expense category -> monthly_actuals field used by the rollup.
@@ -27,10 +27,13 @@ export const CATEGORY_TO_FIELD = {
   "Loan/Debt Payment": "otherLoan",
   "One-off": "oneOffs",
   "Immigration": "oneOffs",
+  "Sent to India": "oneOffs",
   "Misc/Other": "otherExpenses"
 };
 
 const RULES = [
+  /* Cybrid (crobo.money) transfers are money sent to India. */
+  ["Sent to India", ["cybrid", "crobo"]],
   ["Groceries", ["walmart", "fry's", "frys", "kroger", "safeway", "aldi", "trader joe", "whole foods", "costco", "grocery", "groceries", "supermarket", "instacart", "sprouts", "target grocery"]],
   ["Eating Out", ["restaurant", "cafe", "coffee", "starbucks", "dutch bros", "mcdonald", "chipotle", "pizza", "burger", "taco", "sushi", "doordash", "uber eats", "ubereats", "grubhub", "dining", "bakery", "dunkin"]],
   ["Rent", ["rent", "landlord", "apartment lease", "property management"]],
