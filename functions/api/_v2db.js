@@ -23,6 +23,17 @@ const SCHEMA = [
     value TEXT NOT NULL,
     PRIMARY KEY (owner_id, key)
   )`,
+  /* Where a merged-away account's feed id now lives. Written by
+     every merge (see _v2merge.js) and read by every ingest path
+     before it creates an account, so a feed that still pushes the
+     old id lands on the survivor instead of resurrecting the
+     duplicate. */
+  `CREATE TABLE IF NOT EXISTS account_aliases (
+    owner_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    PRIMARY KEY (owner_id, external_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL,
@@ -232,6 +243,14 @@ export async function ensureV2(db) {
     })().catch((e) => { ready.delete(db); throw e; }));
   }
   return ready.get(db);
+}
+
+/* The merge aliases for this scope's owner: { external_id: account_id }. */
+export async function getAliases(s) {
+  const out = {};
+  (await s.all("SELECT external_id, account_id FROM account_aliases WHERE owner_id = ?1"))
+    .forEach((r) => { out[r.external_id] = r.account_id; });
+  return out;
 }
 
 export async function ensureOwner(db, ownerId) {

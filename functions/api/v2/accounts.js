@@ -3,6 +3,9 @@
  *   GET                         -> { accounts, netWorth: { assetsCents, liabilitiesCents, netWorthCents } }
  *   POST   { name, type, balanceCents?, institution? } -> 201 { account }
  *          A manual account (house, car, cash, a loan Plaid can't see).
+ *   POST   { fromId, toId }     -> { merged, into, movedTransactions, removedDuplicates }
+ *          Merge one account into another (the feed-switch repair;
+ *          the merge itself lives in ../_v2merge.js, shared with MCP).
  *   PATCH  { id, patch: { name?, hidden?, includeInNetWorth?, balanceCents? } } -> { account }
  *          balanceCents only for manual accounts; it also records today's
  *          balance snapshot so net worth moves.
@@ -12,6 +15,7 @@
  */
 import { handleV2, HttpError, cleanStr, cleanCents, oneOf, bodyOf, todayIso } from "../_v2http.js";
 import { newId } from "../_v2db.js";
+import { mergeAccounts } from "../_v2merge.js";
 import { loadAccounts, rowToAccount } from "../_v2store.js";
 import { ACCOUNT_TYPES, isLiability } from "../../../js/core/v2/money.js";
 
@@ -37,6 +41,7 @@ export const onRequestGet = (context) => handleV2(context, async ({ s }) => {
 
 export const onRequestPost = (context) => handleV2(context, async ({ s, request }) => {
   const b = await bodyOf(request);
+  if (b.fromId !== undefined || b.toId !== undefined) return mergeAccounts(s, b.fromId, b.toId);
   const name = cleanStr(b.name, 100);
   if (!name) throw new HttpError(400, "name is required.");
   const type = oneOf(b.type || "depository", ACCOUNT_TYPES, "type");

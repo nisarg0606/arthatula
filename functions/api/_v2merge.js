@@ -11,6 +11,13 @@
  * nowhere else. Statement fields the target lacks are filled from
  * the source. The source account is then deleted, so the duplicate
  * is gone — not hidden.
+ *
+ * The merge also records an alias (account_aliases): the source's
+ * feed id now points at the target, and aliases that pointed at the
+ * source are re-pointed too. Every ingest path checks the aliases
+ * before creating an account, so a feed that still pushes the
+ * merged-away id lands on the survivor instead of resurrecting the
+ * duplicate — a merge is permanent, not a tidy-up a sync undoes.
  */
 import { HttpError } from "./_v2http.js";
 import { identityKeyOf, namesCollide } from "./_v2identity.js";
@@ -52,6 +59,11 @@ export async function mergeAccounts(s, fromId, toId) {
   stmts.push(["UPDATE goals SET account_id = ?3 WHERE owner_id = ?1 AND account_id = ?2", from.id, to.id]);
   stmts.push(["UPDATE accounts SET statement_start = COALESCE(statement_start, ?3), statement_end = COALESCE(statement_end, ?4), due_date = COALESCE(due_date, ?5), updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2",
     to.id, from.statement_start, from.statement_end, from.due_date]);
+  stmts.push(["UPDATE account_aliases SET account_id = ?3 WHERE owner_id = ?1 AND account_id = ?2", from.id, to.id]);
+  if (from.external_id) {
+    stmts.push(["INSERT INTO account_aliases (owner_id, external_id, account_id) VALUES (?1, ?2, ?3) " +
+      "ON CONFLICT(owner_id, external_id) DO UPDATE SET account_id = excluded.account_id", from.external_id, to.id]);
+  }
   stmts.push(["DELETE FROM accounts WHERE owner_id = ?1 AND id = ?2", from.id]);
   await s.batch(stmts);
   return { merged: from.id, into: to.id, movedTransactions: fromTxs.length - duplicateIds.length, removedDuplicates: duplicateIds.length };
