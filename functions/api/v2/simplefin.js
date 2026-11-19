@@ -25,6 +25,8 @@ import { handleV2, HttpError, bodyOf, cleanStr } from "../_v2http.js";
 import { accountStmts } from "./sync.js";
 import { importRows } from "../_v2import.js";
 import { getSimplefinUrl, setSimplefinUrl } from "../settings.js";
+import { getAliases } from "../_v2db.js";
+import { findDuplicateIdentities } from "../_v2identity.js";
 import { notify } from "../_notify.js";
 
 export const AUTO_HOURS = 4;
@@ -117,13 +119,50 @@ export async function syncSimplefin(s, db, fetchImpl) {
   try { set = await fetchAccounts(access, start, fetchImpl); }
   catch (e) { await s.setSetting("simplefin_last_error", e.message); throw e; }
   const mapped = mapAccounts(set);
-  await s.batch(mapped.flatMap((m) => accountStmts(m.ext, m.account, m.asOf, "simplefin")));
+  /* Merge aliases: an account that was merged into another feed's
+     account must not be recreated by this sync — its balance and
+     transactions go to the survivor the merge chose. */
+  const aliases = await getAliases(s);
+  const aliveIds = new Set((await s.all("SELECT id FROM accounts WHERE owner_id = ?1")).map((r) => r.id));
+  for (const m of mapped) {
+    const target = aliases[m.ext];
+    if (target && aliveIds.has(target)) m.aliasTo = target;
+  }
+  const acctStmtsAll = [];
+  for (const m of mapped) {
+    if (!m.aliasTo) { acctStmtsAll.push(...accountStmts(m.ext, m.account, m.asOf, "simplefin")); continue; }
+    const bal = m.account.balanceCents;
+    if (bal === null || bal === undefined) continue;
+    acctStmtsAll.push(["UPDATE accounts SET balance_cents = ?3, available_cents = ?4, balance_at = ?5, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2 " +
+      "AND (balance_cents IS NOT ?3 OR available_cents IS NOT ?4 OR balance_at IS NOT ?5)",
+      m.aliasTo, bal, m.account.availableCents, m.asOf]);
+    acctStmtsAll.push(["INSERT INTO balance_snapshots (owner_id, account_id, date, balance_cents) VALUES (?1, ?2, ?3, ?4) " +
+      "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents WHERE balance_snapshots.balance_cents IS NOT excluded.balance_cents",
+      m.aliasTo, m.asOf, bal]);
+  }
+  await s.batch(acctStmtsAll);
+  const allRows = await s.all("SELECT id, external_id, name, mask, type, source FROM accounts WHERE owner_id = ?1");
   const ids = {};
-  (await s.all("SELECT id, external_id FROM accounts WHERE owner_id = ?1 AND source = 'simplefin'")).forEach((r) => { ids[r.external_id] = r.id; });
+  allRows.forEach((r) => { if (r.external_id) ids[r.external_id] = r.id; });
+  for (const m of mapped) if (m.aliasTo) ids[m.ext] = m.aliasTo;
   const total = { accounts: mapped.length, added: 0, duplicates: 0, categorized: 0, toReview: 0 };
   for (const m of mapped) {
     const r = await importRows(s, db, ids[m.ext], m.rows, "simplefin");
     Object.keys(r).forEach((k) => { total[k] += r[k]; });
+  }
+  /* The same real account carried by two feeds counts its balance
+     twice. Flag a distinct set of duplicates once (the setting is
+     shared with the Plaid sync, so the two feeds don't both report
+     the same set). */
+  const dupes = findDuplicateIdentities(allRows);
+  const sig = dupes.map((d) => d.key).sort().join(",");
+  if (sig !== ((await s.getSetting("dup_notice_sig")) || "")) {
+    await s.setSetting("dup_notice_sig", sig);
+    if (dupes.length) {
+      await notify(db, "account", "Possible duplicate accounts",
+        dupes.map((d) => d.accounts.map((a) => a.name).join(" / ")).join("; ") +
+        " — the same account carried by two feeds counts its balance twice. Merge the duplicates to fix it.");
+    }
   }
   /* Bank-side problems (a login that needs fixing) come back as messages. */
   const errors = (set.errlist || []).map((e) => e && e.msg).concat(set.errors || []).filter(Boolean).map(String).slice(0, 5);

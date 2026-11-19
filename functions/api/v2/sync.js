@@ -18,8 +18,9 @@
  *        (/api/expenses, /api/bank, /api/pending) as before.
  */
 import { handleV2, HttpError, bodyOf } from "../_v2http.js";
-import { newId } from "../_v2db.js";
-import { planRekeys } from "../_v2identity.js";
+import { newId, getAliases } from "../_v2db.js";
+import { planRekeys, findDuplicateIdentities } from "../_v2identity.js";
+import { notify } from "../_notify.js";
 import { ACCOUNT_TYPES } from "../../../js/core/v2/money.js";
 
 const CAP = 100;
@@ -57,7 +58,7 @@ export function accountStmts(ext, a, asOf, source) {
   return stmts;
 }
 
-export const onRequestPost = (context) => handleV2(context, async ({ s, request }) => {
+export const onRequestPost = (context) => handleV2(context, async ({ s, db, request }) => {
   const b = await bodyOf(request);
   if (!Array.isArray(b.accounts)) throw new HttpError(400, "accounts must be a list.");
   const asOf = typeof b.asOf === "string" && /^\d{4}-\d{2}-\d{2}/.test(b.asOf) ? b.asOf.slice(0, 10) : new Date().toISOString().slice(0, 10);
@@ -67,7 +68,12 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
      its existing row to the new id, so this push updates that account
      instead of minting a duplicate that net worth would count too. */
   const existing = await s.all("SELECT id, external_id, institution, mask, type FROM accounts WHERE owner_id = ?1 AND source = 'plaid' AND external_id IS NOT NULL");
-  const rekeys = planRekeys(existing, valid.map((a) => ({
+  /* An account that was merged into another feed's account stays
+     merged: its recorded alias means this push must not recreate it
+     (the surviving feed owns the account now). */
+  const aliases = await getAliases(s);
+  const live = valid.filter((a) => !aliases["plaid:" + str(a.id, 200)]);
+  const rekeys = planRekeys(existing, live.map((a) => ({
     ext: "plaid:" + str(a.id, 200),
     institution: str(a.institution, 200),
     mask: str(a.mask, 20),
@@ -80,7 +86,7 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
     stmts.push(["UPDATE accounts SET external_id = ?3, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", rk.accountId, rk.toExt]);
   }
   let n = 0;
-  for (const a of valid) {
+  for (const a of live) {
     stmts.push(...accountStmts("plaid:" + str(a.id, 200), a, asOf, "plaid"));
     n++;
   }
@@ -122,5 +128,19 @@ export const onRequestPost = (context) => handleV2(context, async ({ s, request 
   }
   await s.batch(stmts);
   await s.setSetting("mirror_fp", ""); /* re-run the mirror: a synced card may now pair with a classic one */
+  /* The same real account carried by two feeds counts its balance
+     twice. Flag a distinct set of duplicates once (the setting is
+     shared with the SimpleFIN sync, so the two feeds don't both
+     report the same set). */
+  const dupes = findDuplicateIdentities(await s.all("SELECT id, external_id, name, mask, type, source FROM accounts WHERE owner_id = ?1"));
+  const sig = dupes.map((d) => d.key).sort().join(",");
+  if (sig !== ((await s.getSetting("dup_notice_sig")) || "")) {
+    await s.setSetting("dup_notice_sig", sig);
+    if (dupes.length) {
+      await notify(db, "account", "Possible duplicate accounts",
+        dupes.map((d) => d.accounts.map((a) => a.name).join(" / ")).join("; ") +
+        " — the same account carried by two feeds counts its balance twice. Merge the duplicates to fix it.");
+    }
+  }
   return { ok: true, accounts: n, holdings: holdingsCount };
 }, { allowSync: true, syncOnly: true, skipMirror: true });

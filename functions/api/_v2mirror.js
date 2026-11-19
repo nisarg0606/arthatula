@@ -23,7 +23,7 @@
  * must equal the classic actuals to the cent.
  */
 import { MONEY_FIELDS, readState } from "./budget.js";
-import { OWNER_ID, ensureV2, scope, newId } from "./_v2db.js";
+import { OWNER_ID, ensureV2, scope, newId, getAliases } from "./_v2db.js";
 import { identityKeyOf, namesCollide, planRekeys, planAdoptions } from "./_v2identity.js";
 import { loadCategories, loadTransactions, loadRules, categoryIndex } from "./_v2store.js";
 import { summarize, monthOf, applyRules, daysBetween } from "../../js/core/v2/money.js";
@@ -136,7 +136,20 @@ export async function mirrorV1(db, opts) {
     const pushedExts = new Set(pushed.map((p) => p.ext));
     const claimed = new Set(rekeys.map((rk) => rk.accountId));
     for (const r of allAccounts) if (pushedExts.has(r.external_id)) claimed.add(r.id);
-    for (const ad of planAdoptions(allAccounts, pushed, claimed)) adoptedIdByExt[ad.ext] = ad.accountId;
+    /* A recorded merge alias is exact and wins over identity
+       matching: the classic account was merged into that account on
+       purpose. A dangling alias (its target has since been deleted)
+       falls through to identity adoption. */
+    const aliases = await getAliases(s);
+    const alive = new Set(allAccounts.map((r) => r.id));
+    for (const p of pushed) {
+      const target = aliases[p.ext];
+      if (target && alive.has(target) && !claimed.has(target)) {
+        adoptedIdByExt[p.ext] = target;
+        claimed.add(target);
+      }
+    }
+    for (const ad of planAdoptions(allAccounts, pushed.filter((p) => !adoptedIdByExt[p.ext]), claimed)) adoptedIdByExt[ad.ext] = ad.accountId;
   }
   for (const a of bankAccounts) {
     if (winnerOfPlaidId[a.plaid_account_id]) continue; /* an older generation of another row */

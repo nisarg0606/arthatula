@@ -143,3 +143,21 @@ export function planAdoptions(existing, pushed, claimedIds) {
   }
   return out;
 }
+
+/* Group accounts by adoption identity and return the groups that
+   hold more than one account — the signature of a feed switch (or a
+   reconnect the re-key missed): the same real account carried
+   twice, its balance counted twice. rows: [{ id, external_id, name,
+   mask, type }]. Returns [{ key, accounts: [...] }]. */
+export function findDuplicateIdentities(rows) {
+  const groups = new Map();
+  for (const r of rows || []) {
+    const k = adoptionKeyOf(r);
+    if (!k) continue;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const out = [];
+  for (const [key, list] of groups) if (list.length > 1) out.push({ key, accounts: list });
+  return out;
+}
