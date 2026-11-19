@@ -105,6 +105,7 @@ assert.equal((await row(wNew)).category_id, ent, "seen: gets the past category, 
 assert.equal((await row(wNew)).category_locked, 1, "locked so the classic mirror keeps it");
 assert.equal((await row(wDup)).needs_review, 0);
 assert.equal((await row(wDup)).category_id, transfer, "duplicate: stays not counted (it's in the daily log)");
+assert.equal((await row(wDup)).hidden, 1, "duplicate: hidden, so it isn't counted next to the daily-log entry");
 assert.equal((await row(wFirst)).needs_review, 1, "a first-time payee waits for you");
 assert.equal((await row(wHidden)).needs_review, 1, "hidden rows are left alone");
 r = await runAutoReview(s, {});
@@ -167,6 +168,9 @@ assert.equal((await row(wGem)).needs_review, 1, "a rejected row stays with you")
 p = await call(transactions, "PATCH", "transactions", { id: wNew, patch: { needsReview: false } });
 assert.equal(p.data.transaction.autoReview, null);
 assert.equal((await call(reports, "GET", "reports?kind=summary")).data.autoReviewedCount, 2);
+/* "Not right" on a hidden duplicate brings the row back. */
+p = await call(transactions, "PATCH", "transactions", { id: wDup, patch: { needsReview: true } });
+assert.deepEqual([p.data.transaction.hidden, p.data.transaction.needsReview], [false, true]);
 
 /* Mark all reviewed: every visible To review row, hidden ones untouched. */
 const before = (await call(transactions, "GET", "transactions?review=1")).data.total;

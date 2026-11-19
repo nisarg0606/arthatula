@@ -58,7 +58,7 @@ export function reviewQueue(state, bank) {
   (state.dailyExpenses || []).forEach(function (e) { if (e && e.bankTxId) linked[e.bankTxId] = true; });
   return (bank.transactions || []).filter(function (t) {
     return t && t.amount && String(t.date) >= baseline && !internal[t.id] && !linked[t.id] && !reviews[t.id] &&
-      !ignoredByRule(t, bank.ignoreRules) &&
+      !ignoredByRule(t, bank.ignoreRules) && !/cybrid/i.test(t.name || "") /* sends to India: counted on their own, never logged */ &&
       (REVIEW_PFC.indexOf(t.pfc || "") !== -1 || /zelle|venmo|cash app|paypal/i.test(t.name || ""));
   });
 }

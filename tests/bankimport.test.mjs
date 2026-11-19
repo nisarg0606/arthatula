@@ -225,6 +225,34 @@ out = await ok(simplefin, "POST", "simplefin", { action: "sync" });
 assert.deepEqual([out.added, out.duplicates], [0, 4]);
 assert.equal(accountsCalls, 2);
 
+/* A SimpleFIN account Plaid already brings (same institution, mask in
+   the name) lands on the Plaid account: no second copy for net worth to
+   count. A copy made before that folds in, and its rows come back
+   de-duplicated against the daily log even a day apart. */
+assert.equal(simplefin.maskOf("Blue Cash Everyday® (4007)"), "4007");
+assert.equal(simplefin.maskOf("Everyday Checking"), "");
+const ins = (sql) => env.DB.prepare(sql).run();
+await ins("INSERT INTO accounts (id, owner_id, external_id, name, institution, type, mask, balance_cents, balance_at, source) VALUES ('acc_pl', 'me', 'plaid:pl1', 'Card', 'First Example', 'credit', '4222', 1000, '2026-11-20', 'plaid')");
+await ins("INSERT INTO transactions (id, owner_id, external_id, source, account_id, date, merchant, description, amount_cents, category_id, category_locked) VALUES ('tx_log', 'me', 'exp:1', 'v1exp', 'acc_pl', '2026-11-20', 'Corner Gas', 'Corner Gas', -5001, '" + catId("Eating Out") + "', 1)");
+await ins("INSERT INTO accounts (id, owner_id, external_id, name, institution, type, balance_cents, source) VALUES ('acc_sf', 'me', 'sfin:cc9', 'Rewards Visa (4222)', 'First Example Bank', 'depository', 1000, 'simplefin')");
+await ins("INSERT INTO transactions (id, owner_id, external_id, source, account_id, date, merchant, description, amount_cents) VALUES ('tx_sf', 'me', 'sfin:cc9:t1', 'simplefin', 'acc_sf', '2026-11-19', 'CORNER GAS 123', 'CORNER GAS 123', -5001)");
+SET.accounts = [{ id: "cc9", name: "Rewards Visa (4222)", conn_id: "c1", currency: "USD", balance: "-88.00", "balance-date": day("2026-11-25"),
+  transactions: [
+    { id: "t1", posted: day("2026-11-19"), amount: "-50.01", description: "CORNER GAS 123" },
+    { id: "t2", posted: day("2026-11-21"), amount: "300.00", description: "AUTOPAY PAYMENT - THANK YOU" },
+    { id: "t3", posted: day("2026-11-22"), amount: "-12.00", description: "NEW SHOP" }
+  ] }];
+out = await ok(simplefin, "POST", "simplefin", { action: "sync" });
+assert.deepEqual([out.added, out.duplicates], [2, 1], "the gas charge is the daily-log entry a day later");
+const after = (await ok(accounts, "GET", "accounts")).accounts;
+assert.equal(after.filter((a) => /Rewards Visa \(4222\)|^Card$/.test(a.name)).length, 1, "one account, not two");
+assert.equal(after.find((a) => a.id === "acc_pl").balanceCents, 8800, "SimpleFIN's newer balance");
+const onCard = (await ok(transactions, "GET", "transactions?accountId=acc_pl")).transactions;
+assert.deepEqual(onCard.map((t) => t.merchant).sort(), ["AUTOPAY PAYMENT - THANK YOU", "Corner Gas", "NEW SHOP"]);
+assert.equal(onCard.find((t) => t.amountCents === 30000).categoryId, catId("Credit card payment"), "paying the card isn't income");
+out = await ok(simplefin, "POST", "simplefin", { action: "sync" });
+assert.deepEqual([out.added, out.duplicates], [0, 3], "and nothing comes twice after");
+
 assert.equal((await ok(simplefin, "DELETE", "simplefin")).connected, false);
 assert.equal((await call(simplefin, "POST", "simplefin", { action: "sync" })).status, 400);
 

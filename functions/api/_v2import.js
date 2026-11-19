@@ -6,9 +6,11 @@
  * importRows skips a row when
  *   - its external id is already stored (the same CSV line or SimpleFIN
  *     transaction came in before), or
- *   - a stored row has the same date and amount and a similar name
- *     (you typed it in, or another feed brought it); each stored row
- *     absorbs at most one incoming row.
+ *   - a stored row has the same amount and a similar name and either
+ *     the same date or, on the same account, a date up to 3 days off
+ *     (you typed it in, or another feed brought it: SimpleFIN dates a
+ *     charge when it posts, the daily log when you paid); each stored
+ *     row absorbs at most one incoming row.
  * New rows are filed like the mirror files bank rows: your rules first
  * (category + reviewed), then your own merchant rules from the daily
  * log (reviewed), then the keyword guess (left on To review, where
@@ -48,19 +50,29 @@ export function csvIds(accountId, rows) {
 
 /* rows: [{ date, description, amountCents, externalId }] for one account.
    -> { added, duplicates, categorized, toReview } */
+const shiftDay = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+const NEAR_DAYS = 3;
+
 export async function importRows(s, db, accountId, rows, source) {
   if (!rows.length) return { added: 0, duplicates: 0, categorized: 0, toReview: 0 };
   const dates = rows.map((r) => r.date).sort();
   const [existing, rules, cats, merchantRules, acct] = await Promise.all([
-    s.all("SELECT external_id, date, amount_cents, merchant FROM transactions WHERE owner_id = ?1 AND date >= ?2 AND date <= ?3", dates[0], dates[dates.length - 1]),
+    s.all("SELECT external_id, account_id, date, amount_cents, merchant FROM transactions WHERE owner_id = ?1 AND date >= ?2 AND date <= ?3",
+      shiftDay(dates[0], -NEAR_DAYS), shiftDay(dates[dates.length - 1], NEAR_DAYS)),
     loadRules(s), loadCategories(s), getMerchantRules(db),
     s.first("SELECT type FROM accounts WHERE owner_id = ?1 AND id = ?2", accountId)
   ]);
   /* Stock buys, sells and dividends inside a brokerage aren't spending: file them under Investments (a transfer). */
   const investing = acct && acct.type === "investment";
+  const owed = acct && (acct.type === "credit" || acct.type === "loan");
   const ext = new Set(existing.map((r) => r.external_id).filter(Boolean));
-  const byDay = {};
-  existing.forEach((r) => { if (!r.external_id || !r.external_id.startsWith(source === "csv" ? "csv:" : "sfin:")) (byDay[r.date + "|" + r.amount_cents] = byDay[r.date + "|" + r.amount_cents] || []).push(r.merchant); });
+  const own = source === "csv" ? "csv:" : "sfin:";
+  const pool = existing.filter((r) => !r.external_id || !r.external_id.startsWith(own));
+  const near = (a, b) => Math.abs(Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) <= NEAR_DAYS * 864e5;
+  const twinOf = (r) => {
+    const fits = (p) => !p.used && p.amount_cents === r.amountCents && similarName(p.merchant, r.description);
+    return pool.find((p) => fits(p) && p.date === r.date) || pool.find((p) => fits(p) && p.account_id === accountId && near(p.date, r.date));
+  };
   const catId = {};
   cats.categories.forEach((c) => { catId[c.name.toLowerCase()] = c.id; });
 
@@ -68,9 +80,8 @@ export async function importRows(s, db, accountId, rows, source) {
   const stmts = [];
   for (const r of rows) {
     if (ext.has(r.externalId)) { out.duplicates++; continue; }
-    const same = byDay[r.date + "|" + r.amountCents] || [];
-    const hit = same.findIndex((m) => similarName(m, r.description));
-    if (hit !== -1) { same.splice(hit, 1); out.duplicates++; continue; }
+    const hit = twinOf(r);
+    if (hit) { hit.used = true; out.duplicates++; continue; }
     ext.add(r.externalId);
 
     let categoryId = null, locked = 0, review = 1, hidden = 0, tags = "[]";
@@ -81,6 +92,8 @@ export async function importRows(s, db, accountId, rows, source) {
       if (rule.change.addTag) tags = JSON.stringify([rule.change.addTag]);
     }
     if (!categoryId && investing) categoryId = catId["investments"] || null;
+    /* Money into a card or loan with "payment" in the name is you paying it off, not income. */
+    if (!categoryId && owed && r.amountCents > 0 && /payment|thank you/i.test(r.description)) categoryId = catId["credit card payment"] || catId["transfer"] || null;
     if (!categoryId && r.amountCents < 0) {
       const own = catId[String(merchantCategory(merchantRules, r.description) || "").toLowerCase()];
       const guess = categorizeByRules(r.description);
