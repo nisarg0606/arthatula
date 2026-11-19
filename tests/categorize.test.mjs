@@ -92,5 +92,8 @@ console.log("categorize.test.mjs: all assertions passed");
 import { categorizeByRules, isValidCategory } from "../functions/api/_categories.js";
 assert.equal(categorizeByRules("USCIS SEVIS I-901 fee"), "Immigration");
 assert.equal(categorizeByRules("DHS STEM OPT fee"), "Immigration");
+assert.equal(categorizeByRules("CYBRID-CROBO.MON F4867FCB"), "Sent to India");
+assert.deepEqual(await categorize({ GEMINI_API_KEY: "test-key" }, "CYBRID-CROBO.MON F4867FCB", 1592.53, geminiFetch({ category: "Rent", confidence: 0.9 })),
+  { category: "Sent to India", source: "rules" }, "a Cybrid send never goes to Gemini");
 assert.equal(isValidCategory("Immigration"), true);
 console.log("ok - Immigration category: rules route to it, validator accepts it");
