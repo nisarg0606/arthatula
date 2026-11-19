@@ -184,7 +184,9 @@ const SET = {
         { id: "t3", posted: 0, amount: "-9.99", description: "PENDING THING", pending: true }
       ] },
     { id: "cc1", name: "Rewards Visa", conn_id: "c1", currency: "USD", balance: "-310.55", "balance-date": day("2026-11-25"),
-      transactions: [{ id: "t1", posted: day("2026-11-24"), amount: "-45.00", description: "SHELL OIL" }] }
+      transactions: [{ id: "t1", posted: day("2026-11-24"), amount: "-45.00", description: "SHELL OIL" }] },
+    { id: "br1", name: "Individual Brokerage", conn_id: "c1", currency: "USD", balance: "8000.00", "balance-date": day("2026-11-25"),
+      transactions: [{ id: "t1", posted: day("2026-11-24"), amount: "-500.00", description: "BUY VTI 2 SHARES" }] }
   ]
 };
 globalThis.fetch = async (url, init) => {
@@ -199,8 +201,8 @@ assert.equal((await ok(simplefin, "GET", "simplefin")).connected, false);
 assert.deepEqual(await ok(simplefin, "POST", "simplefin", { action: "sync", auto: true }), { skipped: true });
 out = await ok(simplefin, "POST", "simplefin", { setupToken });
 assert.equal(out.connected, true);
-assert.equal(out.accounts, 2);
-assert.equal(out.added, 3, "pending rows wait until they post");
+assert.equal(out.accounts, 3);
+assert.equal(out.added, 4, "pending rows wait until they post");
 assert.deepEqual(out.errors, ["Your credit union needs you to sign in again."]);
 const st = await call(simplefin, "GET", "simplefin");
 assert.equal(st.data.connected, true);
@@ -212,11 +214,15 @@ assert.deepEqual([chk.type, chk.balanceCents, chk.institution, chk.source], ["de
 assert.deepEqual([cc.type, cc.balanceCents], ["credit", 31055], "owed is positive");
 list = (await ok(transactions, "GET", "transactions?accountId=" + chk.id)).transactions;
 assert.equal(list.find((t) => t.merchant === "TRADER JOES #123").amountCents, -1234);
+const br = all.find((a) => a.name === "Individual Brokerage");
+assert.equal(br.type, "investment");
+const invCat = (await ok(categories, "GET", "categories")).categories.find((c) => c.name === "Investments");
+assert.deepEqual([invCat.kind, (await ok(transactions, "GET", "transactions?accountId=" + br.id)).transactions[0].categoryId], ["transfer", invCat.id], "stock trades land in Investments");
 
 /* Opened again soon: auto skips. Sync now: the same ids don't come twice. */
 assert.deepEqual(await ok(simplefin, "POST", "simplefin", { action: "sync", auto: true }), { skipped: true });
 out = await ok(simplefin, "POST", "simplefin", { action: "sync" });
-assert.deepEqual([out.added, out.duplicates], [0, 3]);
+assert.deepEqual([out.added, out.duplicates], [0, 4]);
 assert.equal(accountsCalls, 2);
 
 assert.equal((await ok(simplefin, "DELETE", "simplefin")).connected, false);

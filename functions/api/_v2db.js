@@ -199,7 +199,7 @@ export const DEFAULT_GROUPS = [
   { key: "lifestyle", name: "Lifestyle", kind: "expense", cats: ["Shopping/Personal", "Gym"] },
   { key: "debt", name: "Debt", kind: "expense", cats: ["Loan/Debt Payment"] },
   { key: "other", name: "Other", kind: "expense", cats: ["One-off", "Misc/Other", "Sent to India", "Immigration"] },
-  { key: "transfers", name: "Transfers", kind: "transfer", cats: ["Transfer", "Credit card payment", "Repayment"] }
+  { key: "transfers", name: "Transfers", kind: "transfer", cats: ["Transfer", "Credit card payment", "Repayment", "Investments"] }
 ];
 
 /* The emoji each default category starts with (display only, kept out
@@ -210,7 +210,7 @@ export const DEFAULT_ICONS = {
   "Groceries": "🛒", "Eating Out": "🍜", "Fuel/Transport": "🚗",
   "Shopping/Personal": "🛍️", "Gym": "🏋️", "Loan/Debt Payment": "🏦",
   "One-off": "📌", "Misc/Other": "🏷️", "Sent to India": "✈️", "Immigration": "🛂",
-  "Transfer": "🔁", "Credit card payment": "💳", "Repayment": "↩️"
+  "Transfer": "🔁", "Credit card payment": "💳", "Repayment": "↩️", "Investments": "📈"
 };
 
 export function newId(prefix) {

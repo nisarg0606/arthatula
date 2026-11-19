@@ -51,10 +51,13 @@ export function csvIds(accountId, rows) {
 export async function importRows(s, db, accountId, rows, source) {
   if (!rows.length) return { added: 0, duplicates: 0, categorized: 0, toReview: 0 };
   const dates = rows.map((r) => r.date).sort();
-  const [existing, rules, cats, merchantRules] = await Promise.all([
+  const [existing, rules, cats, merchantRules, acct] = await Promise.all([
     s.all("SELECT external_id, date, amount_cents, merchant FROM transactions WHERE owner_id = ?1 AND date >= ?2 AND date <= ?3", dates[0], dates[dates.length - 1]),
-    loadRules(s), loadCategories(s), getMerchantRules(db)
+    loadRules(s), loadCategories(s), getMerchantRules(db),
+    s.first("SELECT type FROM accounts WHERE owner_id = ?1 AND id = ?2", accountId)
   ]);
+  /* Stock buys, sells and dividends inside a brokerage aren't spending: file them under Investments (a transfer). */
+  const investing = acct && acct.type === "investment";
   const ext = new Set(existing.map((r) => r.external_id).filter(Boolean));
   const byDay = {};
   existing.forEach((r) => { if (!r.external_id || !r.external_id.startsWith(source === "csv" ? "csv:" : "sfin:")) (byDay[r.date + "|" + r.amount_cents] = byDay[r.date + "|" + r.amount_cents] || []).push(r.merchant); });
@@ -77,6 +80,7 @@ export async function importRows(s, db, accountId, rows, source) {
       if (rule.change.hidden) hidden = 1;
       if (rule.change.addTag) tags = JSON.stringify([rule.change.addTag]);
     }
+    if (!categoryId && investing) categoryId = catId["investments"] || null;
     if (!categoryId && r.amountCents < 0) {
       const own = catId[String(merchantCategory(merchantRules, r.description) || "").toLowerCase()];
       const guess = categorizeByRules(r.description);
