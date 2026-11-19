@@ -10,7 +10,12 @@
  *        { accounts: [...], transactions: [...], syncedAt } is upserted
  *        by Plaid id. Device sessions are refused with 403 — the
  *        snapshot is written by the automation alone, so what the tab
- *        shows is always what Plaid reported.
+ *        shows is always what Plaid reported. An account the push no
+ *        longer sends that has the same institution, mask and type as
+ *        one it does send (a bank linked again from scratch: Plaid
+ *        re-issues every id) is folded into the new one, history and
+ *        all; relink: { merged, ambiguous } in the answer says what
+ *        happened (see ./_relink.js).
  *
  *   PATCH /api/bank { txId, kind } -> the snapshot again
  *        Device sessions only: records the Daily review decision for
@@ -74,7 +79,7 @@ export async function onRequestPost(context) {
       return json({ error: "POST expects { accounts, transactions, syncedAt }" }, 400);
     }
     const counts = await upsertBankData(context.env.DB, body);
-    return json({ ok: true, accounts: counts.accounts, transactions: counts.transactions });
+    return json({ ok: true, accounts: counts.accounts, transactions: counts.transactions, relink: counts.relink });
   } catch (err) {
     return json({ error: String((err && err.message) || err) }, 400);
   }

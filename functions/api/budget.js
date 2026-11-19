@@ -195,6 +195,7 @@ const CREATE_SYNC_REQUESTS = `CREATE TABLE IF NOT EXISTS sync_requests (
 export const REVIEW_KINDS = ["repayment", "income", "ignore"];
 import { CATEGORY_TO_FIELD } from "./_categories.js";
 import { notify, usd } from "./_notify.js";
+import { relinkBankAccounts } from "./_relink.js";
 import { merchantCategory, sanitizeMerchantRules } from "../../js/core/merchant.js";
 export { CATEGORY_TO_FIELD };
 
@@ -914,10 +915,12 @@ export async function upsertBankData(db, body) {
   const stmts = [];
   let accounts = 0;
   let transactions = 0;
+  const pushedIds = [];
   for (const a of accountsIn) {
     if (!a || typeof a !== "object") continue;
     const id = cleanBankText(a.plaidAccountId !== undefined ? a.plaidAccountId : a.id, 200);
     if (!id) continue;
+    pushedIds.push(id);
     stmts.push(db.prepare(
       "INSERT INTO bank_accounts (plaid_account_id, institution, name, subtype, mask, current_cents, available_cents, updated_at) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(plaid_account_id) DO UPDATE SET " +
@@ -966,8 +969,53 @@ export async function upsertBankData(db, body) {
   /* Skipped rows keep their old updated_at, so the push time lives here for syncedAt. */
   stmts.push(db.prepare("INSERT INTO budget_settings (key, value) VALUES ('bank_synced_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(stamp));
   await db.batch(stmts);
+  /* A bank linked again from scratch in Plaid arrives under new account
+     ids: fold the older generation (same institution, mask and type, no
+     longer pushed) into the new one so the Bank tab keeps one account
+     with its whole history. See ./_relink.js. */
+  let relink = { merges: [], ambiguous: [] };
+  if (pushedIds.length) relink = await applyBankRelink(db, { liveIds: pushedIds, stamp });
   await autoLinkBankTransactions(db);
-  return { accounts, transactions };
+  return { accounts, transactions, relink: { merged: relink.merges, ambiguous: relink.ambiguous } };
+}
+
+/* Run the snapshot relink (./_relink.js) and keep what depends on it
+   consistent: an "income" review mark that stops standing takes its
+   income back out of the month's actuals, exactly as clearing the mark
+   by hand does (setBankReview). With apply false nothing is written.
+   Tells the owner (bell + Telegram) what was folded together, and
+   once per distinct set about look-alike accounts it left alone. */
+export async function applyBankRelink(db, opts) {
+  const o = opts || {};
+  const out = await relinkBankAccounts(db, o);
+  if (o.apply === false) return out;
+  const byMonth = {};
+  for (const d of out.droppedIncome) {
+    const k = String(d.date).slice(0, 7);
+    byMonth[k] = (byMonth[k] || 0) + d.amountCents;
+  }
+  const months = Object.keys(byMonth).length ? await monthKeys(db) : [];
+  for (const k of Object.keys(byMonth)) {
+    if (!months.includes(k)) continue;
+    const current = (await readState(db)).actuals.find((a) => a.monthKey === k);
+    /* Money IN is negative in the Plaid convention, so -cents is the income. */
+    const next = Math.round(((current.otherIncome || 0) - toDollars(-byMonth[k])) * 100) / 100;
+    await patchActual(db, k, { otherIncome: next });
+  }
+  if (out.merges.length) {
+    const lines = out.merges.map((m) => (m.institution + " " + (m.name || "") + " ••" + m.mask).replace(/\s+/g, " ").trim() +
+      ": " + m.movedTransactions + " older payments kept, " + m.removedDuplicates + " duplicates removed");
+    await notify(db, "sync", "Reconnected bank accounts kept their history", lines.join("\n"));
+  }
+  if (out.ambiguous.length) {
+    const sig = out.ambiguous.map((a) => a.ids.slice().sort().join(",")).sort().join(";");
+    if ((await getSetting(db, "relink_ambiguous_seen")) !== sig) {
+      await setSetting(db, "relink_ambiguous_seen", sig);
+      await notify(db, "sync", "Some bank accounts look alike",
+        out.ambiguous.length + " set(s) of accounts share a bank, last 4 digits and type and are all still syncing, so they were not merged. Ask your assistant to run repair_relinked_accounts to review them.");
+    }
+  }
+  return out;
 }
 
 /* ================= pending charges snapshot =================
