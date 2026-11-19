@@ -83,3 +83,63 @@ export function planRekeys(existing, pushed) {
   }
   return out;
 }
+
+/* Some feeds (SimpleFIN) carry no mask column: the account number
+   rides inside the display name instead — "Blue Cash Everyday®
+   (4007)", "Robinhood Credit Card **4222 (4222)", "Everyday
+   Checking ...6404". The mask is the last 4-digit group in the
+   name; no group, no mask. */
+export function maskFromName(name) {
+  const groups = String(name || "").match(/\d{4}/g);
+  return groups ? groups[groups.length - 1] : "";
+}
+
+/* Identity for ADOPTING an account across feeds: the mask and the
+   type. The institution is deliberately left out — feeds disagree
+   about it (one calls the same Discover card "Capital One"), while
+   the mask is the account's own number. Without a mask there is no
+   safe identity, so the key is null. */
+export function adoptionKeyOf(a) {
+  const mask = String((a && a.mask) || "").trim() || maskFromName(a && a.name);
+  if (!mask) return null;
+  const type = String((a && a.type) || "").trim().toLowerCase();
+  if (!type) return null;
+  return mask + "|" + type;
+}
+
+/* Plan adoptions of classic-feed accounts by accounts from another
+   feed. pushed: [{ ext, mask, type }] — the classic feed's winning
+   accounts. existing: every money-model account (external_id, name,
+   mask, type, hidden). claimedIds: accounts already spoken for
+   (feed-id matches and re-keys from planRekeys).
+   An account the classic feed itself owns (a plaid: feed id) is
+   never a candidate — those re-key instead — and neither is a
+   hidden account. Ambiguous matches (two candidates with the same
+   mask and type) are left alone: the classic account then gets its
+   own row, as before. Returns [{ ext, accountId }]. */
+export function planAdoptions(existing, pushed, claimedIds) {
+  const byExt = new Map();
+  for (const r of existing || []) if (r.external_id) byExt.set(r.external_id, r);
+  const claimed = new Set(claimedIds || []);
+  const candidates = new Map();
+  for (const r of existing || []) {
+    if (!r.external_id || claimed.has(r.id) || r.hidden) continue;
+    if (String(r.external_id).indexOf("plaid:") === 0) continue;
+    const k = adoptionKeyOf(r);
+    if (!k) continue;
+    if (!candidates.has(k)) candidates.set(k, []);
+    candidates.get(k).push(r);
+  }
+  const out = [];
+  for (const p of pushed || []) {
+    if (byExt.has(p.ext)) continue;
+    const k = adoptionKeyOf(p);
+    if (!k) continue;
+    const list = candidates.get(k) || [];
+    if (list.length !== 1) continue;
+    claimed.add(list[0].id);
+    candidates.set(k, []);
+    out.push({ ext: p.ext, accountId: list[0].id });
+  }
+  return out;
+}
