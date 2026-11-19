@@ -3,14 +3,18 @@
  * re-issues Plaid's account ids, and the money model must recognise
  * "same real account, new id" instead of minting a duplicate.
  * Covers planRekeys (pure), the /api/v2/sync re-key, the v1 mirror's
- * generation handling (one account, transactions mirrored once), and
- * the merge_accounts MCP tool that repairs duplicates created before
- * re-keying existed.
+ * generation handling (one account, transactions mirrored once), the
+ * merge_accounts MCP tool that repairs duplicates created before
+ * re-keying existed, and cross-feed adoption: when the classic
+ * account is merged into another feed's account (the Plaid ->
+ * SimpleFIN switch), the mirror resolves the classic history to the
+ * adopter instead of resurrecting the classic account.
  * Run: node tests/account-identity.test.mjs — dummy data only.
  */
 import assert from "node:assert/strict";
 import { FakeD1, makeCtx, authHeaders, setupTestAuth } from "./_fake-d1.mjs";
-import { planRekeys, namesCollide } from "../functions/api/_v2identity.js";
+import { planRekeys, namesCollide, planAdoptions, maskFromName } from "../functions/api/_v2identity.js";
+import { ensureV2 } from "../functions/api/_v2db.js";
 import { onRequestPost as syncPost } from "../functions/api/v2/sync.js";
 import { onRequestPost as authPost } from "../functions/api/auth.js";
 import { onRequestPost as mcpPost } from "../functions/api/mcp.js";
@@ -182,6 +186,81 @@ async function pairedSyncToken(env, deviceToken) {
   const snaps = (await env.DB.prepare("SELECT * FROM balance_snapshots WHERE owner_id = 'me' AND account_id = 'acc_to' ORDER BY date").all()).results;
   assert.deepEqual(snaps.map((s) => [s.date, s.balance_cents]), [["2026-11-17", 100], ["2026-11-18", 200]], "snapshots merged, target's day wins");
   console.log("merge_accounts ok");
+}
+
+/* ---------- planAdoptions + maskFromName: pure matching ---------- */
+{
+  assert.equal(maskFromName("Blue Cash Everyday® (4007)"), "4007");
+  assert.equal(maskFromName("Robinhood Credit Card **4222 (4222)"), "4222");
+  assert.equal(maskFromName("Everyday Checking ...6404"), "6404");
+  assert.equal(maskFromName("360 Checking"), "");
+  assert.equal(maskFromName(""), "");
+  const sfin = (id, name, type, extra) => Object.assign(
+    { id, external_id: "sfin:" + id, name, institution: "", mask: "", type, hidden: 0 }, extra || {});
+  const pushed = [{ ext: "plaid:P1", mask: "6404", type: "depository" }];
+  /* The mask rides in the SimpleFIN name; the institution may even
+     disagree (a Discover card SimpleFIN files under "Capital One")
+     and the adoption still lands, because the key is mask + type. */
+  assert.deepEqual(planAdoptions([sfin("s1", "Everyday Checking (6404)", "depository")], pushed, []),
+    [{ ext: "plaid:P1", accountId: "s1" }]);
+  assert.deepEqual(planAdoptions([sfin("s2", "Discover it (3670)", "credit", { institution: "Capital One" })],
+    [{ ext: "plaid:P2", mask: "3670", type: "credit" }], []),
+    [{ ext: "plaid:P2", accountId: "s2" }]);
+  /* Ambiguous: two candidates with the same mask and type -> none. */
+  assert.deepEqual(planAdoptions([
+    sfin("s1", "Everyday Checking (6404)", "depository"),
+    sfin("s3", "Everyday Checking (6404)", "depository")
+  ], pushed, []), []);
+  /* Claimed, hidden, plaid-owned, or feed-id-matched -> none. */
+  assert.deepEqual(planAdoptions([sfin("s1", "Everyday Checking (6404)", "depository")], pushed, ["s1"]), []);
+  assert.deepEqual(planAdoptions([sfin("s1", "Everyday Checking (6404)", "depository", { hidden: 1 })], pushed, []), []);
+  assert.deepEqual(planAdoptions([
+    { id: "p1", external_id: "plaid:OLD", name: "Everyday Checking", institution: "Wells Fargo", mask: "6404", type: "depository", hidden: 0 }
+  ], pushed, []), []);
+  assert.deepEqual(planAdoptions([sfin("s1", "Everyday Checking (6404)", "depository")],
+    [{ ext: "sfin:s1", mask: "6404", type: "depository" }], []), []);
+  console.log("planAdoptions + maskFromName ok");
+}
+
+/* ---------- mirror: a SimpleFIN account adopts the classic one ---------- */
+{
+  const env = { DB: new FakeD1() };
+  await setupTestAuth(env);
+  await ensureV2(env.DB);
+  const ins = async (sql, ...binds) => { await env.DB.prepare(sql).bind(...binds).run(); };
+  await ins("INSERT INTO bank_accounts (plaid_account_id, institution, name, subtype, mask, current_cents, available_cents, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "PLAID_WF", "Wells Fargo", "Everyday Checking", "checking", "6404", 200, 200, "2026-11-18T00:00:00Z");
+  await ins("INSERT INTO bank_transactions (plaid_transaction_id, account_id, date, name, amount_cents, pending, pfc) VALUES (?, ?, ?, ?, ?, 0, '')",
+    "btx_1", "PLAID_WF", "2026-11-12", "COFFEE SHOP PURCHASE 1234", 500);
+  await ins("INSERT INTO accounts (id, owner_id, external_id, name, institution, type, subtype, mask, balance_cents, source) VALUES (?, 'me', ?, ?, ?, ?, '', '', ?, 'simplefin')",
+    "acc_sfin_wf", "sfin:ACT-1", "Everyday Checking (6404)", "Wells Fargo", "depository", 200);
+  const out = await mirrorV1(env.DB);
+  assert.equal(out.skipped, false);
+  const accts = (await env.DB.prepare("SELECT * FROM accounts WHERE owner_id = 'me'").all()).results;
+  assert.equal(accts.length, 1, "no classic account is resurrected next to the SimpleFIN one");
+  assert.equal(accts[0].id, "acc_sfin_wf");
+  const txs = (await env.DB.prepare("SELECT * FROM transactions WHERE owner_id = 'me' AND source = 'v1bank'").all()).results;
+  assert.equal(txs.length, 1);
+  assert.equal(txs[0].account_id, "acc_sfin_wf", "the classic bank history lands on the SimpleFIN account");
+  console.log("mirror adoption ok");
+}
+
+/* ---------- mirror: classic cards pair with SimpleFIN accounts ---------- */
+{
+  const env = { DB: new FakeD1() };
+  await setupTestAuth(env);
+  await ensureV2(env.DB);
+  const ins = async (sql, ...binds) => { await env.DB.prepare(sql).bind(...binds).run(); };
+  await ins("INSERT INTO credit_cards (name, statement_start, statement_end, due_date) VALUES (?, ?, ?, ?)",
+    "Discover", "2026-10-28", "2026-11-27", "2026-12-14");
+  await ins("INSERT INTO accounts (id, owner_id, external_id, name, institution, type, subtype, mask, balance_cents, source) VALUES (?, 'me', ?, ?, ?, ?, '', '', ?, 'simplefin')",
+    "acc_sfin_disc", "sfin:ACT-2", "Discover it (3670)", "Capital One", "credit", 53562);
+  await mirrorV1(env.DB);
+  const accts = (await env.DB.prepare("SELECT * FROM accounts WHERE owner_id = 'me'").all()).results;
+  assert.equal(accts.length, 1, "no v1card shell next to the SimpleFIN card");
+  assert.equal(accts[0].id, "acc_sfin_disc");
+  assert.equal(accts[0].due_date, "2026-12-14", "the classic statement dates land on the SimpleFIN account");
+  console.log("mirror simplefin card pairing ok");
 }
 
 console.log("account-identity.test.mjs: all passed");

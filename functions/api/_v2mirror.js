@@ -24,7 +24,7 @@
  */
 import { MONEY_FIELDS, readState } from "./budget.js";
 import { OWNER_ID, ensureV2, scope, newId } from "./_v2db.js";
-import { identityKeyOf, namesCollide, planRekeys } from "./_v2identity.js";
+import { identityKeyOf, namesCollide, planRekeys, planAdoptions } from "./_v2identity.js";
 import { loadCategories, loadTransactions, loadRules, categoryIndex } from "./_v2store.js";
 import { summarize, monthOf, applyRules, daysBetween } from "../../js/core/v2/money.js";
 
@@ -111,9 +111,16 @@ export async function mirrorV1(db, opts) {
   const acctStmts = [];
   /* If the v2 account for a group still carries an older generation's
      feed id, re-key it to the winning generation before the upserts,
-     so the upsert lands on the existing account. */
+     so the upsert lands on the existing account. When the classic
+     feed's account no longer exists in v2 because it was merged into
+     another feed's account (the Plaid -> SimpleFIN switch), that
+     account ADOPTS the classic one instead: no new account is
+     inserted for it below, and the classic history resolves to the
+     adopter when acctByExt is built. */
+  const adoptedIdByExt = {};
   {
-    const existing = await s.all("SELECT id, external_id, institution, mask, type FROM accounts WHERE owner_id = ?1 AND source = 'plaid' AND external_id IS NOT NULL");
+    const allAccounts = await s.all("SELECT id, external_id, name, institution, mask, type, source, hidden FROM accounts WHERE owner_id = ?1 AND external_id IS NOT NULL");
+    const existing = allAccounts.filter((r) => r.source === "plaid");
     const seen = new Set();
     const pushed = [];
     for (const a of bankAccounts) {
@@ -122,12 +129,18 @@ export async function mirrorV1(db, opts) {
       seen.add(wid);
       pushed.push({ ext: "plaid:" + wid, institution: a.institution || "", mask: a.mask || "", type: acctTypeOf(a) });
     }
-    for (const rk of planRekeys(existing, pushed)) {
+    const rekeys = planRekeys(existing, pushed);
+    for (const rk of rekeys) {
       acctStmts.push(["UPDATE accounts SET external_id = ?3, updated_at = datetime('now') WHERE owner_id = ?1 AND id = ?2", rk.accountId, rk.toExt]);
     }
+    const pushedExts = new Set(pushed.map((p) => p.ext));
+    const claimed = new Set(rekeys.map((rk) => rk.accountId));
+    for (const r of allAccounts) if (pushedExts.has(r.external_id)) claimed.add(r.id);
+    for (const ad of planAdoptions(allAccounts, pushed, claimed)) adoptedIdByExt[ad.ext] = ad.accountId;
   }
   for (const a of bankAccounts) {
     if (winnerOfPlaidId[a.plaid_account_id]) continue; /* an older generation of another row */
+    if (adoptedIdByExt["plaid:" + a.plaid_account_id]) continue; /* adopted by another feed's account */
     const isCard = /credit/i.test(a.subtype || "");
     acctStmts.push([
       "INSERT INTO accounts (id, owner_id, external_id, name, institution, type, subtype, mask, balance_cents, available_cents, balance_at, source) " +
@@ -169,7 +182,7 @@ export async function mirrorV1(db, opts) {
     return t.trim().replace(/\s+/g, "");
   };
   const syncedCredit = {};
-  (await s.all("SELECT id, name, institution FROM accounts WHERE owner_id = ?1 AND source = 'plaid' AND type = 'credit'"))
+  (await s.all("SELECT id, name, institution FROM accounts WHERE owner_id = ?1 AND source IN ('plaid', 'simplefin') AND type = 'credit'"))
     .forEach((r) => {
       for (const text of [r.name, r.institution]) {
         const k = issuerKey(text);
@@ -223,11 +236,14 @@ export async function mirrorV1(db, opts) {
        account Plaid calls "CREDIT CARD" (its institution gives the
        issuer away). Prefer the synced account when a key appears
        twice. */
-    const isPlaid = r.external_id && r.external_id.indexOf("plaid:") === 0;
+    const isSynced = r.external_id && (r.external_id.indexOf("plaid:") === 0 || r.external_id.indexOf("sfin:") === 0);
     for (const k of [String(r.name).toLowerCase(), issuerKey(r.name), issuerKey(r.institution)]) {
-      if (k && (!cardByName[k] || isPlaid)) cardByName[k] = r.id;
+      if (k && (!cardByName[k] || isSynced)) cardByName[k] = r.id;
     }
   });
+  /* Adopted classic accounts resolve to the adopting account, so
+     their bank transactions and linked expenses land there. */
+  for (const ext of Object.keys(adoptedIdByExt)) if (!acctByExt[ext]) acctByExt[ext] = adoptedIdByExt[ext];
   await s.batch(acctRows.filter((r) => r.balance_cents !== null && r.balance_at).map((r) => [
     "INSERT INTO balance_snapshots (owner_id, account_id, date, balance_cents) VALUES (?1, ?2, ?3, ?4) " +
     "ON CONFLICT(owner_id, account_id, date) DO UPDATE SET balance_cents = excluded.balance_cents WHERE balance_snapshots.balance_cents IS NOT excluded.balance_cents",
