@@ -75,7 +75,7 @@ export const onRequestGet = (context) => handleV2(context, async ({ s, url }) =>
       cashCents: cashNow(accounts),
       upcoming: upcoming(rec.items.concat(rec.cardBills), today(), addDays(today(), 14)),
       reviewCount: txAll.filter((t) => t.needsReview && !t.hidden).length,
-      autoReviewedCount: txAll.filter((t) => t.autoReview && !t.hidden).length,
+      autoReviewedCount: txAll.filter((t) => t.autoReview && (!t.hidden || t.autoReview.decision === "duplicate")).length,
       topCategories: top,
       overBudget: budget.rows.filter((r) => r.kind === "expense" && r.plannedCents + r.rolloverCents > 0 && r.remainingCents < 0)
         .map((r) => ({ categoryId: r.categoryId, overCents: -r.remainingCents })),

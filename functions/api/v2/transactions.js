@@ -77,8 +77,9 @@ export const onRequestGet = (context) => handleV2(context, async ({ s, url }) =>
     list = list.filter((t) => t.categoryId === c || t.splits.some((x) => x.categoryId === c));
   }
   if (p.get("review") === "1") list = list.filter((t) => t.needsReview && !t.hidden);
-  if (p.get("auto") === "1") list = list.filter((t) => t.autoReview && !t.hidden);
-  if (p.get("hidden") === "only") list = list.filter((t) => t.hidden);
+  /* A copy auto-review hid as a duplicate stays listed, so "Not right" can bring it back. */
+  if (p.get("auto") === "1") list = list.filter((t) => t.autoReview && (!t.hidden || t.autoReview.decision === "duplicate"));
+  else if (p.get("hidden") === "only") list = list.filter((t) => t.hidden);
   else if (p.get("hidden") !== "1") list = list.filter((t) => !t.hidden);
   const q = (p.get("q") || "").trim().toLowerCase();
   if (q) list = list.filter((t) => (t.merchant + " " + t.description + " " + t.notes + " " + t.tags.join(" ")).toLowerCase().indexOf(q) !== -1);
@@ -175,6 +176,7 @@ export const onRequestPatch = (context) => handleV2(context, async ({ s, db, req
   const lockBank = () => { if (tx.source === "v1bank") add("category_locked", 1); };
   if (p.hidden !== undefined) { add("hidden", p.hidden ? 1 : 0); lockBank(); }
   if (p.needsReview !== undefined) { add("needs_review", p.needsReview ? 1 : 0); lockBank(); }
+  if (p.needsReview === true && p.hidden === undefined && tx.hidden && tx.autoReview && tx.autoReview.decision === "duplicate") add("hidden", 0);
   if (p.excludeReports !== undefined) add("exclude_reports", p.excludeReports ? 1 : 0);
 
   let splitStmts = null;

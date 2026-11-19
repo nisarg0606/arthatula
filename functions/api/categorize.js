@@ -66,6 +66,8 @@ export async function categorize(env, description, amount, fetchImpl) {
     } catch (e) { /* fall through to Gemini / keywords */ }
   }
   const rulesResult = { category: categorizeByRules(description), source: "rules" };
+  /* Known for sure: Gemini once filed a Cybrid send as Rent. */
+  if (rulesResult.category === "Sent to India") return rulesResult;
   const cfg = await getAiConfig(env || {});
   if (!cfg.key) return rulesResult;
   const doFetch = fetchImpl || fetch;
