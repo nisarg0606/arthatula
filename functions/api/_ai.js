@@ -23,18 +23,21 @@ export const PROVIDERS = {
 };
 export const DEFAULT_PROVIDER = "gemini";
 
-async function saved(db, key) {
-  const row = await db.prepare("SELECT value FROM budget_settings WHERE key = ?").bind(key).first();
-  return row && row.value ? row.value : null;
-}
-
 /* { provider, key, model, baseUrl }: env first, then Settings, then defaults. */
 export async function getAiConfig(env) {
   env = env || {};
-  let ready = null;
+  /* Every setting this could need, in one query: reading them one by
+     one cost a database round trip each, back to back. */
+  let rows = null;
   const read = async (k) => {
     if (!env.DB) return null;
-    try { await (ready = ready || ensureTables(env.DB)); return await saved(env.DB, k); } catch (e) { return null; }
+    try {
+      rows = rows || ensureTables(env.DB).then(() => {
+        const keys = ["ai_provider", "openai_base_url"].concat(...Object.keys(PROVIDERS).map((id) => [id + "_api_key", id + "_model"]));
+        return env.DB.prepare("SELECT key, value FROM budget_settings WHERE key IN (" + keys.map(() => "?").join(",") + ")").bind(...keys).all();
+      }).then((r) => Object.fromEntries(r.results.map((x) => [x.key, x.value])));
+      return (await rows)[k] || null;
+    } catch (e) { return null; }
   };
   let provider = env.AI_PROVIDER || (await read("ai_provider")) || DEFAULT_PROVIDER;
   if (!PROVIDERS[provider]) provider = DEFAULT_PROVIDER;
