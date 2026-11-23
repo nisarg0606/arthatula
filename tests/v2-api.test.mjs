@@ -90,6 +90,7 @@ for (const d of netflixDates) await addExp({ date: d, description: "NETFLIX.COM"
 const groceries = await addExp({ date: "2026-11-03", description: "Whole Foods", amount: 82.4, category: "Groceries" });
 await addExp({ date: "2026-11-04", description: "Dinner", amount: 90, myShare: 30, category: "Eating Out" });
 await upsertBankData(env.DB, {
+  syncedAt: "2026-11-19T00:00:00.000Z",
   accounts: [{ id: "chk", institution: "Test Bank", name: "Checking", subtype: "checking", currentBalance: 5000 }],
   transactions: [{ id: "b1", accountId: "chk", date: "2026-11-05", name: "AUTOPAY CARD", amount: 400 }]
 });
@@ -181,7 +182,7 @@ assert.ok(!cat.categories.some((c) => c.name === "Temporary"));
 /* ---------- rules ---------- */
 assert.equal((await call(rules, "POST", "rules", { matchText: "", setHidden: true })).status, 400, "a rule needs a match");
 let rr = (await call(rules, "POST", "rules", { matchText: "autopay", setCategoryId: id("Credit card payment"), addTag: "card" })).data;
-await upsertBankData(env.DB, { transactions: [{ id: "b2", accountId: "chk", date: "2026-11-25", name: "AUTOPAY CARD", amount: 300 }] });
+await upsertBankData(env.DB, { syncedAt: "2026-11-19T00:00:00.000Z", transactions: [{ id: "b2", accountId: "chk", date: "2026-11-25", name: "AUTOPAY CARD", amount: 300 }] });
 const b2 = (await ok(transactions, "GET", "transactions?q=autopay")).transactions.find((x) => x.externalId === "bank:b2");
 assert.equal(b2.categoryId, id("Credit card payment"), "rules file new transactions");
 assert.deepEqual(b2.tags, ["card"]);
