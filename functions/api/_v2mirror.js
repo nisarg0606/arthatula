@@ -396,12 +396,20 @@ export async function mirrorV1(db, opts) {
         pending: 0, hidden: 0, exclude: 0, review: 0, v1: null
       });
     };
-    push("takeHomePay", Math.round(a.takeHomePay * 100), FIELD_LABEL.takeHomePay);
-    push("otherIncome", Math.round(a.otherIncome * 100) - (reviewedIncome[m] || 0), FIELD_LABEL.otherIncome);
+    /* A feed-claimed month's stored actuals already include the bank
+       feed's contribution (a.feedRollup: cents per field, see the feed
+       rollup in budget.js). Only the share the feed did NOT contribute
+       — typed in, or rolled up from the daily log — is the mirror's
+       to copy: the feed's share lives in the money model as the feed
+       rows themselves, and copying it too would count it twice.
+       Unmarked months have no feedRollup and mirror exactly as before. */
+    const feedCents = (field) => (a.feedRollup ? a.feedRollup[field] || 0 : 0);
+    push("takeHomePay", Math.round(a.takeHomePay * 100) - feedCents("takeHomePay"), FIELD_LABEL.takeHomePay);
+    push("otherIncome", Math.round(a.otherIncome * 100) - feedCents("otherIncome") - (reviewedIncome[m] || 0), FIELD_LABEL.otherIncome);
     if (!loggedMonths[m]) {
       for (const [field] of MONEY_FIELDS) {
         if (field === "takeHomePay" || field === "otherIncome") continue;
-        push(field, -Math.round(a[field] * 100), FIELD_LABEL[field]);
+        push(field, -Math.round(a[field] * 100) + feedCents(field), FIELD_LABEL[field]);
       }
     }
   }
