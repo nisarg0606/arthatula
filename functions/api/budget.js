@@ -251,9 +251,11 @@ async function createTables(db) {
        created itself never got it.) */
     db.prepare("CREATE INDEX IF NOT EXISTS sessions_token_hash ON sessions (token_hash)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_daily_expenses_date ON daily_expenses (date)"),
-    db.prepare("PRAGMA table_info(daily_expenses)")
+    db.prepare("PRAGMA table_info(daily_expenses)"),
+    db.prepare("PRAGMA table_info(monthly_actuals)")
   ];
-  const pragmaIndex = stmts.length - 1;
+  const pragmaIndex = stmts.length - 2;
+  const actualsPragmaIndex = stmts.length - 1;
   /* Month rows are written on first save (upserts), so none are seeded.
      A database from before plan_start keeps its first month; a new one
      gets plan_start and baseline_date from the app (patchState). */
@@ -294,6 +296,12 @@ async function createTables(db) {
   /* note: the owner's own comment on an expense ("premium processing
      fee"). Only the owner writes it; imports and settling never do. */
   if (!colNames.includes("note")) alters.push(db.prepare("ALTER TABLE daily_expenses ADD COLUMN note TEXT"));
+  /* feed_rollup: on a monthly_actuals row the daily-rollup has claimed
+     (see rollupMonth), a JSON object of the cents the bank feed
+     contributed per money field. NULL = the row is a plain manual /
+     log-only actual, exactly as before the feed rollup existed. */
+  const actualColNames = ((results[actualsPragmaIndex] && results[actualsPragmaIndex].results) || []).map((c) => c.name);
+  if (!actualColNames.includes("feed_rollup")) alters.push(db.prepare("ALTER TABLE monthly_actuals ADD COLUMN feed_rollup TEXT"));
   if (alters.length) {
     try {
       await db.batch(alters);
@@ -1346,6 +1354,9 @@ export async function readState(db) {
     const row = actualByKey.get(key) || {};
     const a = { monthKey: key, entered: row.has_data === 1 || row.has_data === true };
     for (const [field, col] of MONEY_FIELDS) a[field] = toDollars(row[col] || 0);
+    /* The feed rollup's marker (cents per field the bank feed
+       contributed, see rollupMonth); null on manual / log-only rows. */
+    a.feedRollup = parseFeedRollup(row.feed_rollup);
     return a;
   });
   const dailyExpenses = (dailyResult.results || []).map((r) => ({
@@ -1444,39 +1455,246 @@ export async function patchActual(db, monthKey, patch) {
  * therefore only counts expenses dated on or after the baseline date;
  * earlier rows stay in the log as records but never enter actuals —
  * counting them would subtract the same spending twice.
+ *
+ * FEED ROLLUP: since the bank feed moved to the money model (SimpleFIN),
+ * bank rows no longer land in the daily log, so a log-only rollup leaves
+ * a feed month's actuals at whatever was typed or pre-logged — no pay,
+ * a slice of the spending. The rollup therefore also reads the money
+ * model's transactions for the month (feedTotalsForMonth) and folds
+ * them in, under a claim rule that keeps every pre-feed month exactly
+ * as it was:
+ *   - a month whose take-home pay is already booked (typed in, or
+ *     entered back when the retired automation fed the log) is NEVER
+ *     claimed: the classic log-only behaviour above applies verbatim;
+ *   - if take-home pay is later booked by hand on a claimed month, on
+ *     top of the feed's share, the classic flow has taken the month
+ *     back: the feed's share is backed out, the marker is cleared,
+ *     and the classic behaviour applies from then on;
+ *   - any other month with log rows or feed rows is claimed: its
+ *     expense fields become log + feed (the feed side skips the log's
+ *     own mirrored rows, so nothing counts twice), its income fields
+ *     keep the part of the stored figure the feed did not contribute
+ *     (typed-in income survives) plus the feed's contribution, and the
+ *     row is marked (monthly_actuals.feed_rollup = the feed's cents
+ *     per field) so the client knows the stored figures already
+ *     include the log and skips its own log overlay for the month,
+ *     and the mirror knows not to copy the feed's share back into
+ *     the money model as typed-in actuals.
+ * Claimed months are recomputed by syncDailyRollup (log writes) and by
+ * refreshFeedRollups on every classic budget read, so the Dashboard
+ * follows the feed without anyone typing actuals.
  */
-export async function syncDailyRollup(db, monthKey) {
-  await ensureTables(db);
-  if (!(await monthKeys(db)).includes(monthKey)) return readState(db);
-  const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
+
+/* The money model's owner id (OWNER_ID in _v2db.js). Not imported:
+   that module imports ensureTables from this one, and a top-level
+   cycle would break module init. Both models are single-owner. */
+const V2_OWNER_ID = "me";
+
+function parseFeedRollup(raw) {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" && !Array.isArray(o) ? o : null;
+  } catch (e) { return null; }
+}
+
+/* Money-model category name -> classic actual field. The shared names
+   ride CATEGORY_TO_FIELD; the money model adds a few of its own.
+   Names match case-insensitively, as elsewhere in the app. */
+const FEED_FIELD_BY_NAME = {};
+for (const [name, field] of Object.entries(CATEGORY_TO_FIELD)) FEED_FIELD_BY_NAME[name.toLowerCase()] = field;
+Object.assign(FEED_FIELD_BY_NAME, {
+  "car service": "gasTransport",
+  "family": "oneOffs",
+  "india trip": "oneOffs",
+  "travel": "oneOffs"
+});
+/* Transfer money that is never classic income or spending, named
+   explicitly. Repayment is NOT here: money back from friends counts
+   as other income in the classic actuals, as it always has. */
+const FEED_TRANSFER_NAMES = new Set(["transfer", "credit card payment", "investments", "internal transfers"]);
+const FEED_OTHER_INCOME_NAMES = new Set(["other income", "interest", "dividends", "cashback", "repayment"]);
+
+function feedFieldFor(cat) {
+  const n = String(cat.name || "").toLowerCase();
+  if (FEED_TRANSFER_NAMES.has(n)) return null;
+  if (n === "paycheck") return "takeHomePay";
+  if (FEED_OTHER_INCOME_NAMES.has(n)) return "otherIncome";
+  if (FEED_FIELD_BY_NAME[n]) return FEED_FIELD_BY_NAME[n];
+  if (cat.kind === "transfer") return null;
+  if (cat.kind === "income") return "otherIncome";
+  return "otherExpenses";
+}
+
+/* The money model's categories for the feed rollup, or null when the
+   money model was never set up on this database (its tables do not
+   exist): the caller reads null as "no feed" and the classic
+   behaviour carries on unchanged. */
+async function feedCategories(db) {
+  try {
+    const { results } = await db.prepare("SELECT id, name, kind FROM categories WHERE owner_id = ?").bind(V2_OWNER_ID).all();
+    const map = {};
+    for (const c of results || []) map[c.id] = c;
+    return map;
+  } catch (e) { return null; }
+}
+
+/* One aggregate read over the money model's transactions for a month,
+   counting what the new app's own reports count (see summarize /
+   reportLines in js/core/v2/money.js): hidden, report-excluded and
+   still-pending rows never count; a split row counts by its splits;
+   his share replaces the full amount where one is set. The daily
+   log's own rows (source "v1exp") are the log rollup's business, the
+   typed-in actuals mirrored back ("v1actual") are this rollup's own
+   output, and hand-added pending placeholders retire when the posted
+   charge lands — all three stay out, so nothing is counted twice.
+   Bank-mirror rows the classic Bank tab has reviewed stay out too:
+   the classic flow already accounts for those itself (an "income"
+   review is booked into the month's actuals, and a "repayment" is
+   deliberately not income there).
+   Returns { totals: {field: cents}, count } or null without a feed. */
+async function feedTotalsForMonth(db, monthKey, baselineDate, catById) {
+  let rows;
+  try {
+    const { results } = await db.prepare(
+      "SELECT COALESCE(sp.category_id, t.category_id) AS category_id, " +
+      "(COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) >= 0) AS positive, " +
+      "SUM(COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents)) AS cents, COUNT(*) AS n " +
+      "FROM transactions t LEFT JOIN transaction_splits sp ON sp.transaction_id = t.id AND sp.owner_id = t.owner_id " +
+      "WHERE t.owner_id = ? AND t.date >= ? AND t.date < ? AND substr(t.date, 1, 7) = ? AND t.date >= ? " +
+      "AND t.source NOT IN ('v1exp', 'v1actual') AND t.hidden = 0 AND t.exclude_reports = 0 AND t.pending = 0 " +
+      "AND t.tags NOT LIKE '%pending-placeholder%' " +
+      "AND NOT (t.source = 'v1bank' AND EXISTS (SELECT 1 FROM bank_tx_review r WHERE r.plaid_transaction_id = substr(t.external_id, 6))) " +
+      "GROUP BY COALESCE(sp.category_id, t.category_id), (COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) >= 0)"
+    ).bind(V2_OWNER_ID, ...monthRange(monthKey), baselineDate).all();
+    rows = results || [];
+  } catch (e) { return null; }
+  const totals = {};
+  let count = 0;
+  for (const r of rows) {
+    const cat = r.category_id ? catById[r.category_id] : null;
+    /* An unknown (deleted) category files by sign, like no category. */
+    const field = cat ? feedFieldFor(cat) : (r.positive ? "otherIncome" : "otherExpenses");
+    if (field === null) continue; /* transfers never count, in either sense */
+    count += r.n || 0;
+    const cents = r.cents || 0;
+    totals[field] = (totals[field] || 0) + (field === "takeHomePay" || field === "otherIncome" ? cents : -cents);
+  }
+  return { totals, count };
+}
+
+/* Compute one month's actuals from the daily log plus the bank feed
+   and store them when they moved. Returns true when it wrote.
+   legacy=true is the write paths' licence to run the pre-feed
+   behaviour on months the feed rollup does not claim (an expense was
+   just edited there); the read-path refresh passes false, so a page
+   load never rewrites an untouched manual month. */
+async function rollupMonth(db, monthKey, baselineDate, current, catById, legacy) {
   const { results } = await db
     .prepare("SELECT category, SUM(COALESCE(my_share, amount)) AS total, COUNT(*) AS n FROM daily_expenses WHERE " + IN_MONTH + " AND date >= ? GROUP BY category")
     .bind(...monthRange(monthKey), baselineDate)
     .all();
   const rows = results || [];
-  const totalCount = rows.reduce((s, r) => s + (r.n || 0), 0);
-  const current = (await readState(db)).actuals.find((a) => a.monthKey === monthKey);
+  const logCount = rows.reduce((s, r) => s + (r.n || 0), 0);
   const expenseFields = MONEY_FIELDS.map(([f]) => f)
     .filter((f) => f !== "takeHomePay" && f !== "otherIncome");
-  /* Callers only sync a month that just gained or lost a row, so an empty
-     log means its last expense was deleted or moved away: clear the
-     rolled-up fields, and the month stops counting as entered unless it
-     has manually entered actual income. */
-  if (totalCount === 0) {
-    const cleared = { ...current };
-    for (const f of expenseFields) cleared[f] = 0;
-    if (!((cleared.takeHomePay || 0) + (cleared.otherIncome || 0))) cleared.entered = false;
-    await writeActual(db, cleared);
-    return readState(db);
+  const feed = catById ? await feedTotalsForMonth(db, monthKey, baselineDate, catById) : null;
+  let marked = !!(current && current.feedRollup);
+  if (marked) {
+    /* Take-home pay booked by hand beyond the feed's share means the
+       classic flow has taken this month back: back the feed's share out
+       of the other fields (the booked pay figure itself stands whole —
+       booking writes the month's total, not an increment), clear the
+       marker, and let the classic behaviour below apply from here on. */
+    const prev = current.feedRollup || {};
+    if (toCents(current.takeHomePay) - (prev.takeHomePay || 0) > 0) {
+      const restored = { ...current };
+      for (const [f] of MONEY_FIELDS) restored[f] = (toCents(current[f]) - (prev[f] || 0)) / 100;
+      restored.takeHomePay = current.takeHomePay;
+      restored.entered = MONEY_FIELDS.some(([f]) => restored[f] !== 0);
+      await writeActual(db, restored);
+      await db.prepare("UPDATE monthly_actuals SET feed_rollup = NULL WHERE month_key = ?").bind(monthKey).run();
+      current = { ...restored, feedRollup: null };
+      marked = false;
+    }
   }
+  const claimed = marked || (!!feed && !(current.takeHomePay > 0) && (logCount > 0 || feed.count > 0));
+  if (!claimed) {
+    if (!legacy) return false;
+    /* Callers only sync a month that just gained or lost a row, so an empty
+       log means its last expense was deleted or moved away: clear the
+       rolled-up fields, and the month stops counting as entered unless it
+       has manually entered actual income. */
+    if (logCount === 0) {
+      const cleared = { ...current };
+      for (const f of expenseFields) cleared[f] = 0;
+      if (!((cleared.takeHomePay || 0) + (cleared.otherIncome || 0))) cleared.entered = false;
+      await writeActual(db, cleared);
+      return true;
+    }
+    const merged = { ...current, entered: true };
+    for (const f of expenseFields) merged[f] = 0;
+    for (const r of rows) {
+      const field = CATEGORY_TO_FIELD[r.category] || "otherExpenses";
+      merged[field] = Math.round(((merged[field] || 0) + (r.total || 0)) * 100) / 100;
+    }
+    await writeActual(db, merged);
+    return true;
+  }
+  if (!feed) return false; /* claimed on the marker alone, feed gone: leave the row as it stands */
+  const prevFeed = current.feedRollup || {};
   const merged = { ...current, entered: true };
-  for (const f of expenseFields) merged[f] = 0;
+  const logCents = {};
   for (const r of rows) {
     const field = CATEGORY_TO_FIELD[r.category] || "otherExpenses";
-    merged[field] = Math.round(((merged[field] || 0) + (r.total || 0)) * 100) / 100;
+    logCents[field] = (logCents[field] || 0) + Math.round((r.total || 0) * 100);
   }
+  for (const f of expenseFields) merged[f] = ((logCents[f] || 0) + (feed.totals[f] || 0)) / 100;
+  for (const f of ["takeHomePay", "otherIncome"]) {
+    merged[f] = (toCents(current[f]) - (prevFeed[f] || 0) + (feed.totals[f] || 0)) / 100;
+  }
+  if (logCount === 0 && feed.count === 0 && !merged.takeHomePay && !merged.otherIncome) merged.entered = false;
+  const marker = {};
+  for (const [f] of MONEY_FIELDS) if (feed.totals[f]) marker[f] = feed.totals[f];
+  const changed = !marked || JSON.stringify(marker) !== JSON.stringify(prevFeed)
+    || MONEY_FIELDS.some(([f]) => toCents(merged[f]) !== toCents(current[f]))
+    || merged.entered !== current.entered;
+  if (!changed) return false;
   await writeActual(db, merged);
+  await db.prepare("UPDATE monthly_actuals SET feed_rollup = ? WHERE month_key = ?")
+    .bind(JSON.stringify(marker), monthKey).run();
+  return true;
+}
+
+export async function syncDailyRollup(db, monthKey) {
+  await ensureTables(db);
+  if (!(await monthKeys(db)).includes(monthKey)) return readState(db);
+  const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
+  const current = (await readState(db)).actuals.find((a) => a.monthKey === monthKey);
+  const catById = await feedCategories(db);
+  await rollupMonth(db, monthKey, baselineDate, current, catById, true);
   return readState(db);
+}
+
+/* Read-path refresh: bring every planner month the feed rollup claims
+   (or can claim) up to date with the bank feed. Two aggregate reads
+   per month plus one shared category read, and writes only where the
+   figures actually moved — no per-row work on a budget load. Months
+   with booked pay are skipped outright: the claim rule can never
+   take them, and their actuals are already on record. */
+export async function refreshFeedRollups(db) {
+  await ensureTables(db);
+  const catById = await feedCategories(db);
+  if (!catById) return;
+  const keys = await monthKeys(db);
+  const baselineDate = (await getSetting(db, "baseline_date")) || todayIso();
+  const state = await readState(db);
+  for (const key of keys) {
+    const current = state.actuals.find((a) => a.monthKey === key);
+    if (!current) continue;
+    if (!current.feedRollup && current.takeHomePay > 0) continue;
+    await rollupMonth(db, key, baselineDate, current, catById, false);
+  }
 }
 
 export async function listDailyExpenses(db, monthKey) {
@@ -1631,6 +1849,10 @@ export async function onRequestGet(context) {
   try {
     const auth = await requireAuth(context.env.DB, context.request);
     if (auth.response) return auth.response;
+    /* The bank feed lands in the money model, not the daily log, so a
+       feed month's stored actuals only move when the rollup runs:
+       refresh them (writes only where figures moved) before reading. */
+    await refreshFeedRollups(context.env.DB);
     return json(await readState(context.env.DB));
   } catch (err) {
     return json({ error: String((err && err.message) || err) }, 500);

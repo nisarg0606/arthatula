@@ -35,7 +35,10 @@ export function computeComparison(state) {
      authoritative for actual EXPENSE fields (same rule as the server's
      syncDailyRollup) — manual actual income still applies, and the
      rolled-up expenses replace, never add to, manual actual expenses,
-     so nothing is double-counted. */
+     so nothing is double-counted. A month the server's feed rollup
+     has claimed (stored.feedRollup) is the one exception: its stored
+     expenses already include the log AND the bank feed, so the
+     overlay would swap the feed's share back out — skip it there. */
   var rollup = dailyRollupByMonth(state);
   var actualBalance = state.startingBalance || 0;
   var contiguous = true;
@@ -44,7 +47,7 @@ export function computeComparison(state) {
     var stored = actualByKey[r.monthKey];
     var a = stored;
     var roll = rollup[r.monthKey];
-    if (roll && roll.count > 0 && stored) {
+    if (roll && roll.count > 0 && stored && !stored.feedRollup) {
       a = { monthKey: stored.monthKey, entered: true,
         takeHomePay: stored.takeHomePay, otherIncome: stored.otherIncome };
       EXPENSE_FIELD_KEYS.forEach(function (k) { a[k] = roll.totals[k] || 0; });

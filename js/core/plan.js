@@ -162,6 +162,11 @@ export function sanitizeState(raw) {
       NUMBER_FIELDS.forEach(function (f) { if (ra[f.key] !== undefined) target[f.key] = toNumber(ra[f.key]); });
       target.entered = ra.entered === true ||
         NUMBER_FIELDS.some(function (f) { return target[f.key] !== 0; });
+      /* The server's feed-rollup marker: present (an object of cents
+         per field) when the stored actual already includes the bank
+         feed as well as the log. Kept verbatim so the comparison
+         knows not to overlay the log a second time. */
+      if (ra.feedRollup && typeof ra.feedRollup === "object") target.feedRollup = ra.feedRollup;
     });
   }
   if (Array.isArray(raw.dailyExpenses)) {

@@ -49,7 +49,7 @@
  * AI context small.
  */
 import {
-  ensureTables, requireAuth, readState, listDailyExpenses, listCards,
+  ensureTables, requireAuth, readState, refreshFeedRollups, listDailyExpenses, listCards,
   getBankSnapshot, getPendingSnapshot, requestSync, getLatestSyncRequest, lastBankSyncAt,
   patchState, patchActual, getMerchantRules, createCard, updateCard, deleteCard,
   setBankReview, setIgnoreRules, REVIEW_KINDS, applyBankRelink
@@ -921,6 +921,7 @@ async function callTool(db, env, session, name, args) {
   args = args && typeof args === "object" ? args : {};
   switch (name) {
     case "get_budget":
+      await refreshFeedRollups(db);
       return toolOk(await readState(db));
     case "list_expenses": {
       if (args.month !== undefined && !/^\d{4}-\d{2}$/.test(String(args.month))) {
