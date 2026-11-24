@@ -153,7 +153,14 @@ export async function syncSimplefin(s, db, fetchImpl) {
     folded++;
   }
   /* A week of overlap catches rows that posted late; the first sync (or one after a fold) takes all 90 days. */
-  const start = Number.isFinite(last) && !folded ? last - 7 * DAY : now - 90 * DAY;
+  let start = Number.isFinite(last) && !folded ? last - 7 * DAY : now - 90 * DAY;
+  /* A pending placeholder still waiting for its posted charge reaches
+     the window back to it (a few days before, as importRows matches),
+     so a posted charge an earlier sync passed over comes in now. */
+  const waiting = await s.first("SELECT MIN(date) AS d FROM transactions WHERE owner_id = ?1 AND hidden = 0 AND external_id IS NULL " +
+    "AND tags LIKE '%pending-placeholder%' AND date >= ?2", new Date((now - 90 * DAY) * 1000).toISOString().slice(0, 10));
+  const waitSec = waiting && waiting.d ? Date.parse(waiting.d + "T00:00:00Z") / 1000 - 3 * DAY : NaN;
+  if (Number.isFinite(waitSec) && waitSec < start) start = Math.max(waitSec, now - 90 * DAY);
   let set;
   try { set = await fetchAccounts(access, start, fetchImpl); }
   catch (e) { await s.setSetting("simplefin_last_error", e.message); throw e; }
@@ -200,7 +207,7 @@ export async function syncSimplefin(s, db, fetchImpl) {
   const total = { accounts: mapped.length, added: 0, duplicates: 0, categorized: 0, toReview: 0 };
   for (const m of mapped) {
     const r = await importRows(s, db, m.into || ids[m.ext], m.rows, "simplefin");
-    Object.keys(r).forEach((k) => { total[k] += r[k]; });
+    Object.keys(r).forEach((k) => { total[k] = (total[k] || 0) + r[k]; });
   }
   /* The same real account carried by two feeds counts its balance
      twice. Flag a distinct set of duplicates once (the setting is

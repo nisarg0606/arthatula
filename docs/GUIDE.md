@@ -352,6 +352,13 @@ importing overlapping statements is safe), how many your rules filed,
 and how many wait on **To review**. With the AI on (section 5), it
 checks those first, the next time you open the app.
 
+A row tagged `pending-placeholder` (a stand-in an assistant adds while a
+card charge is still pending) doesn't count in the reports or the
+Dashboard. When the posted charge arrives (same card, same amount, a
+similar name, within a few days), it comes in as a normal row, takes the
+placeholder's category, and the placeholder is hidden with a "Settled"
+note, so the charge counts once.
+
 **Connect your bank with SimpleFIN (US banks, about $15 a year).**
 [SimpleFIN Bridge](https://beta-bridge.simplefin.org/) links US (and
 some Canadian) banks and cards without a computer left on. It doesn't
