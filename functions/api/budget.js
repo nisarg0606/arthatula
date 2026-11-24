@@ -1542,7 +1542,7 @@ async function feedCategories(db) {
   } catch (e) { return null; }
 }
 
-/* One aggregate read over the money model's transactions for a month,
+/* One read over the money model's transactions for a month,
    counting what the new app's own reports count (see summarize /
    reportLines in js/core/v2/money.js): rows flagged off the reports
    and still-pending rows never count; a split row counts by its
@@ -1555,56 +1555,61 @@ async function feedCategories(db) {
    too: the classic flow already accounts for those itself (an
    "income" review is booked into the month's actuals, and a
    "repayment" is deliberately not income there).
-   The read groups by day as well as category, so the same pass also
-   yields the feed's spending by day and by category name — the
-   marker carries those alongside the field totals, and the classic
-   Dashboard's two graphs (which draw from the log alone) add them
-   on top. Spending here is exactly the expense-field side of the
+   The same pass also yields the feed's spending by day and by
+   category name, and the charges themselves — the marker carries
+   those alongside the field totals, and the classic Dashboard (whose
+   graphs, Pace and Spent tile read the log) adds them on top. Spending here is exactly the expense-field side of the
    totals: refunds net against their day and category, as they do
    against the fields.
-   Returns { totals, perDayCents, byCategoryCents, count } or null
+   Returns { totals, perDayCents, byCategoryCents, items, count } or null
    without a feed. */
 async function feedTotalsForMonth(db, monthKey, baselineDate, catById) {
   let rows;
   try {
+    /* Row by row (a split row once per split): a month of feed rows is
+       small, and the rows themselves feed the marker's item list. */
     const { results } = await db.prepare(
-      "SELECT substr(t.date, 9, 2) AS day, COALESCE(sp.category_id, t.category_id) AS category_id, " +
-      "(COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) >= 0) AS positive, " +
-      "SUM(COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents)) AS cents, COUNT(*) AS n " +
+      "SELECT t.date AS date, t.merchant AS merchant, COALESCE(sp.category_id, t.category_id) AS category_id, " +
+      "COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) AS cents " +
       "FROM transactions t LEFT JOIN transaction_splits sp ON sp.transaction_id = t.id AND sp.owner_id = t.owner_id " +
       "WHERE t.owner_id = ? AND t.date >= ? AND t.date < ? AND substr(t.date, 1, 7) = ? AND t.date >= ? " +
       "AND t.source NOT IN ('v1exp', 'v1actual') AND t.hidden = 0 AND t.exclude_reports = 0 AND t.pending = 0 " +
       "AND t.tags NOT LIKE '%pending-placeholder%' " +
       "AND NOT (t.source = 'v1bank' AND EXISTS (SELECT 1 FROM bank_tx_review r WHERE r.plaid_transaction_id = substr(t.external_id, 6))) " +
-      "GROUP BY substr(t.date, 9, 2), COALESCE(sp.category_id, t.category_id), (COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) >= 0)"
+      "ORDER BY t.date, t.id"
     ).bind(V2_OWNER_ID, ...monthRange(monthKey), baselineDate).all();
     rows = results || [];
   } catch (e) { return null; }
   const totals = {};
   const perDayCents = {};
   const byCategoryCents = {};
+  const items = [];
   let count = 0;
   for (const r of rows) {
+    const cents = r.cents || 0;
     const cat = r.category_id ? catById[r.category_id] : null;
     /* An unknown (deleted) category files by sign, like no category. */
-    const field = cat ? feedFieldFor(cat) : (r.positive ? "otherIncome" : "otherExpenses");
+    const field = cat ? feedFieldFor(cat) : (cents >= 0 ? "otherIncome" : "otherExpenses");
     if (field === null) continue; /* transfers never count, in either sense */
-    count += r.n || 0;
-    const cents = r.cents || 0;
+    count += 1;
     totals[field] = (totals[field] || 0) + (field === "takeHomePay" || field === "otherIncome" ? cents : -cents);
     if (field !== "takeHomePay" && field !== "otherIncome" && cents) {
       const spent = -cents;
-      const day = String(Number(r.day));
+      const day = String(Number(String(r.date).slice(8, 10)));
       perDayCents[day] = (perDayCents[day] || 0) + spent;
       const name = cat ? cat.name : "Misc/Other";
       byCategoryCents[name] = (byCategoryCents[name] || 0) + spent;
+      /* The charge itself, for the Dashboard's lists (Pace, a day's
+         bar, a category slice): date, name, spending in cents (a
+         refund is negative), category name and classic field. */
+      items.push({ date: String(r.date).slice(0, 10), merchant: String(r.merchant || "").slice(0, 120), cents: spent, category: name, field });
     }
   }
   /* Days and categories whose charges and refunds cancel out carry
      no spending: leave them out of the marker. */
   for (const k of Object.keys(perDayCents)) if (!perDayCents[k]) delete perDayCents[k];
   for (const k of Object.keys(byCategoryCents)) if (!byCategoryCents[k]) delete byCategoryCents[k];
-  return { totals, perDayCents, byCategoryCents, count };
+  return { totals, perDayCents, byCategoryCents, items, count };
 }
 
 /* Compute one month's actuals from the daily log plus the bank feed
@@ -1686,6 +1691,7 @@ async function rollupMonth(db, monthKey, baselineDate, current, catById, legacy)
      keys are chart data only: nothing reads them as fields. */
   if (Object.keys(feed.perDayCents).length) marker.perDayCents = feed.perDayCents;
   if (Object.keys(feed.byCategoryCents).length) marker.byCategoryCents = feed.byCategoryCents;
+  if (feed.items.length) marker.items = feed.items;
   const changed = !marked || JSON.stringify(marker) !== JSON.stringify(prevFeed)
     || MONEY_FIELDS.some(([f]) => toCents(merged[f]) !== toCents(current[f]))
     || merged.entered !== current.entered;

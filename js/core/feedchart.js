@@ -34,3 +34,49 @@ export function feedChartData(actual) {
     byCategory: dollarMap(marker.byCategoryCents, false)
   };
 }
+
+/* The feed's charges in a feed-claimed month, shaped like daily-log
+   entries so the Dashboard's lists (Pace, a day's bar, a category
+   slice) can show them next to the log's own rows: { date,
+   description, amount (dollars; a refund is negative), category
+   (the money model's name), field (the classic actual field),
+   fromFeed: true }. A marker written before the items existed, or
+   none at all, yields an empty list. */
+export function feedItems(actual) {
+  var marker = actual && typeof actual === "object" ? actual.feedRollup : null;
+  var raw = marker && Array.isArray(marker.items) ? marker.items : [];
+  var out = [];
+  raw.forEach(function (it) {
+    if (!it || typeof it !== "object") return;
+    if (typeof it.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(it.date)) return;
+    if (typeof it.cents !== "number" || !isFinite(it.cents) || it.cents === 0) return;
+    out.push({
+      date: it.date,
+      description: typeof it.merchant === "string" && it.merchant ? it.merchant : "Bank charge",
+      amount: Math.round(it.cents) / 100,
+      myShare: null,
+      category: typeof it.category === "string" && it.category ? it.category : "Misc/Other",
+      field: typeof it.field === "string" ? it.field : "otherExpenses",
+      card: "Bank feed",
+      fromFeed: true
+    });
+  });
+  return out;
+}
+
+/* The feed's share of one classic expense field, in dollars (the
+   marker's per-field cents), and its total spending in the month
+   (the sum of its by-day spending, which is what the Daily spending
+   chart adds). 0 for an unclaimed month. */
+export function feedFieldDollars(actual, field) {
+  var marker = actual && typeof actual === "object" ? actual.feedRollup : null;
+  var v = marker ? marker[field] : 0;
+  return typeof v === "number" && isFinite(v) ? Math.round(v) / 100 : 0;
+}
+
+export function feedSpendingDollars(actual) {
+  var perDay = feedChartData(actual).perDay;
+  var total = 0;
+  Object.keys(perDay).forEach(function (k) { total += perDay[k]; });
+  return Math.round(total * 100) / 100;
+}

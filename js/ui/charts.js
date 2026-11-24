@@ -2,7 +2,7 @@
 import { fmt, amountsHidden, HIDDEN } from "../core/format.js";
 import { MONTHS } from "../core/plan.js";
 import { expenseShare, isSpending } from "../core/spending.js";
-import { feedChartData } from "../core/feedchart.js";
+import { feedChartData, feedItems } from "../core/feedchart.js";
 import { fmtDate } from "./cards.js";
 import { app, els } from "./context.js";
 import { withIcon } from "../core/categories.js";
@@ -181,6 +181,8 @@ export function renderCharts(cmp) {
   var selActual = null;
   (app.state.actuals || []).forEach(function (a) { if (a.monthKey === app.selectedKey) selActual = a; });
   var feedChart = feedChartData(selActual);
+  /* ...and the feed's charges themselves, for the tap-through lists. */
+  var feedList = feedItems(selActual);
 
   /* 1) Cumulative balance: smooth area for the actual balance, a dashed
      plan line on top in Compare mode. */
@@ -301,7 +303,7 @@ export function renderCharts(cmp) {
       var showCat = function (cat) {
         showTransactions(cat + " · " + monthLabel(app.selectedKey), (app.state.dailyExpenses || []).filter(function (e) {
           return isSpending(e) && e.category === cat && String(e.date).slice(0, 7) === app.selectedKey;
-        }));
+        }).concat(feedList.filter(function (e) { return e.category === cat; })));
       };
       doughOpts.onClick = function (evt, elements) { if (elements.length) showCat(catLabels[elements[0].index]); };
       doughOpts.onHover = function (evt, elements) { evt.native.target.style.cursor = elements.length ? "pointer" : ""; };
@@ -338,8 +340,8 @@ export function renderCharts(cmp) {
   });
   /* The feed's charges land on their own days, on top of the log's:
      the bars, the running line and the header total all follow from
-     perDay, so they pick the feed up from here. (Tapping a day still
-     lists the log rows for that day, as before.) */
+     perDay, so they pick the feed up from here. Tapping a day lists
+     the log rows and the feed's charges for that day. */
   Object.keys(feedChart.perDay).forEach(function (k) {
     var day = Number(k);
     if (day >= 1 && day <= daysIn) { perDay[day - 1] = Math.round((perDay[day - 1] + feedChart.perDay[k]) * 100) / 100; anyDaily = true; }
@@ -369,7 +371,7 @@ export function renderCharts(cmp) {
       var dayKey = app.selectedKey + "-" + String(elements[0].index + 1).padStart(2, "0");
       showTransactions(fmtDate(dayKey), (app.state.dailyExpenses || []).filter(function (e) {
         return isSpending(e) && e.date === dayKey;
-      }));
+      }).concat(feedList.filter(function (e) { return e.date === dayKey; })));
     };
     dailyOpts.onHover = function (evt, elements) { evt.native.target.style.cursor = elements.length ? "pointer" : ""; };
     app.chartDaily = new window.Chart(els.dailyChart, {

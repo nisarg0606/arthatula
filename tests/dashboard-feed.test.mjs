@@ -274,6 +274,16 @@ await refreshFeedRollups(env.DB);
   assert.equal(sum(jun.feedRollup.perDayCents), 23832 + 14099 + 25000);
   assert.equal(jun.groceries, 238.32);
   assert.equal(jun.oneOffs, 250, "Sent to India still files under one-offs in the fields");
+  /* The charges themselves, for the Dashboard's tap-through lists: the
+     same rows the sums count, so a slice's list adds up to the slice. */
+  const items = jun.feedRollup.items;
+  assert.ok(Array.isArray(items), "the marker lists the charges");
+  assert.equal(sum(items.map((it) => it.cents)), sum(jun.feedRollup.perDayCents), "the list adds up to the month's feed spending");
+  const byCat = {};
+  for (const it of items) byCat[it.category] = (byCat[it.category] || 0) + it.cents;
+  assert.deepEqual(byCat, jun.feedRollup.byCategoryCents, "each category's list adds up to its slice");
+  assert.ok(items.every((it) => /^2027-06-\d\d$/.test(it.date) && typeof it.field === "string"));
+  assert.ok(!items.some((it) => it.field === "takeHomePay"), "pay is never listed as spending");
 }
 
 /* ---------- K. client: the graph reader for the marker ---------- */
@@ -301,6 +311,46 @@ await refreshFeedRollups(env.DB);
   Object.keys(data.byCategory).forEach((name) => { catTotals[name] = Math.round(((catTotals[name] || 0) + data.byCategory[name]) * 100) / 100; });
   assert.equal(catTotals["Groceries"], 318.32, "same-name categories merge");
   assert.equal(catTotals["Sent to India"], 250, "a feed-only category appears under its own name");
+}
+
+/* ---------- K2. client: the feed's charges, Spent so far and Pace ---------- */
+{
+  const actual = { monthKey: "2026-11", feedRollup: {
+    groceries: 23832, eatingOut: 1000,
+    perDayCents: { "3": 20000, "4": 4832 },
+    byCategoryCents: { "Groceries": 23832, "Eating Out": 1000 },
+    items: [
+      { date: "2026-11-03", merchant: "COSTCO WHSE", cents: 20000, category: "Groceries", field: "groceries" },
+      { date: "2026-11-04", merchant: "WALMART", cents: 5832, category: "Groceries", field: "groceries" },
+      { date: "2026-11-04", merchant: "WALMART refund", cents: -2000, category: "Groceries", field: "groceries" },
+      { date: "2026-11-04", merchant: "Cafe", cents: 1000, category: "Eating Out", field: "eatingOut" },
+      { date: "bad", cents: 500 }, { date: "2026-11-05", cents: 0 }
+    ]
+  } };
+  const list = app.feedItems(actual);
+  assert.equal(list.length, 4, "malformed and zero items are dropped");
+  assert.deepEqual(list[0], { date: "2026-11-03", description: "COSTCO WHSE", amount: 200, myShare: null,
+    category: "Groceries", field: "groceries", card: "Bank feed", fromFeed: true });
+  assert.equal(list[2].amount, -20, "a refund lists as negative");
+  assert.deepEqual(app.feedItems(null), []);
+  assert.deepEqual(app.feedItems({ feedRollup: { groceries: 100 } }), [], "a marker from before the items existed");
+  assert.equal(app.feedFieldDollars(actual, "groceries"), 238.32);
+  assert.equal(app.feedSpendingDollars(actual), 248.32);
+
+  const st = blank();
+  st.months[1].groceries = 300; /* November, as in merchant.test.mjs */
+  st.dailyExpenses = [{ id: 1, date: "2026-11-02", description: "Busan Mart", amount: 10, category: "Groceries" }];
+  st.actuals = [actual];
+  assert.equal(app.spentInMonth(st, "2026-11"), 258.32, "Spent so far = log + the feed's spending");
+  const pace = app.categoryPacing(st, "2026-11", "2026-11-10");
+  const g = pace.rows.find((r) => r.key === "groceries");
+  assert.equal(g.spent, 248.32, "Pace counts the feed's groceries on top of the log's");
+  assert.equal(g.items.length, 4, "and lists them");
+  assert.equal(Math.round(g.items.reduce((s, e) => s + app.expenseShare(e), 0) * 100) / 100, g.spent, "the list adds up to the bar");
+  const e = pace.rows.find((r) => r.key === "eatingOut");
+  assert.equal(e.spent, 10);
+  st.actuals = [];
+  assert.equal(app.spentInMonth(st, "2026-11"), 10, "an unclaimed month is the log alone");
 }
 
 /* ---------- L. the mirror pays no attention to the chart sums ---------- */

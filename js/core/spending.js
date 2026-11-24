@@ -1,6 +1,7 @@
 /* Spending rules: my share of an expense, daily rollups, what counts as spending, plan room. */
 import { CATEGORY_TO_FIELD } from "./categories.js";
 import { isPendingPayment } from "./pending.js";
+import { feedSpendingDollars } from "./feedchart.js";
 
 /* His effective cost of an expense: the optional myShare (his portion
    of a shared expense) when set, otherwise the full amount. Monthly
@@ -59,7 +60,17 @@ export function spentInMonth(state, monthKey) {
     if (!isSpending(e) || e.date.slice(0, 7) !== monthKey) return;
     total += expenseShare(e);
   });
+  /* A feed-claimed month adds the bank feed's spending (the same sum
+     the Daily spending chart adds), so the tile and the chart agree. */
+  total += feedSpendingDollars(monthActual(state, monthKey));
   return Math.round(total * 100) / 100;
+}
+
+/* The stored actual for a month, or null. */
+export function monthActual(state, monthKey) {
+  var found = null;
+  ((state && state.actuals) || []).forEach(function (a) { if (a && a.monthKey === monthKey) found = a; });
+  return found;
 }
 
 /* The fixed obligations a planned month must cover before any

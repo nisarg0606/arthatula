@@ -4,7 +4,8 @@
    would always look "ahead of pace". */
 import { CATEGORY_TO_FIELD } from "./categories.js";
 import { NUMBER_FIELDS } from "./plan.js";
-import { expenseShare, isSpending } from "./spending.js";
+import { expenseShare, isSpending, monthActual } from "./spending.js";
+import { feedFieldDollars, feedItems } from "./feedchart.js";
 
 export var PACE_FIELDS = ["groceries", "eatingOut", "gasTransport", "shopping", "otherExpenses"];
 
@@ -31,6 +32,17 @@ export function categoryPacing(state, monthKey, todayIso) {
     var f = CATEGORY_TO_FIELD[e.category] || "otherExpenses";
     spent[f] = (spent[f] || 0) + expenseShare(e);
     (items[f] = items[f] || []).push(e);
+  });
+  /* A feed-claimed month adds the bank feed's share of each field
+     (the marker's per-field cents) and lists its charges too. */
+  var actual = monthActual(state, monthKey);
+  PACE_FIELDS.forEach(function (f) {
+    var feed = feedFieldDollars(actual, f);
+    if (feed) spent[f] = (spent[f] || 0) + feed;
+  });
+  feedItems(actual).forEach(function (e) {
+    if (PACE_FIELDS.indexOf(e.field) === -1) return;
+    (items[e.field] = items[e.field] || []).push(e);
   });
   var daysLeft = days - day + 1; /* today still counts */
   var rows = PACE_FIELDS.map(function (key) {
