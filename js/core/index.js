@@ -2,6 +2,7 @@
 export * from "./plan.js";
 export * from "./categories.js";
 export * from "./spending.js";
+export * from "./feedchart.js";
 export * from "./summary.js";
 export * from "./review.js";
 export * from "./pending.js";

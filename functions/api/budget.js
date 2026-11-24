@@ -298,8 +298,10 @@ async function createTables(db) {
   if (!colNames.includes("note")) alters.push(db.prepare("ALTER TABLE daily_expenses ADD COLUMN note TEXT"));
   /* feed_rollup: on a monthly_actuals row the daily-rollup has claimed
      (see rollupMonth), a JSON object of the cents the bank feed
-     contributed per money field. NULL = the row is a plain manual /
-     log-only actual, exactly as before the feed rollup existed. */
+     contributed per money field, plus the feed's spending by day
+     (perDayCents) and by category name (byCategoryCents) for the
+     Dashboard graphs. NULL = the row is a plain manual / log-only
+     actual, exactly as before the feed rollup existed. */
   const actualColNames = ((results[actualsPragmaIndex] && results[actualsPragmaIndex].results) || []).map((c) => c.name);
   if (!actualColNames.includes("feed_rollup")) alters.push(db.prepare("ALTER TABLE monthly_actuals ADD COLUMN feed_rollup TEXT"));
   if (alters.length) {
@@ -1476,10 +1478,11 @@ export async function patchActual(db, monthKey, patch) {
  *     keep the part of the stored figure the feed did not contribute
  *     (typed-in income survives) plus the feed's contribution, and the
  *     row is marked (monthly_actuals.feed_rollup = the feed's cents
- *     per field) so the client knows the stored figures already
- *     include the log and skips its own log overlay for the month,
- *     and the mirror knows not to copy the feed's share back into
- *     the money model as typed-in actuals.
+ *     per field, plus its spending by day and by category name for
+ *     the Dashboard graphs) so the client knows the stored figures
+ *     already include the log and skips its own log overlay for the
+ *     month, and the mirror knows not to copy the feed's share back
+ *     into the money model as typed-in actuals.
  * Claimed months are recomputed by syncDailyRollup (log writes) and by
  * refreshFeedRollups on every classic budget read, so the Dashboard
  * follows the feed without anyone typing actuals.
@@ -1541,23 +1544,31 @@ async function feedCategories(db) {
 
 /* One aggregate read over the money model's transactions for a month,
    counting what the new app's own reports count (see summarize /
-   reportLines in js/core/v2/money.js): hidden, report-excluded and
-   still-pending rows never count; a split row counts by its splits;
-   his share replaces the full amount where one is set. The daily
-   log's own rows (source "v1exp") are the log rollup's business, the
-   typed-in actuals mirrored back ("v1actual") are this rollup's own
-   output, and hand-added pending placeholders retire when the posted
-   charge lands — all three stay out, so nothing is counted twice.
-   Bank-mirror rows the classic Bank tab has reviewed stay out too:
-   the classic flow already accounts for those itself (an "income"
-   review is booked into the month's actuals, and a "repayment" is
-   deliberately not income there).
-   Returns { totals: {field: cents}, count } or null without a feed. */
+   reportLines in js/core/v2/money.js): rows flagged off the reports
+   and still-pending rows never count; a split row counts by its
+   splits; his share replaces the full amount where one is set. The
+   daily log's own rows (source "v1exp") are the log rollup's business,
+   the typed-in actuals mirrored back ("v1actual") are this rollup's
+   own output, and hand-added pending placeholders retire when the
+   posted charge lands — all three stay out, so nothing is counted
+   twice. Bank-mirror rows the classic Bank tab has reviewed stay out
+   too: the classic flow already accounts for those itself (an
+   "income" review is booked into the month's actuals, and a
+   "repayment" is deliberately not income there).
+   The read groups by day as well as category, so the same pass also
+   yields the feed's spending by day and by category name — the
+   marker carries those alongside the field totals, and the classic
+   Dashboard's two graphs (which draw from the log alone) add them
+   on top. Spending here is exactly the expense-field side of the
+   totals: refunds net against their day and category, as they do
+   against the fields.
+   Returns { totals, perDayCents, byCategoryCents, count } or null
+   without a feed. */
 async function feedTotalsForMonth(db, monthKey, baselineDate, catById) {
   let rows;
   try {
     const { results } = await db.prepare(
-      "SELECT COALESCE(sp.category_id, t.category_id) AS category_id, " +
+      "SELECT substr(t.date, 9, 2) AS day, COALESCE(sp.category_id, t.category_id) AS category_id, " +
       "(COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) >= 0) AS positive, " +
       "SUM(COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents)) AS cents, COUNT(*) AS n " +
       "FROM transactions t LEFT JOIN transaction_splits sp ON sp.transaction_id = t.id AND sp.owner_id = t.owner_id " +
@@ -1565,11 +1576,13 @@ async function feedTotalsForMonth(db, monthKey, baselineDate, catById) {
       "AND t.source NOT IN ('v1exp', 'v1actual') AND t.hidden = 0 AND t.exclude_reports = 0 AND t.pending = 0 " +
       "AND t.tags NOT LIKE '%pending-placeholder%' " +
       "AND NOT (t.source = 'v1bank' AND EXISTS (SELECT 1 FROM bank_tx_review r WHERE r.plaid_transaction_id = substr(t.external_id, 6))) " +
-      "GROUP BY COALESCE(sp.category_id, t.category_id), (COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) >= 0)"
+      "GROUP BY substr(t.date, 9, 2), COALESCE(sp.category_id, t.category_id), (COALESCE(sp.amount_cents, t.my_share_cents, t.amount_cents) >= 0)"
     ).bind(V2_OWNER_ID, ...monthRange(monthKey), baselineDate).all();
     rows = results || [];
   } catch (e) { return null; }
   const totals = {};
+  const perDayCents = {};
+  const byCategoryCents = {};
   let count = 0;
   for (const r of rows) {
     const cat = r.category_id ? catById[r.category_id] : null;
@@ -1579,8 +1592,19 @@ async function feedTotalsForMonth(db, monthKey, baselineDate, catById) {
     count += r.n || 0;
     const cents = r.cents || 0;
     totals[field] = (totals[field] || 0) + (field === "takeHomePay" || field === "otherIncome" ? cents : -cents);
+    if (field !== "takeHomePay" && field !== "otherIncome" && cents) {
+      const spent = -cents;
+      const day = String(Number(r.day));
+      perDayCents[day] = (perDayCents[day] || 0) + spent;
+      const name = cat ? cat.name : "Misc/Other";
+      byCategoryCents[name] = (byCategoryCents[name] || 0) + spent;
+    }
   }
-  return { totals, count };
+  /* Days and categories whose charges and refunds cancel out carry
+     no spending: leave them out of the marker. */
+  for (const k of Object.keys(perDayCents)) if (!perDayCents[k]) delete perDayCents[k];
+  for (const k of Object.keys(byCategoryCents)) if (!byCategoryCents[k]) delete byCategoryCents[k];
+  return { totals, perDayCents, byCategoryCents, count };
 }
 
 /* Compute one month's actuals from the daily log plus the bank feed
@@ -1656,6 +1680,12 @@ async function rollupMonth(db, monthKey, baselineDate, current, catById, legacy)
   if (logCount === 0 && feed.count === 0 && !merged.takeHomePay && !merged.otherIncome) merged.entered = false;
   const marker = {};
   for (const [f] of MONEY_FIELDS) if (feed.totals[f]) marker[f] = feed.totals[f];
+  /* Alongside the field shares, the marker carries the feed's
+     spending by day and by category name (same inclusion rules), so
+     the Dashboard graphs can draw the feed's part too. These two
+     keys are chart data only: nothing reads them as fields. */
+  if (Object.keys(feed.perDayCents).length) marker.perDayCents = feed.perDayCents;
+  if (Object.keys(feed.byCategoryCents).length) marker.byCategoryCents = feed.byCategoryCents;
   const changed = !marked || JSON.stringify(marker) !== JSON.stringify(prevFeed)
     || MONEY_FIELDS.some(([f]) => toCents(merged[f]) !== toCents(current[f]))
     || merged.entered !== current.entered;

@@ -2,6 +2,7 @@
 import { fmt, amountsHidden, HIDDEN } from "../core/format.js";
 import { MONTHS } from "../core/plan.js";
 import { expenseShare, isSpending } from "../core/spending.js";
+import { feedChartData } from "../core/feedchart.js";
 import { fmtDate } from "./cards.js";
 import { app, els } from "./context.js";
 import { withIcon } from "../core/categories.js";
@@ -172,6 +173,14 @@ export function renderCharts(cmp) {
   hideFallback(els.doughnutChart, els.doughnutFallback);
   hideFallback(els.dailyChart, els.dailyFallback);
   var start = app.state.startingBalance || 0;
+  /* The bank feed's spending in the month in focus, by day and by
+     category name, from the stored actual's feed marker. The two
+     graphs below draw from the daily log; a feed-claimed month adds
+     this on top so they show the feed's charges too. Empty for any
+     month the feed never claimed. */
+  var selActual = null;
+  (app.state.actuals || []).forEach(function (a) { if (a.monthKey === app.selectedKey) selActual = a; });
+  var feedChart = feedChartData(selActual);
 
   /* 1) Cumulative balance: smooth area for the actual balance, a dashed
      plan line on top in Compare mode. */
@@ -251,6 +260,12 @@ export function renderCharts(cmp) {
         catTotals[e.category] = Math.round(((catTotals[e.category] || 0) + expenseShare(e)) * 100) / 100;
       }
     });
+    /* The feed's charges in the month, by category name (share-based
+       too, from the same rollup): on top of the log's, under the
+       feed's own names. */
+    Object.keys(feedChart.byCategory).forEach(function (name) {
+      catTotals[name] = Math.round(((catTotals[name] || 0) + feedChart.byCategory[name]) * 100) / 100;
+    });
   } else {
     var pm = getMonth(app.selectedKey);
     var planMap = { "Groceries": pm.groceries, "Eating Out": pm.eatingOut, "Rent": pm.rent,
@@ -320,6 +335,14 @@ export function renderCharts(cmp) {
     if (!isSpending(e) || String(e.date).slice(0, 7) !== app.selectedKey) return;
     var day = Number(String(e.date).slice(8, 10));
     if (day >= 1 && day <= daysIn) { perDay[day - 1] = Math.round((perDay[day - 1] + expenseShare(e)) * 100) / 100; anyDaily = true; }
+  });
+  /* The feed's charges land on their own days, on top of the log's:
+     the bars, the running line and the header total all follow from
+     perDay, so they pick the feed up from here. (Tapping a day still
+     lists the log rows for that day, as before.) */
+  Object.keys(feedChart.perDay).forEach(function (k) {
+    var day = Number(k);
+    if (day >= 1 && day <= daysIn) { perDay[day - 1] = Math.round((perDay[day - 1] + feedChart.perDay[k]) * 100) / 100; anyDaily = true; }
   });
   if (!anyDaily) {
     showFallback(els.dailyChart, els.dailyFallback,

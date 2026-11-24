@@ -10,7 +10,9 @@
  * later feed updates flow past it; a booked month keeps the classic
  * log-only behaviour on both the server and the client; and the
  * mirror does not copy a claimed month's feed share back into the
- * money model as typed-in actuals.
+ * money model as typed-in actuals. The marker also carries the feed's
+ * spending by day and by category name for the Dashboard graphs, and
+ * the client reader for those sums is covered too.
  * Run: node tests/dashboard-feed.test.mjs — made-up data only.
  */
 import assert from "node:assert/strict";
@@ -228,6 +230,88 @@ await refreshFeedRollups(env.DB);
   const may = await actualOf("2027-05");
   assert.equal(may.takeHomePay, 1500, "once handed back, the feed no longer flows into the month");
   assert.equal(may.feedRollup, null);
+}
+
+/* ---------- J. the marker also carries the feed's spending by day and category ---------- */
+/* The Dashboard graphs draw from the log alone, so the marker also
+   carries the feed's spending sums — same rows, same rules as the
+   field totals above — for the graphs to add on top of the log's. */
+await addTx({ date: "2027-06-03", amountCents: -10332, categoryId: catId("Groceries") });
+await addTx({ date: "2027-06-04", amountCents: -5000, categoryId: catId("Groceries") });
+await addTx({ date: "2027-06-04", amountCents: 2000, categoryId: catId("Groceries") }); /* a refund nets against its day */
+await addTx({ date: "2027-06-05", amountCents: -19322, myShareCents: -10099, categoryId: catId("Eating Out") });
+const splitTx2 = await addTx({ date: "2027-06-06", amountCents: -10000 });
+await me.run("INSERT INTO transaction_splits (id, owner_id, transaction_id, category_id, amount_cents) VALUES (?2, ?1, ?3, ?4, ?5)",
+  "split_c", splitTx2, catId("Groceries"), -6000);
+await me.run("INSERT INTO transaction_splits (id, owner_id, transaction_id, category_id, amount_cents) VALUES (?2, ?1, ?3, ?4, ?5)",
+  "split_d", splitTx2, catId("Eating Out"), -4000);
+await addTx({ date: "2027-06-09", amountCents: -99900, categoryId: catId("Groceries"), tags: ["pending-placeholder"] });
+await addTx({ date: "2027-06-10", amountCents: -50000, categoryId: catId("Transfer") });
+await addTx({ date: "2027-06-11", amountCents: -88800, categoryId: catId("Groceries"), hidden: true });
+await addTx({ date: "2027-06-12", amountCents: -77700, categoryId: catId("Groceries"), source: "v1exp" });
+await addTx({ date: "2027-06-13", amountCents: -66600, categoryId: catId("Groceries"), source: "v1bank", externalId: "bank:fc_rev" });
+await env.DB.prepare("INSERT INTO bank_tx_review (plaid_transaction_id, kind, updated_at) VALUES (?, 'expense', datetime('now'))")
+  .bind("fc_rev").run();
+await addTx({ date: "2027-06-14", amountCents: -4500, categoryId: catId("Groceries"), source: "v1bank", externalId: "bank:fc_plain" });
+await addTx({ date: "2027-06-15", amountCents: 100000, categoryId: catId("Paycheck") });
+await addTx({ date: "2027-06-16", amountCents: -25000, categoryId: catId("Sent to India") });
+await refreshFeedRollups(env.DB);
+{
+  const jun = await actualOf("2027-06");
+  assert.ok(jun.feedRollup, "June is marked");
+  assert.deepEqual(jun.feedRollup.perDayCents,
+    { "3": 10332, "4": 3000, "5": 10099, "6": 10000, "14": 4500, "16": 25000 },
+    "per-day: charges land on their days, his share and splits count, the refund nets, " +
+    "placeholder / transfer / off-reports / twin / reviewed rows never appear");
+  assert.deepEqual(jun.feedRollup.byCategoryCents,
+    { "Groceries": 23832, "Eating Out": 14099, "Sent to India": 25000 },
+    "by category name, under the feed's own names");
+  assert.equal(jun.feedRollup.groceries, 23832, "the field share and the category sum agree");
+  assert.equal(jun.feedRollup.takeHomePay, 100000, "pay is a field share only, never chart spending");
+  const sum = (o) => Object.values(o || {}).reduce((s, v) => s + v, 0);
+  assert.equal(sum(jun.feedRollup.perDayCents), sum(jun.feedRollup.byCategoryCents),
+    "the two sums describe the same spending");
+  assert.equal(sum(jun.feedRollup.perDayCents), 23832 + 14099 + 25000);
+  assert.equal(jun.groceries, 238.32);
+  assert.equal(jun.oneOffs, 250, "Sent to India still files under one-offs in the fields");
+}
+
+/* ---------- K. client: the graph reader for the marker ---------- */
+{
+  assert.deepEqual(app.feedChartData(null), { perDay: {}, byCategory: {} }, "no actual, no feed");
+  assert.deepEqual(app.feedChartData({}), { perDay: {}, byCategory: {} }, "an unclaimed month");
+  assert.deepEqual(app.feedChartData({ feedRollup: { takeHomePay: 595200, groceries: 15000 } }),
+    { perDay: {}, byCategory: {} }, "a marker from before the sums existed reads as log-only");
+  const data = app.feedChartData({ feedRollup: {
+    takeHomePay: 100000,
+    perDayCents: { "3": 10332, "16": 25000 },
+    byCategoryCents: { "Groceries": 23832, "Sent to India": 25000 }
+  } });
+  assert.deepEqual(data.perDay, { "3": 103.32, "16": 250 }, "cents become dollars, keyed by day");
+  assert.deepEqual(data.byCategory, { "Groceries": 238.32, "Sent to India": 250 });
+  assert.deepEqual(app.feedChartData({ feedRollup: { perDayCents: { "0": 500, "32": 500, "x": 500, "5": "700", "6": 0 } } }),
+    { perDay: {}, byCategory: {} }, "stray keys and values are dropped");
+  /* The merge the graphs perform: log-shaped days and categories,
+     with the feed's sums added on top. */
+  const perDay = [0, 0, 50, 0, 0, 0];
+  Object.keys(data.perDay).forEach((k) => { perDay[Number(k) - 1] = Math.round(((perDay[Number(k) - 1] || 0) + data.perDay[k]) * 100) / 100; });
+  assert.equal(perDay[2], 153.32, "the feed's day-3 charge adds onto the log's day-3 bar");
+  assert.equal(perDay[15], 250, "a feed-only day appears");
+  const catTotals = { "Groceries": 80 };
+  Object.keys(data.byCategory).forEach((name) => { catTotals[name] = Math.round(((catTotals[name] || 0) + data.byCategory[name]) * 100) / 100; });
+  assert.equal(catTotals["Groceries"], 318.32, "same-name categories merge");
+  assert.equal(catTotals["Sent to India"], 250, "a feed-only category appears under its own name");
+}
+
+/* ---------- L. the mirror pays no attention to the chart sums ---------- */
+/* June's stored actual is the feed alone (no log rows, nothing typed),
+   so a marker whose field shares the mirror nets out leaves nothing
+   to copy — the two extra keys must not leak into that arithmetic. */
+await mirrorV1(env.DB, { force: true });
+{
+  const txs = await loadTransactions(me);
+  assert.ok(!txs.some((t) => t.source === "v1actual" && t.date.slice(0, 7) === "2027-06"),
+    "no v1actual rows for June: the chart sums in its marker changed nothing");
 }
 
 console.log("dashboard-feed.test.mjs: all assertions passed");
