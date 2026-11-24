@@ -72,7 +72,8 @@ export function renderSummary() {
   }
   /* Selected-month figures, one per view (never added together):
      what the PLAN leaves free after that month's bills & loans, and
-     what was SPENT in it by charge date from the daily log. */
+     what was SPENT in it by charge date: the daily log plus, in a
+     feed-claimed month, the bank feed's charges. */
   if (els.statFreeMonth) {
     var freeMonth = planFreeAfterBills(getMonth(app.selectedKey));
     els.statFreeMonth.textContent = fmt(freeMonth);
