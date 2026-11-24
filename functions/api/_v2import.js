@@ -11,6 +11,14 @@
  *     (you typed it in, or another feed brought it: SimpleFIN dates a
  *     charge when it posts, the daily log when you paid); each stored
  *     row absorbs at most one incoming row.
+ * A pending placeholder (a hand-added row tagged "pending-placeholder",
+ * no external id: an assistant's stand-in for a charge the bank still
+ * shows as pending) is NOT a stored copy of the posted charge. The
+ * reports leave placeholders out, so absorbing the posted row into one
+ * would lose the charge from the Dashboard altogether. Instead the
+ * posted row comes in, takes the placeholder's category when nothing
+ * else files it, and the placeholder is settled (hidden, kept for the
+ * record), so the charge counts once, as posted.
  * New rows are filed like the mirror files bank rows: your rules first
  * (category + reviewed), then your own merchant rules from the daily
  * log (reviewed), then the keyword guess (left on To review, where
@@ -54,12 +62,16 @@ export function csvIds(accountId, rows) {
    -> { added, duplicates, categorized, toReview } */
 const shiftDay = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 const NEAR_DAYS = 3;
+export const PLACEHOLDER_TAG = "pending-placeholder";
+export function isPlaceholder(r) {
+  return !r.external_id && String(r.tags || "").indexOf(PLACEHOLDER_TAG) !== -1;
+}
 
 export async function importRows(s, db, accountId, rows, source) {
   if (!rows.length) return { added: 0, duplicates: 0, categorized: 0, toReview: 0 };
   const dates = rows.map((r) => r.date).sort();
   const [existing, rules, cats, merchantRules, acct] = await Promise.all([
-    s.all("SELECT external_id, account_id, date, amount_cents, merchant FROM transactions WHERE owner_id = ?1 AND date >= ?2 AND date <= ?3",
+    s.all("SELECT id, external_id, account_id, date, amount_cents, merchant, tags, category_id, hidden FROM transactions WHERE owner_id = ?1 AND date >= ?2 AND date <= ?3",
       shiftDay(dates[0], -NEAR_DAYS), shiftDay(dates[dates.length - 1], NEAR_DAYS)),
     loadRules(s), loadCategories(s), getMerchantRules(db),
     s.first("SELECT type FROM accounts WHERE owner_id = ?1 AND id = ?2", accountId)
@@ -69,16 +81,22 @@ export async function importRows(s, db, accountId, rows, source) {
   const owed = acct && (acct.type === "credit" || acct.type === "loan");
   const ext = new Set(existing.map((r) => r.external_id).filter(Boolean));
   const own = source === "csv" ? "csv:" : "sfin:";
-  const pool = existing.filter((r) => !r.external_id || !r.external_id.startsWith(own));
+  const pool = existing.filter((r) => (!r.external_id || !r.external_id.startsWith(own)) && !isPlaceholder(r));
+  const placeholders = existing.filter((r) => isPlaceholder(r) && !r.hidden);
   const near = (a, b) => Math.abs(Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) <= NEAR_DAYS * 864e5;
   const twinOf = (r) => {
     const fits = (p) => !p.used && p.amount_cents === r.amountCents && similarName(p.merchant, r.description);
     return pool.find((p) => fits(p) && p.date === r.date) || pool.find((p) => fits(p) && p.account_id === accountId && near(p.date, r.date));
   };
+  /* The placeholder this posted row settles: same account, same amount,
+     a similar name, within a few days (pending dates the swipe, the
+     posted row dates the posting). */
+  const placeholderOf = (r) => placeholders.find((p) => !p.used && p.account_id === accountId &&
+    p.amount_cents === r.amountCents && similarName(p.merchant, r.description) && near(p.date, r.date));
   const catId = {};
   cats.categories.forEach((c) => { catId[c.name.toLowerCase()] = c.id; });
 
-  const out = { added: 0, duplicates: 0, categorized: 0, toReview: 0, refundsLinked: 0 };
+  const out = { added: 0, duplicates: 0, categorized: 0, toReview: 0, refundsLinked: 0, placeholdersSettled: 0 };
   const stmts = [];
   const fresh = [];
   for (const r of rows) {
@@ -86,6 +104,8 @@ export async function importRows(s, db, accountId, rows, source) {
     const hit = twinOf(r);
     if (hit) { hit.used = true; out.duplicates++; continue; }
     ext.add(r.externalId);
+    const stand = placeholderOf(r);
+    if (stand) stand.used = true;
 
     let categoryId = null, locked = 0, review = 1, hidden = 0, tags = "[]";
     const rule = applyRules(rules, { merchant: r.description, description: r.description, amountCents: r.amountCents, accountId });
@@ -94,6 +114,8 @@ export async function importRows(s, db, accountId, rows, source) {
       if (rule.change.hidden) hidden = 1;
       if (rule.change.addTag) tags = JSON.stringify([rule.change.addTag]);
     }
+    /* The placeholder was filed by hand: its category is the posted row's best guess after your rules. */
+    if (!categoryId && stand && stand.category_id) { categoryId = stand.category_id; locked = 1; review = 0; }
     if (!categoryId && investing) categoryId = catId["investments"] || null;
     /* Money into a card or loan with "payment" in the name is you paying it off, not income. */
     if (!categoryId && owed && r.amountCents > 0 && /payment|thank you/i.test(r.description)) categoryId = catId["credit card payment"] || catId["transfer"] || null;
@@ -112,6 +134,15 @@ export async function importRows(s, db, accountId, rows, source) {
     ]);
     fresh.push({ id, date: r.date, merchant: r.description, amountCents: r.amountCents, categoryId, locked, review });
     out.added++;
+    if (stand) {
+      stmts.push([
+        "UPDATE transactions SET hidden = 1, needs_review = 0, " +
+        "notes = CASE WHEN notes = '' THEN ?3 ELSE notes || ' ' || ?3 END, updated_at = datetime('now') " +
+        "WHERE owner_id = ?1 AND id = ?2 AND hidden = 0",
+        stand.id, "Settled: the posted charge came in on " + r.date + "."
+      ]);
+      out.placeholdersSettled++;
+    }
   }
   await s.batch(stmts);
   await linkImportedRefunds(s, acct, accountId, fresh, out);
